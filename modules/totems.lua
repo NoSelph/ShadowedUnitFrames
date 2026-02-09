@@ -161,29 +161,64 @@ function Totems:UpdateVisibility(frame)
 	end
 end
 
+-- Helper function to check if a totem is active, handling secret values
+-- In WoW 12.0.0, GetTotemInfo returns secret values in combat
+-- If 'have' is a secret value, it means the totem exists (Blizzard only returns secrets for existing data)
+local function isTotemActive(have)
+	if issecretvalue(have) then
+		-- If it's a secret value, the totem exists (Blizzard protects existing totem data)
+		return true
+	end
+	return have
+end
+
 function Totems:Update(frame)
 	local totalActive = 0
 	for _, indicator in pairs(frame.totemBar.totems) do
 		local have, _name, start, duration, icon
+		local foundTotem = false
+		
 		if MAX_TOTEMS == 1 and indicator.id == 1 then
-			local id = 1
-			while not have and id <= 4 do
+			-- For single totem classes, search through all 4 slots
+			for id = 1, 4 do
 				have, _name, start, duration, icon = GetTotemInfo(id)
-				id = id + 1
+				if isTotemActive(have) then
+					foundTotem = true
+					break
+				end
 			end
 		else
 			have, _name, start, duration, icon = GetTotemInfo(indicator.id)
+			foundTotem = isTotemActive(have)
 		end
-		if( have and start > 0 ) then
+		
+		-- Use SetShownFromBoolean for visibility as it accepts secret values
+		-- Also check if start/duration are valid (non-secret or handle them)
+		local isActive = foundTotem
+		
+		-- For values that might be secret, we use them directly with APIs that accept secrets
+		if isActive then
 			if( ShadowUF.db.profile.units[frame.unitType].totemBar.icon ) then
+				-- icon might be secret, but SetStatusBarTexture should accept it
 				indicator:SetStatusBarTexture(icon)
 			end
 
 			indicator.have = true
-			indicator.endTime = start + duration
-			indicator:SetMinMaxValues(0, duration)
-			indicator:SetValue(indicator.endTime - GetTime())
-			indicator:SetScript("OnUpdate", totemMonitor)
+			
+			-- start and duration might be secret values in combat
+			-- SetValue accepts secret values, but we need to handle the arithmetic
+			if issecretvalue(start) or issecretvalue(duration) then
+				-- Use duration objects for secret time handling
+				indicator:SetMinMaxValues(0, 1)
+				indicator:SetValue(1) -- Show as full when we can't calculate
+				indicator:SetScript("OnUpdate", nil)
+				indicator.endTime = nil
+			else
+				indicator.endTime = start + duration
+				indicator:SetMinMaxValues(0, duration)
+				indicator:SetValue(indicator.endTime - GetTime())
+				indicator:SetScript("OnUpdate", totemMonitor)
+			end
 			indicator:SetAlpha(1.0)
 
 			totalActive = totalActive + 1

@@ -112,6 +112,9 @@ function ShadowUF:LoadDefaultLayout(useMerge)
 		color = {r = 1, g = 1, b = 1, a = 1},
 		shadowX = 1.00,
 		shadowY = -1.00,
+		cooldownSize = 12,
+		cooldownOutline = "OUTLINE",
+		cooldownColor = {r = 1, g = 1, b = 1, a = 1},
 	}
 
 	-- Some localizations do not work with Myriad Condensed Web, need to automatically swap it to a localization that will work for it

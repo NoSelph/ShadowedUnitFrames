@@ -5,6 +5,69 @@ local rareColor, eliteColor = {r = 0, g = 0.63, b = 1}, {r = 1, g = 0.81, b = 0}
 local canCure = ShadowUF.Units.canCure
 ShadowUF:RegisterModule(Highlight, "highlight", ShadowUF.L["Highlight"])
 
+-- 12.0: DebuffTypeColor global is deprecated/removed.
+local DebuffTypeColor = DebuffTypeColor or {
+	["Magic"]	= { r = 0.20, g = 0.60, b = 1.00 },
+	["Curse"]	= { r = 0.60, g = 0.00, b = 1.00 },
+	["Disease"]	= { r = 0.60, g = 0.40, b = 0.00 },
+	["Poison"]	= { r = 0.00, g = 0.60, b = 0.00 },
+	[""]		= { r = 0.80, g = 0.00, b = 0.00 }, -- default/none
+	["none"]	= { r = 0.80, g = 0.00, b = 0.00 }
+}
+
+-- 12.0: ColorCurve for dispellable debuff highlighting (update when Midnight Release if there's a better option)
+local highlightColorCurve = nil
+local highlightColorCurveVersion = 0
+
+function Highlight:GetColorCurve()
+	-- Check if canCure changed (version is bumped on spec/spell changes)
+	local currentVersion = ShadowUF.Units.canCureVersion or 0
+	if highlightColorCurve and highlightColorCurveVersion == currentVersion then
+		return highlightColorCurve
+	end
+	
+	if not C_CurveUtil or not C_CurveUtil.CreateColorCurve then
+		return nil
+	end
+	
+	local curve = C_CurveUtil.CreateColorCurve()
+	local E = Enum and Enum.AuraDispelType
+	local noneID = (E and E.None) or 0
+	local magicID = (E and E.Magic) or 1
+	local curseID = (E and E.Curse) or 2
+	local diseaseID = (E and E.Disease) or 3
+	local poisonID = (E and E.Poison) or 4
+	
+	if curve.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step then
+		curve:SetType(Enum.LuaCurveType.Step)
+	end
+	
+	-- Map dispel type IDs to colors with alpha based on canCure
+	-- Alpha = 0 means invisible (can't cure)
+	local function getAlpha(auraType)
+		return canCure[auraType] and 1 or 0
+	end
+	
+	curve:AddPoint(noneID, CreateColor(0.8, 0, 0, 0)) -- None/default: always invisible
+	curve:AddPoint(magicID, CreateColor(0.2, 0.6, 1, getAlpha("Magic")))
+	curve:AddPoint(curseID, CreateColor(0.6, 0, 1, getAlpha("Curse")))
+	curve:AddPoint(diseaseID, CreateColor(0.6, 0.4, 0, getAlpha("Disease")))
+	curve:AddPoint(poisonID, CreateColor(0, 0.6, 0, getAlpha("Poison")))
+	
+	-- Cap point for any unknown types
+	local capID = math.max(noneID, magicID, curseID, diseaseID, poisonID) + 1
+	curve:AddPoint(capID, CreateColor(0.8, 0, 0, 0))
+	curve:AddPoint(255, CreateColor(0.8, 0, 0, 0))
+	
+	if curve.SetMinMaxValues then
+		curve:SetMinMaxValues(0, 255)
+	end
+	
+	highlightColorCurve = curve
+	highlightColorCurveVersion = currentVersion
+	return curve
+end
+
 -- Might seem odd to hook my code in the core manually, but HookScript is ~40% slower due to it being a secure hook
 local function OnEnter(frame)
 	if( ShadowUF.db.profile.units[frame.unitType].highlight.mouseover ) then
@@ -115,7 +178,7 @@ end
 function Highlight:OnDisable(frame)
 	frame:UnregisterAll(self)
 
-	frame.highlight.hasDebuff = nil
+	frame.highlight.hasDebuffColor = nil
 	frame.highlight.hasThreat = nil
 	frame.highlight.hasAttention = nil
 	frame.highlight.hasMouseover = nil
@@ -133,25 +196,38 @@ end
 
 function Highlight:Update(frame)
 	local color
-	if( frame.highlight.hasDebuff ) then
-		color = DebuffTypeColor[frame.highlight.hasDebuff] or DebuffTypeColor[""]
-	elseif( frame.highlight.hasThreat ) then
+	local useSecretColor = false
+	
+	if frame.highlight.hasDebuffColor then
+		useSecretColor = true
+		color = frame.highlight.hasDebuffColor
+	elseif frame.highlight.hasThreat then
 		color = ShadowUF.db.profile.healthColors.hostile
-	elseif( frame.highlight.hasAttention ) then
+	elseif frame.highlight.hasAttention then
 		color = goldColor
-	elseif( frame.highlight.hasMouseover ) then
+	elseif frame.highlight.hasMouseover then
 		color = mouseColor
-	elseif( ShadowUF.db.profile.units[frame.unitType].highlight.rareMob and ( frame.highlight.hasClassification == "rareelite" or frame.highlight.hasClassification == "rare" ) ) then
+	elseif ShadowUF.db.profile.units[frame.unitType].highlight.rareMob and ( frame.highlight.hasClassification == "rareelite" or frame.highlight.hasClassification == "rare" ) then
 		color = rareColor
-	elseif( ShadowUF.db.profile.units[frame.unitType].highlight.eliteMob and frame.highlight.hasClassification == "elite" ) then
+	elseif ShadowUF.db.profile.units[frame.unitType].highlight.eliteMob and frame.highlight.hasClassification == "elite" then
 		color = eliteColor
 	end
 
-	if( color ) then
-		frame.highlight.top:SetVertexColor(color.r, color.g, color.b, ShadowUF.db.profile.units[frame.unitType].highlight.alpha)
-		frame.highlight.left:SetVertexColor(color.r, color.g, color.b, ShadowUF.db.profile.units[frame.unitType].highlight.alpha)
-		frame.highlight.bottom:SetVertexColor(color.r, color.g, color.b, ShadowUF.db.profile.units[frame.unitType].highlight.alpha)
-		frame.highlight.right:SetVertexColor(color.r, color.g, color.b, ShadowUF.db.profile.units[frame.unitType].highlight.alpha)
+	if color then
+		local r, g, b, a
+		if useSecretColor then
+			-- Secret color from ColorCurve
+			r, g, b, a = color:GetRGBA()
+		else
+			-- Regular color table
+			r, g, b = color.r, color.g, color.b
+			a = ShadowUF.db.profile.units[frame.unitType].highlight.alpha
+		end
+		
+		frame.highlight.top:SetVertexColor(r, g, b, a)
+		frame.highlight.left:SetVertexColor(r, g, b, a)
+		frame.highlight.bottom:SetVertexColor(r, g, b, a)
+		frame.highlight.right:SetVertexColor(r, g, b, a)
 		frame.highlight:Show()
 	else
 		frame.highlight:Hide()
@@ -174,17 +250,29 @@ function Highlight:UpdateClassification(frame)
 end
 
 function Highlight:UpdateAura(frame)
-	frame.highlight.hasDebuff = nil
-	if( UnitIsFriend(frame.unit, "player") ) then
-		local id = 0
-		while( true ) do
-			id = id + 1
-			local name, _, _, auraType = AuraUtil.UnpackAuraData(C_UnitAuras.GetDebuffDataByIndex(frame.unit, id))
-			if( not name ) then break end
-			if( auraType == "" ) then auraType = "Enrage" end
-
-			if( canCure[auraType] ) then
-				frame.highlight.hasDebuff = auraType
+	frame.highlight.hasDebuffColor = nil
+	
+	if not UnitIsFriend(frame.unit, "player") then
+		self:Update(frame)
+		return
+	end
+	
+	-- 12.0: Use ColorCurve to determine curable debuffs
+	-- Non-curable debuffs will have invisible highlight (alpha 0)
+	local curve = self:GetColorCurve()
+	if not curve or not C_UnitAuras.GetAuraDispelTypeColor then
+		self:Update(frame)
+		return
+	end
+	
+	local slots = {C_UnitAuras.GetAuraSlots(frame.unit, "HARMFUL")}
+	for i = 2, #slots do
+		local index = slots[i]
+		local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, index)
+		if auraData and auraData.auraInstanceID then
+			local color = C_UnitAuras.GetAuraDispelTypeColor(frame.unit, auraData.auraInstanceID, curve)
+			if color then
+				frame.highlight.hasDebuffColor = color
 				break
 			end
 		end
@@ -192,3 +280,4 @@ function Highlight:UpdateAura(frame)
 
 	self:Update(frame)
 end
+

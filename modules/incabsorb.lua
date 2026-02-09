@@ -35,14 +35,19 @@ function IncAbsorb:UpdateFrame(frame)
 	local amount = UnitGetTotalAbsorbs(frame.unit) or 0
 
 	-- Obviously we only want to add incoming heals if we have something being absorbed
-	if( amount > 0 ) then
+	if( ShadowUF:SafeMath(function() return amount > 0 end) ) then
 		if( frame.visibility.incHeal ) then
-			amount = amount + (UnitGetIncomingHeals(frame.unit) or 0)
+			local inc = UnitGetIncomingHeals(frame.unit) or 0
+			local success, sum = pcall(function() return amount + inc end)
+			if( success ) then amount = sum end
 		end
 
 		if( frame.visibility.healAbsorb ) then
-			amount = amount + (UnitGetTotalHealAbsorbs(frame.unit) or 0)
+			local hAbsorb = UnitGetTotalHealAbsorbs(frame.unit) or 0
+			local success, sum = pcall(function() return amount + hAbsorb end)
+			if( success ) then amount = sum end
 		end
+	elseif( not pcall(function() return amount > 0 end) ) then
 	end
 
 	self:PositionBar(frame, amount)

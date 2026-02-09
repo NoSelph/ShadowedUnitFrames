@@ -1,4 +1,4 @@
-local Config = {}
+﻿local Config = {}
 local AceDialog, AceRegistry, AceGUI, SML, registered, options
 local playerClass = select(2, UnitClass("player"))
 local modifyUnits, globalConfig = {}, {}
@@ -70,7 +70,7 @@ local positionList = {["C"] = L["Center"], ["RT"] = L["Right Top"], ["RC"] = L["
 
 local unitOrder = {}
 for order, unit in pairs(ShadowUF.unitList) do unitOrder[unit] = order end
-local fullReload = {["bars"] = true, ["auras"] = true, ["backdrop"] = true, ["font"] = true, ["classColors"] = true, ["powerColors"] = true, ["healthColors"] = true, ["xpColors"] = true, ["omnicc"] = true}
+local fullReload = {["bars"] = true, ["auras"] = true, ["backdrop"] = true, ["font"] = true, ["classColors"] = true, ["powerColors"] = true, ["healthColors"] = true, ["xpColors"] = true, ["omnicc"] = true, ["blizzardcc"] = true, ["castColors"] = true}
 local quickIDMap = {}
 
 -- Helper functions
@@ -161,7 +161,7 @@ local function getName(info)
 		return ShadowUF.modules[key].moduleName
 	end
 
-	return LOCALIZED_CLASS_NAMES_MALE[key] or INDICATOR_NAMES[key] or L.units[key] or TAG_GROUPS[key] or L[key]
+	return LOCALIZED_CLASS_NAMES_MALE[key] or INDICATOR_NAMES[key] or L.units[key] or TAG_GROUPS[key] or L[key] or "Unknown"
 end
 
 local function getUnitOrder(info)
@@ -209,7 +209,7 @@ end
 
 local function getColor(info)
 	local color = get(info) or {}
-	return color.r, color.g, color.b, color.a
+	return color.r or 0, color.g or 0, color.b or 0, color.a or 1
 end
 
 -- These are for setting complex options like units.player.auras.buffs.enabled = true or units.player.portrait.enabled = true
@@ -404,9 +404,14 @@ local function loadGeneralOptions()
 	local function getMediaData(info)
 		local mediaType = info[#(info)]
 
+		-- Optimization: return cached table if exists and populated
+		if( MediaList[mediaType] and next(MediaList[mediaType]) ) then
+			return MediaList[mediaType]
+		end
+
 		MediaList[mediaType] = MediaList[mediaType] or {}
 
-		for k in pairs(MediaList[mediaType]) do	MediaList[mediaType][k] = nil end
+		-- Only rebuild if empty
 		for _, name in pairs(SML:List(mediaType)) do
 			MediaList[mediaType][name] = name
 		end
@@ -727,14 +732,6 @@ local function loadGeneralOptions()
 								name = "",
 								width = "full",
 							},
-							omnicc = {
-								order = 2.5,
-								type = "toggle",
-								name = L["Disable OmniCC Cooldown Count"],
-								desc = L["Disables showing Cooldown Count timers in all Shadowed Unit Frame auras."],
-								arg = "omnicc",
-								width = "double",
-							},
 							blizzardcc = {
 								order = 2.5,
 								type = "toggle",
@@ -900,9 +897,9 @@ local function loadGeneralOptions()
 								arg = "font.color",
 								hidden = hideAdvancedOption,
 							},
-							sep = {order = 1.25, type = "description", name = "", hidden = hideAdvancedOption},
+							sep = {order = 2, type = "description", name = "", hidden = hideAdvancedOption},
 							font = {
-								order = 1.5,
+								order = 3,
 								type = "select",
 								name = L["Font"],
 								dialogControl = "LSM30_Font",
@@ -910,18 +907,61 @@ local function loadGeneralOptions()
 								arg = "font.name",
 							},
 							size = {
-								order = 2,
+								order = 4,
 								type = "range",
 								name = L["Size"],
 								min = 1, max = 50, step = 1, softMin = 1, softMax = 20,
 								arg = "font.size",
 							},
 							outline = {
-								order = 3,
+								order = 5,
 								type = "select",
 								name = L["Outline"],
 								values = {["OUTLINE"] = L["Thin outline"], ["THICKOUTLINE"] = L["Thick outline"], ["MONOCHROMEOUTLINE"] = L["Monochrome Outline"], [""] = L["None"]},
 								arg = "font.extra",
+								hidden = hideAdvancedOption,
+							},
+						},
+					},
+					cooldown = {
+						order = 3.5,
+						type = "group",
+						inline = true,
+						name = L["Aura font"],
+						args = {
+							color = {
+								order = 1,
+								type = "color",
+								name = L["Default color"],
+								desc = L["Default font color, any color tags inside individual tag texts will override this."],
+								hasAlpha = true,
+								set = setColor,
+								get = getColor,
+								arg = "font.cooldownColor",
+								hidden = hideAdvancedOption,
+							},
+							sep = {order = 2, type = "description", name = "", hidden = hideAdvancedOption},
+							font = {
+								order = 3,
+								type = "select",
+								name = L["Font"],
+								dialogControl = "LSM30_Font",
+								values = getMediaData,
+								arg = "font.cooldownName",
+							},
+							size = {
+								order = 4,
+								type = "range",
+								name = L["Size"],
+								min = 1, max = 50, step = 1, softMin = 1, softMax = 20,
+								arg = "font.cooldownSize",
+							},
+							outline = {
+								order = 5,
+								type = "select",
+								name = L["Outline"],
+								values = {["OUTLINE"] = L["Thin outline"], ["THICKOUTLINE"] = L["Thick outline"], ["MONOCHROMEOUTLINE"] = L["Monochrome Outline"], [""] = L["None"]},
+								arg = "font.cooldownOutline",
 								hidden = hideAdvancedOption,
 							},
 						},
@@ -2038,17 +2078,22 @@ local function loadUnitOptions()
 				},
 			},
 		}
-
+		
 		for parent, list in pairs(parentList) do
 			parent = string.sub(parent, 2)
-			tagWizard[parent] = Config.parentTable
-			Config.parentTable.args.help = nagityNagNagTable
+			
+			-- Skip modules that have a class restriction not matching the player's class
+			local module = ShadowUF.modules[parent]
+			if not (module and module.moduleClass and module.moduleClass ~= playerClass) then
+				tagWizard[parent] = Config.parentTable
+				Config.parentTable.args.help = nagityNagNagTable
 
-			for id in pairs(list) do
-				tagWizard[parent].args[tostring(id)] = Config.tagTextTable
-				tagWizard[parent].args[tostring(id) .. ":adv"] = Config.advanceTextTable
+				for id in pairs(list) do
+					tagWizard[parent].args[tostring(id)] = Config.tagTextTable
+					tagWizard[parent].args[tostring(id) .. ":adv"] = Config.advanceTextTable
 
-				quickIDMap[tostring(id) .. ":adv"] = id
+					quickIDMap[tostring(id) .. ":adv"] = id
+				end
 			end
 		end
 	end
@@ -2101,15 +2146,315 @@ local function loadUnitOptions()
 	end
 
 	local function reloadUnitAuras()
-		for _, frame in pairs(ShadowUF.Units.unitFrames) do
-			if( UnitExists(frame.unit) and frame.visibility.auras ) then
-				ShadowUF.modules.auras:UpdateFilter(frame)
-				frame:FullUpdate()
-			end
-		end
+		ShadowUF.Layout:Reload()
 	end
 
 	local aurasDisabled = function(info) return not getVariable(info[2], "auras", info[#(info) - 2], "enabled") end
+
+	-- 12.0: New multi-frame aura configuration
+	-- Supports up to 4 frames per type (buffs/debuffs) with filter dropdown
+	local filterValues = {
+		buffs = {
+			["ALL"] = L["All Auras"],
+			["PLAYER"] = L["My Auras"],
+			["RAID"] = L["Class auras (group, raid)"],
+		},
+		debuffs = {
+			["ALL"] = L["All Auras"],
+			["PLAYER"] = L["My Auras"],
+			["RAID"] = L["Contextual auras (group, raid)"],
+		}
+	}
+
+	-- Helper to get frame config (auras.buffs[1], auras.debuffs[2], etc.)
+	local function getAuraFrameConfig(unit, auraType, frameIndex)
+		local config = ShadowUF.db.profile.units[unit]
+		if config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex] then
+			return config.auras[auraType][frameIndex]
+		end
+		return nil
+	end
+
+	local function setAuraFrameValue(unit, auraType, frameIndex, key, value)
+		local config = ShadowUF.db.profile.units[unit]
+		if config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex] then
+			config.auras[auraType][frameIndex][key] = value
+			reloadUnitAuras()
+		end
+	end
+
+	-- Create options for a single aura frame slot
+	local function createAuraFrameOptions(frameIndex)
+		local frameName = L["Frame"] .. " " .. frameIndex
+		return {
+			type = "group",
+			inline = true,
+			name = frameName,
+			order = frameIndex,
+			args = {
+				enabled = {
+					order = 1,
+					type = "toggle",
+					name = L["Enable"],
+					width = "half",
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.enabled
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "enabled", value)
+					end,
+				},
+				anchorOn = {
+					order = 1.5,
+					type = "toggle",
+					name = function(info)
+						local auraType = info[#(info) - 2]
+						if auraType == "buffs" then
+							return string.format(L["Anchor to debuffs %d"], frameIndex)
+						else
+							return string.format(L["Anchor to buffs %d"], frameIndex)
+						end
+					end,
+					desc = function(info)
+						local auraType = info[#(info) - 2]
+						if auraType == "buffs" then
+							return L["Anchors this buff frame to the corresponding debuff frame, positioning it after the last visible debuff."]
+						else
+							return L["Anchors this debuff frame to the corresponding buff frame, positioning it after the last visible buff."]
+						end
+					end,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.anchorOn
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						local otherType = auraType == "buffs" and "debuffs" or "buffs"
+						-- Disable anchorOn on the other type if we're enabling it here
+						if value then
+							setAuraFrameValue(info[2], otherType, frameIndex, "anchorOn", false)
+						end
+						setAuraFrameValue(info[2], auraType, frameIndex, "anchorOn", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local otherType = auraType == "buffs" and "debuffs" or "buffs"
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						local otherCfg = getAuraFrameConfig(info[2], otherType, frameIndex)
+						-- Disabled if this frame is not enabled, or if the other frame is not enabled, or if the other frame has anchorOn
+						return not (cfg and cfg.enabled) or not (otherCfg and otherCfg.enabled) or (otherCfg and otherCfg.anchorOn)
+					end,
+				},
+				filter = {
+					order = 2,
+					type = "select",
+					name = L["Filter"],
+					desc = L["Which auras to show in this frame"],
+					values = function(info)
+						local auraType = info[#(info) - 2]
+						return filterValues[auraType] or filterValues.buffs
+					end,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.filter or "ALL"
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "filter", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				anchorPoint = {
+					order = 3,
+					type = "select",
+					name = L["Position"],
+					values = getAuraAnchors,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.anchorPoint or "TL"
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "anchorPoint", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						-- Disabled if frame not enabled OR if anchorOn is enabled (position is inherited)
+						return not (cfg and cfg.enabled) or (cfg and cfg.anchorOn)
+					end,
+				},
+				size = {
+					order = 4,
+					type = "range",
+					name = L["Icon Size"],
+					min = 8, max = 50, step = 1,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.size or 16
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "size", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				perRow = {
+					order = 5,
+					type = "range",
+					name = L["Per row"],
+					min = 1, max = 20, step = 1,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.perRow or 10
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "perRow", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				maxRows = {
+					order = 6,
+					type = "range",
+					name = L["Max rows"],
+					min = 1, max = 10, step = 1,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.maxRows or 4
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "maxRows", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				x = {
+					order = 7,
+					type = "range",
+					name = L["X Offset"],
+					min = -100, max = 100, step = 1, softMin = -50, softMax = 50,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.x or 0
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "x", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				y = {
+					order = 8,
+					type = "range",
+					name = L["Y Offset"],
+					min = -100, max = 100, step = 1, softMin = -50, softMax = 50,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.y or 0
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "y", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				enlargePlayer = {
+					order = 9,
+					type = "toggle",
+					name = L["Enlarge my auras"],
+					desc = L["Scale up auras that were cast by the player to make them more visible."],
+					hidden = function(info)
+						-- Hide when filter is PLAYER since all auras are already player auras
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.filter == "PLAYER"
+					end,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.enlarge and cfg.enlarge.PLAYER
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						local config = ShadowUF.db.profile.units[info[2]]
+						if config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex] then
+							config.auras[auraType][frameIndex].enlarge = config.auras[auraType][frameIndex].enlarge or {}
+							config.auras[auraType][frameIndex].enlarge.PLAYER = value
+							reloadUnitAuras()
+						end
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				selfScale = {
+					order = 10,
+					type = "range",
+					name = L["Enlarged scale"],
+					desc = L["Scale multiplier applied to player auras when enlargement is enabled."],
+					min = 1.0, max = 2.0, step = 0.05,
+					hidden = function(info)
+						-- Hide when filter is PLAYER since all auras are already player auras
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.filter == "PLAYER"
+					end,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.selfScale or 1.30
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "selfScale", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled) or not (cfg and cfg.enlarge and cfg.enlarge.PLAYER)
+					end,
+				},
+			}
+		}
+	end
 
 	Config.auraTable = {
 		type = "group",
@@ -2118,286 +2463,184 @@ local function loadUnitOptions()
 		order = function(info) return info[#(info)] == "buffs" and 1 or 2 end,
 		disabled = false,
 		args = {
-			general = {
-				type = "group",
-				name = L["General"],
+			frame1 = createAuraFrameOptions(1),
+			frame2 = createAuraFrameOptions(2),
+			frame3 = createAuraFrameOptions(3),
+			frame4 = createAuraFrameOptions(4),
+		}
+	}
+
+	-- Boss Debuffs (Private Auras) configuration
+	-- Uses Blizzard's secure AddPrivateAuraAnchor API for friendly units
+	Config.bossDebuffsTable = {
+		type = "group",
+		name = L["Boss Debuffs"],
+		order = 3,
+		args = {
+			description = {
 				order = 0,
-				args = {
-					enabled = {
-						order = 1,
-						type = "toggle",
-						name = function(info) if( info[#(info) - 2] == "buffs" ) then return L["Enable buffs"] end return L["Enable debuffs"] end,
-						disabled = false,
-						width = "full",
-						arg = "auras.$parentparent.enabled",
-					},
-					temporary = {
-						order = 2,
-						type = "toggle",
-						name = L["Enable temporary enchants"],
-						desc = L["Adds temporary enchants to the buffs for the player."],
-						width = "full",
-						hidden = function(info) return info[2] ~= "player" or info[#(info) - 2] ~= "buffs" end,
-						disabled = function(info) return not getVariable(info[2], "auras", "buffs", "enabled") end,
-						arg = "auras.buffs.temporary",
-					}
-				}
+				type = "description",
+				name = L["Private auras from bosses and encounters displayed using Blizzard's secure API."],
 			},
-			filters = {
-				type = "group",
-				name = L["Filters"],
+			enabled = {
 				order = 1,
+				type = "toggle",
+				name = L["Enable"],
+				width = "half",
+				get = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return cfg and cfg.enabled
+				end,
 				set = function(info, value)
-					getVariable(info[2], "auras", info[#(info) - 2], "show")[info[#(info)]] = value
-					reloadUnitAuras()
+					ShadowUF.db.profile.units[info[2]].auras.bossDebuffs.enabled = value
+					ShadowUF.Layout:Reload()
+				end,
+			},
+			anchorPoint = {
+				order = 2,
+				type = "select",
+				name = L["Position"],
+				values = function()
+					return ShadowUF.db.profile.advanced and advancedAuraList or defaultAuraList
 				end,
 				get = function(info)
-					return getVariable(info[2], "auras", info[#(info) - 2], "show")[info[#(info)]]
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return cfg and cfg.anchorPoint or "C"
 				end,
-				args = {
-					player = {
-						order = 1,
-						type = "toggle",
-						name = L["Show your auras"],
-						desc = L["Whether auras you casted should be shown"],
-						width = "full"
-					},
-					raid = {
-						order = 2,
-						type = "toggle",
-						name = function(info) return info[#(info) - 2] == "buffs" and L["Show castable on other auras"] or L["Show curable/removable auras"] end,
-						desc = function(info) return info[#(info) - 2] == "buffs" and L["Whether to show buffs that you cannot cast."] or L["Whether to show any debuffs you can remove, cure or steal."] end,
-						width = "full"
-					},
-					boss = {
-						order = 3,
-						type = "toggle",
-						name = L["Show casted by boss"],
-						desc = L["Whether to show any auras casted by the boss"],
-						width = "full"
-					},
-					misc = {
-						order = 5,
-						type = "toggle",
-						name = L["Show any other auras"],
-						desc = L["Whether to show auras that do not fall into the above categories."],
-						width = "full"
-					},
-					relevant = {
-						order = 6,
-						type = "toggle",
-						name = L["Smart Friendly/Hostile Filter"],
-						desc = L["Only apply the selected filters to buffs on friendly units and debuffs on hostile units, and otherwise show all auras."],
-						width = "full"
-					},
-				}
+				set = function(info, value)
+					ShadowUF.db.profile.units[info[2]].auras.bossDebuffs.anchorPoint = value
+					ShadowUF.Layout:Reload()
+				end,
+				disabled = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return not (cfg and cfg.enabled)
+				end,
 			},
-			display = {
-				type = "group",
-				name = L["Display"],
-				order = 2,
-				args = {
-					prioritize = {
-						order = 1,
-						type = "toggle",
-						name = L["Prioritize buffs"],
-						desc = L["Show buffs before debuffs when sharing the same anchor point."],
-						hidden = hideBuffOption,
-						disabled = function(info)
-							if( not getVariable(info[2], "auras", info[#(info) - 2], "enabled") ) then return true end
-
-							local buffs = getVariable(info[2], "auras", nil, "buffs")
-							local debuffs = getVariable(info[2], "auras", nil, "debuffs")
-
-							return buffs.anchorOn or debuffs.anchorOn or buffs.anchorPoint ~= debuffs.anchorPoint
-						end,
-						arg = "auras.$parentparent.prioritize"
-					},
-					sep1 = {order = 1.5, type = "description", name = "", width = "full"},
-					selfScale = {
-						order = 2,
-						type = "range",
-						name = L["Scaled aura size"],
-						desc = L["Scale for auras that you casted or can Spellsteal, any number above 100% is bigger than default, any number below 100% is smaller than default."],
-						min = 1, max = 3, step = 0.10,
-						isPercent = true,
-						hidden = hideAdvancedOption,
-						arg = "auras.$parentparent.selfScale",
-					},
-					sep12 = {order = 2.5, type = "description", name = "", width = "full"},
-					timers = {
-						order = 3,
-						type = "multiselect",
-						name = L["Cooldown rings for"],
-						desc = L["When to show cooldown rings on auras"],
-						hidden = hideAdvancedOption,
-						values = function(info)
-							local tbl = {["ALL"] = L["All Auras"], ["SELF"] = L["Your Auras"]}
-							local type = info[#(info) - 2]
-							if( type == "debuffs" ) then
-								tbl["BOSS"] = L["Boss Debuffs"]
-							end
-
-							return tbl;
-						end,
-						set = function(info, key, value)
-							local tbl = getVariable(info[2], "auras", info[#(info) - 2], "timers")
-							if( key == "ALL" and value ) then
-								tbl = {["ALL"] = true}
-							elseif( key ~= "ALL" and value ) then
-								tbl["ALL"] = nil
-								tbl[key] = value
-							else
-								tbl[key] = value
-							end
-
-							setVariable(info[2], "auras", info[#(info) - 2], "timers", tbl)
-							reloadUnitAuras()
-						end,
-						get = function(info, key)
-							return getVariable(info[2], "auras", info[#(info) - 2], "timers")[key]
-						end
-					},
-					sep3 = {order = 3.5, type = "description", name = "", width = "full"},
-					enlarge = {
-						order = 4,
-						type = "multiselect",
-						name = L["Enlarge auras for"],
-						desc = L["What type of auras should be enlarged, use the scaled aura size option to change the size."],
-						values = function(info)
-							local tbl = {["SELF"] = L["Your Auras"]}
-							local type = info[#(info) - 2]
-							if( type == "debuffs" ) then
-								tbl["BOSS"] = L["Boss Debuffs"]
-							end
-
-							if( type == "debuffs" ) then
-								tbl["REMOVABLE"] = L["Curable"]
-							elseif( info[2] ~= "player" and info[2] ~= "pet" and info[2] ~= "party" and info[2] ~= "raid" and type == "buffs" ) then
-								tbl["REMOVABLE"] = L["Dispellable/Stealable"]
-							end
-
-							return tbl;
-						end,
-						set = function(info, key, value)
-							local tbl = getVariable(info[2], "auras", info[#(info) - 2], "enlarge")
-							tbl[key] = value
-
-							setVariable(info[2], "auras", info[#(info) - 2], "enlarge", tbl)
-							reloadUnitAuras()
-						end,
-						get = function(info, key)
-							return getVariable(info[2], "auras", info[#(info) - 2], "enlarge")[key]
-						end
-					}
-				}
-			},
-			positioning = {
-				type = "group",
-				name = L["Positioning"],
+			size = {
 				order = 3,
-				args = {
-					anchorOn = {
-						order = 1,
-						type = "toggle",
-						name = function(info) return info[#(info) - 2] == "buffs" and L["Anchor to debuffs"] or L["Anchor to buffs"] end,
-						desc = L["Allows you to anchor the aura group to another, you can then choose where it will be anchored using the position.|n|nUse this if you want to duplicate the default ui style where buffs and debuffs are separate groups."],
-						set = function(info, value)
-							setVariable(info[2], "auras", info[#(info) - 2] == "buffs" and "debuffs" or "buffs", "anchorOn", false)
-							setUnit(info, value)
-						end,
-						width = "full",
-						arg = "auras.$parentparent.anchorOn",
-					},
-					anchorPoint = {
-						order = 1.5,
-						type = "select",
-						name = L["Position"],
-						desc = L["How you want this aura to be anchored to the unit frame."],
-						values = getAuraAnchors,
-						disabled = disableAnchoredTo,
-						arg = "auras.$parentparent.anchorPoint",
-					},
-					size = {
-						order = 2,
-						type = "range",
-						name = L["Icon Size"],
-						min = 1, max = 30, step = 1,
-						arg = "auras.$parentparent.size",
-					},
-					sep1 = {order = 3, type = "description", name = "", width = "full"},
-					perRow = {
-						order = 13,
-						type = "range",
-						name = function(info)
-							local anchorPoint = getVariable(info[2], "auras", info[#(info) - 2], "anchorPoint")
-							if( ShadowUF.Layout:GetColumnGrowth(anchorPoint) == "LEFT" or ShadowUF.Layout:GetColumnGrowth(anchorPoint) == "RIGHT" ) then
-								return L["Per column"]
-							end
-
-							return L["Per row"]
-						end,
-						desc = L["How many auras to show in a single row."],
-						min = 1, max = 100, step = 1, softMin = 1, softMax = 50,
-						disabled = disableSameAnchor,
-						arg = "auras.$parentparent.perRow",
-					},
-					maxRows = {
-						order = 14,
-						type = "range",
-						name = L["Max rows"],
-						desc = L["How many rows total should be used, rows will be however long the per row value is set at."],
-						min = 1, max = 10, step = 1, softMin = 1, softMax = 5,
-						disabled = disableSameAnchor,
-						hidden = function(info)
-							local anchorPoint = getVariable(info[2], "auras", info[#(info) - 2], "anchorPoint")
-							if( ShadowUF.Layout:GetColumnGrowth(anchorPoint) == "LEFT" or ShadowUF.Layout:GetColumnGrowth(anchorPoint) == "RIGHT" ) then
-								return true
-							end
-
-							return false
-						end,
-						arg = "auras.$parentparent.maxRows",
-					},
-					maxColumns = {
-						order = 14,
-						type = "range",
-						name = L["Max columns"],
-						desc = L["How many auras per a column for example, entering two her will create two rows that are filled up to whatever per row is set as."],
-						min = 1, max = 100, step = 1, softMin = 1, softMax = 50,
-						hidden = function(info)
-							local anchorPoint = getVariable(info[2], "auras", info[#(info) - 2], "anchorPoint")
-							if( ShadowUF.Layout:GetColumnGrowth(anchorPoint) == "LEFT" or ShadowUF.Layout:GetColumnGrowth(anchorPoint) == "RIGHT" ) then
-								return false
-							end
-
-							return true
-						end,
-						disabled = disableSameAnchor,
-						arg = "auras.$parentparent.maxRows",
-					},
-					x = {
-						order = 18,
-						type = "range",
-						name = L["X Offset"],
-						min = -1000, max = 1000, step = 1, softMin = -100, softMax = 100,
-						disabled = disableSameAnchor,
-						hidden = hideAdvancedOption,
-						arg = "auras.$parentparent.x",
-					},
-					y = {
-						order = 19,
-						type = "range",
-						name = L["Y Offset"],
-						min = -1000, max = 1000, step = 1, softMin = -100, softMax = 100,
-						disabled = disableSameAnchor,
-						hidden = hideAdvancedOption,
-						arg = "auras.$parentparent.y",
-					},
-
-				}
-			}
-		}
+				type = "range",
+				name = L["Icon Size"],
+				min = 16, max = 64, step = 1,
+				get = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return cfg and cfg.size or 32
+				end,
+				set = function(info, value)
+					ShadowUF.db.profile.units[info[2]].auras.bossDebuffs.size = value
+					ShadowUF.Layout:Reload()
+				end,
+				disabled = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return not (cfg and cfg.enabled)
+				end,
+			},
+			perRow = {
+				order = 4,
+				type = "range",
+				name = L["Per row"],
+				min = 1, max = 10, step = 1,
+				get = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return cfg and cfg.perRow or 3
+				end,
+				set = function(info, value)
+					ShadowUF.db.profile.units[info[2]].auras.bossDebuffs.perRow = value
+					ShadowUF.Layout:Reload()
+				end,
+				disabled = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return not (cfg and cfg.enabled)
+				end,
+			},
+			maxRows = {
+				order = 5,
+				type = "range",
+				name = L["Max rows"],
+				min = 1, max = 5, step = 1,
+				get = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return cfg and cfg.maxRows or 1
+				end,
+				set = function(info, value)
+					ShadowUF.db.profile.units[info[2]].auras.bossDebuffs.maxRows = value
+					ShadowUF.Layout:Reload()
+				end,
+				disabled = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return not (cfg and cfg.enabled)
+				end,
+			},
+			x = {
+				order = 6,
+				type = "range",
+				name = L["X Offset"],
+				min = -200, max = 200, step = 1, softMin = -100, softMax = 100,
+				get = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return cfg and cfg.x or 0
+				end,
+				set = function(info, value)
+					ShadowUF.db.profile.units[info[2]].auras.bossDebuffs.x = value
+					ShadowUF.Layout:Reload()
+				end,
+				disabled = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return not (cfg and cfg.enabled)
+				end,
+			},
+			y = {
+				order = 7,
+				type = "range",
+				name = L["Y Offset"],
+				min = -200, max = 200, step = 1, softMin = -100, softMax = 100,
+				get = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return cfg and cfg.y or 0
+				end,
+				set = function(info, value)
+					ShadowUF.db.profile.units[info[2]].auras.bossDebuffs.y = value
+					ShadowUF.Layout:Reload()
+				end,
+				disabled = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return not (cfg and cfg.enabled)
+				end,
+			},
+			showCooldown = {
+				order = 8,
+				type = "toggle",
+				name = L["Show cooldown"],
+				get = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return cfg and cfg.showCooldown ~= false
+				end,
+				set = function(info, value)
+					ShadowUF.db.profile.units[info[2]].auras.bossDebuffs.showCooldown = value
+					ShadowUF.Layout:Reload()
+				end,
+				disabled = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return not (cfg and cfg.enabled)
+				end,
+			},
+			showCooldownNumbers = {
+				order = 9,
+				type = "toggle",
+				name = L["Show cooldown numbers"],
+				get = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return cfg and cfg.showCooldownNumbers ~= false
+				end,
+				set = function(info, value)
+					ShadowUF.db.profile.units[info[2]].auras.bossDebuffs.showCooldownNumbers = value
+					ShadowUF.Layout:Reload()
+				end,
+				disabled = function(info)
+					local cfg = ShadowUF.db.profile.units[info[2]].auras.bossDebuffs
+					return not (cfg and cfg.enabled)
+				end,
+			},
+		},
 	}
 
 	local function hideBarOption(info)
@@ -4293,27 +4536,45 @@ local function loadUnitOptions()
 						hidden = function(info) return ShadowUF.Units.zoneUnits[info[2]] or hideRestrictedOption(info) end,
 						disabled = function(info) return not getVariable(info[2], "healthBar", nil, "enabled") end,
 						args = {
-							heals = {
-								order = 1,
-								type = "toggle",
-								name = L["Show Heal Absorbs"],
-								desc = L["Adds a bar inside the health bar indicating how much healing will be absorbed and not applied to the player."],
-								arg = "healAbsorb.enabled",
-								hidden = false,
-								set = function(info, value)
-									setUnit(info, value)
-									setDirectUnit(info[2], "healAbsorb", nil, "enabled", getVariable(info[2], "healAbsorb", nil, "enabled"))
-								end
-							},
-							cap = {
-								order = 3,
+								heals = {
+									order = 1,
+									type = "toggle",
+									name = L["Show Heal Absorbs"],
+									desc = L["Adds a bar inside the health bar indicating how much healing will be absorbed and not applied to the player."],
+									arg = "healAbsorb.enabled",
+									hidden = false,
+									set = function(info, value)
+										setUnit(info, value)
+										setDirectUnit(info[2], "healAbsorb", nil, "enabled", getVariable(info[2], "healAbsorb", nil, "enabled"))
+									end
+								},
+								anchorMode = {
+									order = 2,
+									type = "select",
+									name = L["Anchor mode"],
+									desc = L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."] .. "\n\n" .. L["Bar anchored to the right edge of the frame, growing inward with reverse fill."],
+									values = {["healthBar"] = L["Attached to health bar"], ["frame"] = L["Attached to frame"]},
+									arg = "healAbsorb.anchorMode",
+									hidden = false,
+								},
+								cap = {
+									order = 3,
+									type = "range",
+									name = L["Outside bar limit"],
+									desc = L["Percentage value of how far outside the unit frame the absorbed health bar can go. 130% means it will go 30% outside the frame, 100% means it will not go outside."],
+									min = 1, max = 1.50, step = 0.05, isPercent = true,
+									arg = "healAbsorb.cap",
+									hidden = function(info) return getVariable(info[2], "healAbsorb", nil, "anchorMode") == "frame" end,
+								},
+							frameSize = {
+								order = 4,
+								min = 0.50, max = 0.90, step = 0.05, isPercent = true,
 								type = "range",
-								name = L["Outside bar limit"],
-								desc = L["Percentage value of how far outside the unit frame the absorbed health bar can go. 130% means it will go 30% outside the frame, 100% means it will not go outside."],
-								min = 1, max = 1.50, step = 0.05, isPercent = true,
-								arg = "healAbsorb.cap",
-								hidden = false,
-							},
+								name = L["Bar interior"],
+								desc = L["Percentage value of how far inside the unit frame the absorbed health bar can go. 90% means it will go 10% inside the frame, 50% means it will go up to the middle of the frame."],
+								arg = "healAbsorb.frameSize",
+								hidden = function(info) return getVariable(info[2], "healAbsorb", nil, "anchorMode") ~= "frame" end,
+								},
 						},
 					},
 					incHeal = {
@@ -4336,6 +4597,15 @@ local function loadUnitOptions()
 									setDirectUnit(info[2], "incHeal", nil, "enabled", getVariable(info[2], "incHeal", nil, "enabled"))
 								end
 							},
+							anchorMode = {
+								order = 2,
+								type = "select",
+								name = L["Anchor mode"],
+								desc = L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."] .. "\n\n" .. L["Bar anchored to the right edge of the frame, growing inward with reverse fill."],
+								values = {["healthBar"] = L["Attached to health bar"], ["frame"] = L["Attached to frame"]},
+								arg = "incHeal.anchorMode",
+								hidden = false,
+							},
 							cap = {
 								order = 3,
 								type = "range",
@@ -4343,7 +4613,16 @@ local function loadUnitOptions()
 								desc = L["Percentage value of how far outside the unit frame the incoming heal bar can go. 130% means it will go 30% outside the frame, 100% means it will not go outside."],
 								min = 1, max = 1.50, step = 0.05, isPercent = true,
 								arg = "incHeal.cap",
-								hidden = false,
+								hidden = function(info) return getVariable(info[2], "incHeal", nil, "anchorMode") == "frame" end,
+							},
+							frameSize = {
+								order = 4,
+								type = "range",
+								name = L["Bar interior"],
+								desc = L["Percentage value of how far inside the unit frame the incoming heal bar can go. 90% means it will go 10% inside the frame, 50% means it will go up to the middle of the frame."],
+								min = 0.50, max = 0.90, step = 0.05, isPercent = true,
+								arg = "incHeal.frameSize",
+								hidden = function(info) return getVariable(info[2], "incHeal", nil, "anchorMode") ~= "frame" end,
 							},
 						},
 					},
@@ -4367,6 +4646,15 @@ local function loadUnitOptions()
 									setDirectUnit(info[2], "incAbsorb", nil, "enabled", getVariable(info[2], "incAbsorb", nil, "enabled"))
 								end
 							},
+							anchorMode = {
+								order = 2,
+								type = "select",
+								name = L["Anchor mode"],
+								desc = L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."] .. "\n\n" .. L["Bar anchored to the right edge of the frame, growing inward with reverse fill."],
+								values = {["healthBar"] = L["Attached to health bar"], ["frame"] = L["Attached to frame"]},
+								arg = "incAbsorb.anchorMode",
+								hidden = false,
+							},
 							cap = {
 								order = 3,
 								type = "range",
@@ -4374,7 +4662,16 @@ local function loadUnitOptions()
 								desc = L["Percentage value of how far outside the unit frame the incoming absorb bar can go. 130% means it will go 30% outside the frame, 100% means it will not go outside."],
 								min = 1, max = 1.50, step = 0.05, isPercent = true,
 								arg = "incAbsorb.cap",
-								hidden = false,
+								hidden = function(info) return getVariable(info[2], "incAbsorb", nil, "anchorMode") == "frame" end,
+							},
+							frameSize = {
+								order = 4,
+								type = "range",
+								name = L["Bar interior"],
+								desc = L["Percentage value of how far inside the unit frame the incoming absorb bar can go. 90% means it will go 10% inside the frame, 50% means it will go up to the middle of the frame."],
+								min = 0.50, max = 0.90, step = 0.05, isPercent = true,
+								arg = "incAbsorb.frameSize",
+								hidden = function(info) return getVariable(info[2], "incAbsorb", nil, "anchorMode") ~= "frame" end,
 							},
 						},
 					},
@@ -4713,6 +5010,7 @@ local function loadUnitOptions()
 				args = {
 					buffs = Config.auraTable,
 					debuffs = Config.auraTable,
+					bossDebuffs = Config.bossDebuffsTable,
 				},
 			},
 			indicators = {
@@ -7578,17 +7876,17 @@ local function loadOptions()
 	loadUnitOptions()
 	loadHideOptions()
 	loadTagOptions()
-	loadFilterOptions()
+	-- loadFilterOptions()  -- DISABLED: Not compatible with WoW 12.0
 	loadVisibilityOptions()
-	loadAuraIndicatorsOptions()
+	-- loadAuraIndicatorsOptions()  -- DISABLED: Not compatible with WoW 12.0 secret values in combat
 
 	-- Ordering
 	options.args.general.order = 1
 	options.args.profile.order = 1.5
 	options.args.enableUnits.order = 2
 	options.args.units.order = 3
-	options.args.filter.order = 4
-	options.args.auraIndicators.order = 4.5
+	-- options.args.filter.order = 4  -- DISABLED: Not compatible with WoW 12.0
+	-- options.args.auraIndicators.order = 4.5  -- DISABLED: Module not compatible with WoW 12.0
 	options.args.hideBlizzard.order = 5
 	options.args.visibility.order = 6
 	options.args.tags.order = 7

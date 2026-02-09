@@ -138,6 +138,44 @@ local function createConfigEnv()
 			local auraType = mod == 0 and "Magic" or mod == 1 and "Curse" or mod == 2 and "Poison" or mod == 3 and "Disease" or "none"
 			return L["Test Aura"], texture, id, auraType, 0, 0, "player", id % 6 == 0
 		end,
+		-- Modern WoW 11.0+ aura API mock
+		AuraUtil = setmetatable({
+			ForEachAura = function(unit, filter, maxCount, func, usePackedAura)
+				-- Generate mock auras for preview
+				local count = math.min(maxCount or 8, 8)
+				for i = 1, count do
+					local mod = i % 5
+					local auraType = mod == 0 and "Magic" or mod == 1 and "Curse" or mod == 2 and "Poison" or mod == 3 and "Disease" or ""
+					local isBuff = filter and string.find(filter, "HELPFUL")
+
+					local auraData = {
+						name = L["Test Aura"],
+						icon = isBuff and "Interface\\Icons\\Spell_Nature_Rejuvenation" or "Interface\\Icons\\Ability_DualWield",
+						applications = i % 3 == 0 and math.random(1, 5) or 0,
+						dispelName = auraType ~= "" and auraType or nil,
+						duration = 300,
+						expirationTime = GetTime() + 300 - (i * 20),
+						sourceUnit = i % 2 == 0 and "player" or "target",
+						isStealable = isBuff and i % 4 == 0,
+						isFromPlayerOrPlayerPet = i % 2 == 0,
+						isBossAura = i % 7 == 0,
+						spellId = 1000 + i,
+						auraInstanceID = i,
+						nameplateShowAll = true,
+						canApplyAura = i % 3 == 0,
+					}
+
+					if usePackedAura then
+						func(auraData)
+					else
+						func(auraData.name, auraData.icon, auraData.applications, auraData.dispelName,
+							auraData.duration, auraData.expirationTime, auraData.sourceUnit, auraData.isStealable,
+							false, auraData.spellId, false, auraData.isBossAura, auraData.isFromPlayerOrPlayerPet,
+							false, false, auraData.auraInstanceID)
+					end
+				end
+			end,
+		}, { __index = _G.AuraUtil }),
 		UnitName = function(unit)
 			local unitID = string.match(unit, "(%d+)")
 			if( unitID ) then

@@ -3,25 +3,47 @@ ShadowUF:RegisterModule(Health, "healthBar", ShadowUF.L["Health bar"], true)
 local canCure = ShadowUF.Units.canCure
 
 local function getGradientColor(unit)
-	local maxHealth = UnitHealthMax(unit)
-	local percent = maxHealth > 0 and UnitHealth(unit) / maxHealth or 0
-	if( percent >= 1 ) then return ShadowUF.db.profile.healthColors.green.r, ShadowUF.db.profile.healthColors.green.g, ShadowUF.db.profile.healthColors.green.b end
-	if( percent == 0 ) then return ShadowUF.db.profile.healthColors.red.r, ShadowUF.db.profile.healthColors.red.g, ShadowUF.db.profile.healthColors.red.b end
-
-	local sR, sG, sB, eR, eG, eB = 0, 0, 0, 0, 0, 0
-	local modifier, inverseModifier = percent * 2, 0
-	if( percent > 0.50 ) then
-		sR, sG, sB = ShadowUF.db.profile.healthColors.green.r, ShadowUF.db.profile.healthColors.green.g, ShadowUF.db.profile.healthColors.green.b
-		eR, eG, eB = ShadowUF.db.profile.healthColors.yellow.r, ShadowUF.db.profile.healthColors.yellow.g, ShadowUF.db.profile.healthColors.yellow.b
-
-		modifier = modifier - 1
-	else
-		sR, sG, sB = ShadowUF.db.profile.healthColors.yellow.r, ShadowUF.db.profile.healthColors.yellow.g, ShadowUF.db.profile.healthColors.yellow.b
-		eR, eG, eB = ShadowUF.db.profile.healthColors.red.r, ShadowUF.db.profile.healthColors.red.g, ShadowUF.db.profile.healthColors.red.b
+	if not ShadowUF.db or not ShadowUF.db.profile or not ShadowUF.db.profile.healthColors then
+		-- DB not ready yet; safe fallback.
+		return 0, 1, 0
 	end
 
-	inverseModifier = 1 - modifier
-	return eR * inverseModifier + sR * modifier, eG * inverseModifier + sG * modifier, eB * inverseModifier + sB * modifier
+	-- Cache curve and rebuild only when profile colors change.
+	Health._gradientKey = Health._gradientKey or nil
+	Health._gradientCurve = Health._gradientCurve or nil
+
+	local hc = ShadowUF.db.profile.healthColors
+	local key = string.format(
+		"%.3f,%.3f,%.3f|%.3f,%.3f,%.3f|%.3f,%.3f,%.3f",
+		hc.red.r, hc.red.g, hc.red.b,
+		hc.yellow.r, hc.yellow.g, hc.yellow.b,
+		hc.green.r, hc.green.g, hc.green.b
+	)
+
+	if not Health._gradientCurve or Health._gradientKey ~= key then
+		Health._gradientKey = key
+
+		if C_CurveUtil and C_CurveUtil.CreateColorCurve then
+			local curve = C_CurveUtil.CreateColorCurve()
+			curve:AddPoint(0.0, CreateColor(hc.red.r, hc.red.g, hc.red.b))
+			curve:AddPoint(0.5, CreateColor(hc.yellow.r, hc.yellow.g, hc.yellow.b))
+			curve:AddPoint(1.0, CreateColor(hc.green.r, hc.green.g, hc.green.b))
+			Health._gradientCurve = curve
+		else
+			Health._gradientCurve = nil
+		end
+	end
+
+	-- 12.0: Curve Interpolation
+	if UnitHealthPercent and Health._gradientCurve then
+		local ok, color = pcall(UnitHealthPercent, unit, true, Health._gradientCurve)
+		if ok and color and color.GetRGB then
+			return color:GetRGB()
+		end
+	end
+
+	-- Fallback: solid green
+	return hc.green.r, hc.green.g, hc.green.b
 end
 
 Health.getGradientColor = getGradientColor
@@ -29,6 +51,151 @@ Health.getGradientColor = getGradientColor
 function Health:OnEnable(frame)
 	if( not frame.healthBar ) then
 		frame.healthBar = ShadowUF.Units:CreateBar(frame)
+	end
+    
+    -- ... (Listeners kept same)
+	frame:RegisterUnitEvent("UNIT_HEALTH", self, "Update")
+	frame:RegisterUnitEvent("UNIT_MAXHEALTH", self, "Update")
+	frame:RegisterUnitEvent("UNIT_CONNECTION", self, "Update")
+	frame:RegisterUnitEvent("UNIT_FACTION", self, "UpdateColor")
+	frame:RegisterUnitEvent("UNIT_THREAT_SITUATION_UPDATE", self, "UpdateColor")
+	frame:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", self, "UpdateColor")
+
+	if( frame.unit == "pet" ) then
+		frame:RegisterUnitEvent("UNIT_POWER_UPDATE", self, "UpdateColor")
+	end
+
+	if ( ShadowUF.db.profile.units[frame.unitType].healthBar.colorDispel ) then
+		frame:RegisterUnitEvent("UNIT_AURA", self, "UpdateAura")
+		frame:RegisterUpdateFunc(self, "UpdateAura")
+	end
+	
+	frame:RegisterUpdateFunc(self, "UpdateColor")
+	frame:RegisterUpdateFunc(self, "Update")
+end
+
+function Health:OnDisable(frame)
+	frame:UnregisterAll(self)
+end
+
+function Health:UpdateAura(frame)
+	-- ... (Keep existing logic)
+	local hadDebuff = frame.healthBar.hasDebuff
+	frame.healthBar.hasDebuff = nil
+	if( UnitIsFriend(frame.unit, "player") ) then
+		-- 12.0 Safe Scan for curable debuffs
+		local slots = {C_UnitAuras.GetAuraSlots(frame.unit, "HARMFUL")}
+		-- Index 1 is continuation token
+		for i = 2, #slots do
+			local index = slots[i]
+			local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, index)
+			if( auraData and auraData.dispelName ) then
+				if( canCure[auraData.dispelName] ) then
+					frame.healthBar.hasDebuff = auraData.dispelName
+					break
+				end
+			end
+		end
+	end
+
+	if hadDebuff ~= frame.healthBar.hasDebuff then
+		self:UpdateColor(frame)
+	end
+end
+
+function Health:UpdateColor(frame)
+	frame.healthBar.hasReaction = nil
+	frame.healthBar.hasPercent = nil
+	frame.healthBar.wasOffline = nil
+
+	local color
+	local unit = frame.unit
+	local reactionType = ShadowUF.db.profile.units[frame.unitType].healthBar.reactionType
+	
+	if( not UnitIsConnected(unit) ) then
+		frame.healthBar.wasOffline = true
+		frame:SetBarColor("healthBar", ShadowUF.db.profile.healthColors.offline.r, ShadowUF.db.profile.healthColors.offline.g, ShadowUF.db.profile.healthColors.offline.b)
+		return
+	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorDispel and frame.healthBar.hasDebuff ) then
+		color = DebuffTypeColor[frame.healthBar.hasDebuff]
+	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorAggro and UnitThreatSituation(frame.unit) == 3 ) then
+		frame:SetBarColor("healthBar", ShadowUF.db.profile.healthColors.aggro.r, ShadowUF.db.profile.healthColors.aggro.g, ShadowUF.db.profile.healthColors.aggro.b)
+		return
+	elseif( frame.inVehicle ) then
+		color = ShadowUF.db.profile.classColors.VEHICLE
+	elseif( not UnitPlayerControlled(unit) and UnitIsTapDenied(unit) and UnitCanAttack("player", unit) ) then
+		color = ShadowUF.db.profile.healthColors.tapped
+	elseif( not UnitPlayerOrPetInRaid(unit) and not UnitPlayerOrPetInParty(unit) and ( ( ( reactionType == "player" or reactionType == "both" ) and UnitPlayerControlled(unit) and not UnitIsFriend(unit, "player") ) or ( ( reactionType == "npc" or reactionType == "both" )  and not UnitPlayerControlled(unit) ) ) ) then
+		if( not UnitIsFriend(unit, "player") and UnitPlayerControlled(unit) ) then
+			if( UnitCanAttack("player", unit) ) then
+				color = ShadowUF.db.profile.healthColors.hostile
+			else
+				color = ShadowUF.db.profile.healthColors.enemyUnattack
+			end
+		elseif( UnitReaction(unit, "player") ) then
+			local reaction = UnitReaction(unit, "player")
+			if( reaction > 4 ) then
+				color = ShadowUF.db.profile.healthColors.friendly
+			elseif( reaction == 4 ) then
+				color = ShadowUF.db.profile.healthColors.neutral
+			elseif( reaction < 4 ) then
+				color = ShadowUF.db.profile.healthColors.hostile
+			end
+		end
+	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorType == "class" and (UnitIsPlayer(unit) or unit == "pet") ) then
+		local class = (unit == "pet") and "PET" or frame:UnitClassToken()
+		color = class and ShadowUF.db.profile.classColors[class]
+	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorType == "playerclass" and unit == "pet") then
+		local class = select(2, UnitClass("player"))
+		color = class and ShadowUF.db.profile.classColors[class]
+	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorType == "playerclass" and (frame.unitType == "partypet" or frame.unitType == "raidpet" or frame.unitType == "arenapet") and (frame.parent or frame.unitType == "raidpet") ) then
+		local unit2
+		if frame.unitType == "raidpet" then
+			local id = string.match(frame.unit, "raidpet(%d+)")
+			if id then unit2 = "raid" .. id end
+		elseif frame.parent then unit2 = frame.parent.unit end
+		if unit2 then
+			local class = select(2, UnitClass(unit2))
+			color = class and ShadowUF.db.profile.classColors[class]
+		end
+	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorType == "static" ) then
+		color = ShadowUF.db.profile.healthColors.static
+	end
+
+	if( color ) then
+		frame:SetBarColor("healthBar", color.r, color.g, color.b)
+	else
+		frame.healthBar.hasPercent = true
+		frame:SetBarColor("healthBar", getGradientColor(unit))
+	end
+end
+
+function Health:Update(frame)
+	local unit = frame.unit
+	local isOffline = not UnitIsConnected(unit)
+	frame.isDead = UnitIsDeadOrGhost(unit)
+	frame.healthBar.currentHealth = UnitHealth(unit)
+	frame.healthBar:SetMinMaxValues(0, UnitHealthMax(unit))
+
+	-- Safe SetValue
+	local isDead = UnitIsDeadOrGhost(unit)
+	local isConnected = UnitIsConnected(unit)
+	local val = isDead and 0 or not isConnected and 0 or frame.healthBar.currentHealth
+	
+	-- Try to set the value directly (even if secret).
+	pcall(frame.healthBar.SetValue, frame.healthBar, val)
+
+	-- Unit is offline, fill bar up + grey it
+	if( isOffline ) then
+		frame.healthBar.wasOffline = true
+		frame.unitIsOnline = nil
+		frame:SetBarColor("healthBar", ShadowUF.db.profile.healthColors.offline.r, ShadowUF.db.profile.healthColors.offline.g, ShadowUF.db.profile.healthColors.offline.b)
+	-- The unit was offline, but they no longer are so we need to do a forced color update
+	elseif( frame.healthBar.wasOffline ) then
+		frame.healthBar.wasOffline = nil
+		self:UpdateColor(frame)
+	-- Color health by percentage
+	elseif( frame.healthBar.hasPercent ) then
 	end
 
 	frame:RegisterUnitEvent("UNIT_HEALTH", self, "Update")
@@ -46,7 +213,7 @@ function Health:OnEnable(frame)
 		frame:RegisterUnitEvent("UNIT_AURA", self, "UpdateAura")
 		frame:RegisterUpdateFunc(self, "UpdateAura")
 	end
-
+	
 	frame:RegisterUpdateFunc(self, "UpdateColor")
 	frame:RegisterUpdateFunc(self, "Update")
 end
@@ -59,15 +226,17 @@ function Health:UpdateAura(frame)
 	local hadDebuff = frame.healthBar.hasDebuff
 	frame.healthBar.hasDebuff = nil
 	if( UnitIsFriend(frame.unit, "player") ) then
-		local id = 0
-		while( true ) do
-			id = id + 1
-			local name, _, _, auraType = AuraUtil.UnpackAuraData(C_UnitAuras.GetDebuffDataByIndex(frame.unit, id))
-			if( not name ) then break end
-
-			if( canCure[auraType] ) then
-				frame.healthBar.hasDebuff = auraType
-				break
+		-- 12.0 Safe Scan for curable debuffs
+		local slots = {C_UnitAuras.GetAuraSlots(frame.unit, "HARMFUL")}
+		-- Index 1 is continuation token
+		for i = 2, #slots do
+			local index = slots[i]
+			local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, index)
+			if( auraData and auraData.dispelName ) then
+				if( canCure[auraData.dispelName] ) then
+					frame.healthBar.hasDebuff = auraData.dispelName
+					break
+				end
 			end
 		end
 	end
@@ -143,16 +312,44 @@ function Health:UpdateColor(frame)
 		frame:SetBarColor("healthBar", color.r, color.g, color.b)
 	else
 		frame.healthBar.hasPercent = true
-		frame:SetBarColor("healthBar", getGradientColor(unit))
+		
+		-- 12.0: Check for Curve
+		local curve = getGradientColor(unit) -- Returns Curve or RGB values (multiple returns)
+		if( type(curve) == "userdata" ) then
+		    -- It is a Curve. Bypass SetBarColor to avoid crash.
+		    -- Apply directly.
+		    if( frame.healthBar.SetStatusBarColorCurve ) then
+		        frame.healthBar:SetStatusBarColorCurve(curve)
+		    elseif( frame.healthBar.SetColorCurve ) then
+		        frame.healthBar:SetColorCurve(curve)
+		    end
+		    
+		    -- Set static background (Cannot darken a secret curve)
+		    -- Using a standard dark grey
+		    if( frame.healthBar.background ) then
+		        frame.healthBar.background:SetVertexColor(0.2, 0.2, 0.2, 1)
+		    end
+		else
+		    -- Manual RGB (Legacy Fallback)
+		    frame:SetBarColor("healthBar", getGradientColor(unit))
+		end
 	end
 end
 
 function Health:Update(frame)
-	local isOffline = not UnitIsConnected(frame.unit)
-	frame.isDead = UnitIsDeadOrGhost(frame.unit)
-	frame.healthBar.currentHealth = UnitHealth(frame.unit)
-	frame.healthBar:SetMinMaxValues(0, UnitHealthMax(frame.unit))
-	frame.healthBar:SetValue(isOffline and UnitHealthMax(frame.unit) or frame.isDead and 0 or frame.healthBar.currentHealth)
+	local unit = frame.unit
+	local isOffline = not UnitIsConnected(unit)
+	frame.isDead = UnitIsDeadOrGhost(unit)
+	frame.healthBar.currentHealth = UnitHealth(unit)
+	frame.healthBar:SetMinMaxValues(0, UnitHealthMax(unit))
+
+	-- Safe SetValue
+	local isDead = UnitIsDeadOrGhost(unit)
+	local isConnected = UnitIsConnected(unit)
+	local val = isDead and 0 or not isConnected and 0 or frame.healthBar.currentHealth
+	
+	-- Try to set the value directly (even if secret).
+	pcall(frame.healthBar.SetValue, frame.healthBar, val)
 
 	-- Unit is offline, fill bar up + grey it
 	if( isOffline ) then
@@ -165,6 +362,24 @@ function Health:Update(frame)
 		self:UpdateColor(frame)
 	-- Color health by percentage
 	elseif( frame.healthBar.hasPercent ) then
-		frame:SetBarColor("healthBar", getGradientColor(frame.unit))
+		-- 12.0: Check for Curve
+		local curve = getGradientColor(frame.unit)
+		if( type(curve) == "userdata" ) then
+		    -- Curve Logic
+		    if( frame.healthBar.SetStatusBarColorCurve ) then
+		        frame.healthBar:SetStatusBarColorCurve(curve)
+		    elseif( frame.healthBar.SetColorCurve ) then
+		        frame.healthBar:SetColorCurve(curve)
+		    end
+		    
+		    -- Background update not needed here as UpdateColor handles it, 
+		    -- but to be safe and consistent with non-UpdateColor flows:
+		    if( frame.healthBar.background ) then
+		         frame.healthBar.background:SetVertexColor(0.2, 0.2, 0.2, 1)
+		    end
+		else
+		    -- Manual Logic
+		    frame:SetBarColor("healthBar", getGradientColor(frame.unit))
+		end
 	end
 end

@@ -190,18 +190,33 @@ local auraList = {}
 local function scanAuras(frame, filter, type)
 	local isFriendly = not UnitIsEnemy(frame.unit, "player")
 
-	local index = 0
-	while( true ) do
-		index = index + 1
-		local name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff = AuraUtil.UnpackAuraData(C_UnitAuras.GetAuraDataByIndex(frame.unit, index, filter))
-		if( not name ) then return end
+	-- 12.0 Safe Scan
+	local slots = {C_UnitAuras.GetAuraSlots(frame.unit, filter)}
+	for i = 2, #slots do
+		local index = slots[i]
+		local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, index)
+		if( auraData and auraData.name ) then
+			local name = auraData.name
+			local texture = auraData.icon
+			local count = auraData.applications
+			local auraType = auraData.dispelName
+			local duration = auraData.duration
+			local endTime = auraData.expirationTime
+			local caster = auraData.sourceUnit
+			local isRemovable = auraData.isStealable -- For buff stealing
+			local nameplateShowPersonal = auraData.nameplateShowPersonal
+			local spellID = auraData.spellId
+			local canApplyAura = auraData.canApplyAura
+			local isBossDebuff = auraData.isBossAura
+			
+			
+			local result = checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
+			if( not result ) then
+				checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
+			end
 
-		local result = checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
-		if( not result ) then
-			checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
+			auraList[name] = true
 		end
-
-		auraList[name] = true
 	end
 end
 

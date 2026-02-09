@@ -8,6 +8,7 @@ end
 
 local function resetGUID(self)
 	self.guid = nil
+	self._nextSecretUpdate = nil
 end
 
 function Portrait:OnEnable(frame)
@@ -49,10 +50,35 @@ function Portrait:UpdateFunc(frame)
 	-- Portrait models can't be updated unless the GUID changed or else you have the animation jumping around
 	if( ShadowUF.db.profile.units[frame.unitType].portrait.type == "3D" ) then
 		local guid = UnitGUID(frame.unitOwner)
-		if( frame.portrait.guid ~= guid ) then
-			self:Update(frame)
+		local prev = frame.portrait.guid
+
+		-- Only compare when it is safe (not secret + caller can access the value).
+		local canCompare = false
+		
+		-- Use Blizzard globals for secret checks if available
+		if (_G.canaccessvalue and _G.issecretvalue) then
+			canCompare = guid ~= nil and prev ~= nil and 
+						canaccessvalue(guid) and canaccessvalue(prev) and 
+						(not issecretvalue(guid)) and (not issecretvalue(prev))
+		else
+			-- Fallback: basic type check (if globals missing)
+			canCompare = type(guid) == "string" and type(prev) == "string"
 		end
 
+		if canCompare then
+			if prev ~= guid then
+				self:Update(frame)
+			end
+		else
+			-- If we cannot compare (secret/tainted), do a throttled update so we do not jitter every frame (credits Xinux_vg).
+			local now = GetTime()
+			if not frame.portrait._nextSecretUpdate or now >= frame.portrait._nextSecretUpdate then
+				self:Update(frame)
+				frame.portrait._nextSecretUpdate = now + 0.50
+			end
+		end
+
+		-- Storing secrets is allowed; we just do not compare them unless safe.
 		frame.portrait.guid = guid
 	else
 		self:Update(frame)

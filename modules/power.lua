@@ -96,7 +96,19 @@ function Power:Update(frame, event, unit, powerType)
 	if( event and powerType and powerType ~= frame.powerBar.currentType ) then return end
 	if( frame.powerBar.minusMob ) then return end
 
+	-- Attempt to get power values. If secret, these might be userdata or cause errors on math
+	-- We try to set them directly to the bar. If that fails, we hide or zero.
 	frame.powerBar.currentPower = UnitPower(frame.unit)
-	frame.powerBar:SetMinMaxValues(0, UnitPowerMax(frame.unit))
-	frame.powerBar:SetValue(UnitIsDeadOrGhost(frame.unit) and 0 or not UnitIsConnected(frame.unit) and 0 or frame.powerBar.currentPower)
+	local maxPower = UnitPowerMax(frame.unit)
+	
+	-- Safe update for MinMax
+	local success = pcall(frame.powerBar.SetMinMaxValues, frame.powerBar, 0, maxPower)
+	if( not success ) then
+		-- Fallback for secret values if set fails: try 0-1, or hide execution
+		frame.powerBar:SetMinMaxValues(0, 1)
+	end
+
+	-- Safe update for Value
+	local val = UnitIsDeadOrGhost(frame.unit) and 0 or not UnitIsConnected(frame.unit) and 0 or frame.powerBar.currentPower
+	pcall(frame.powerBar.SetValue, frame.powerBar, val)
 end

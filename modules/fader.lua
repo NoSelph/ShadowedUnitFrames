@@ -147,10 +147,10 @@ function Fader:Update(frame, event)
 	elseif( frame.fader.playerCasting ) then
 		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha, true)
 	-- Ether mana or energy is not at 100%, fade in
-	elseif( powerDepletes[UnitPowerType(frame.unit)] and UnitPower(frame.unit) ~= UnitPowerMax(frame.unit) ) then
+	elseif( powerDepletes[UnitPowerType(frame.unit)] and ShadowUF:SafeMath(function() return UnitPower(frame.unit) ~= UnitPowerMax(frame.unit) end) ) then
 		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha)
 	-- Health is not at max, fade in
-	elseif( UnitHealth(frame.unit) ~= UnitHealthMax(frame.unit) ) then
+	elseif( ShadowUF:SafeMath(function() return UnitHealth(frame.unit) ~= UnitHealthMax(frame.unit) end) ) then
 		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha)
 	-- Targetting somebody, fade in
 	elseif( frame.unitType == "player" and UnitExists("target") ) then

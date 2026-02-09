@@ -5,7 +5,7 @@
 ShadowUF = select(2, ...)
 
 local L = ShadowUF.L
-ShadowUF.dbRevision = 63
+ShadowUF.dbRevision = 64
 ShadowUF.playerUnit = "player"
 ShadowUF.enabledUnits = {}
 ShadowUF.modules = {}
@@ -101,13 +101,36 @@ function ShadowUF.UnitAuraBySpell(unit, spell, filter)
 			index = index + 1
 			local data = C_UnitAuras.GetAuraDataByIndex(unit, index, filter)
 			if not data then break end
-			if data.spellId == spell then
+			local match = false
+			local success, result = pcall(function() return data.spellId == spell end)
+			if( success and result ) then
+				match = true
+			end
+			
+			if match then
 				auraData = data
 				break
 			end
 		end
 	end
-	return AuraUtil.UnpackAuraData(auraData)
+	-- Manual safe unpack for 12.0
+	if( not auraData ) then return nil end
+	
+	return  auraData.name,
+			auraData.icon,
+			auraData.applications,
+			auraData.dispelName,
+			auraData.duration,
+			auraData.expirationTime,
+			auraData.sourceUnit,
+			auraData.isStealable,
+			auraData.nameplateShowPersonal,
+			auraData.spellId,
+			auraData.canApplyAura,
+			auraData.isBossAura,
+			auraData.isFromPlayerOrPlayerPet,
+			auraData.nameplateShowAll,
+			auraData.timeMod
 end
 
 function ShadowUF:CheckBuild()
@@ -243,6 +266,45 @@ function ShadowUF:CheckUpgrade()
 			end
 		end
 	end
+	
+	-- Migrate old auras config to new multi-frame structure
+	if( revision <= 63 ) then
+		for unit, config in pairs(self.db.profile.units) do
+			if( config.auras ) then
+				for _, key in pairs({"buffs", "debuffs"}) do
+					local oldAura = config.auras[key]
+					-- Check if this is old format (has 'enabled' at top level, not a numbered table)
+					if( oldAura and oldAura.enabled ~= nil and oldAura[1] == nil ) then
+						-- Migrate to new structure: old config becomes frame 1
+						local newFrame = {
+							enabled = oldAura.enabled,
+							filter = "ALL", -- Default to showing all
+							perRow = oldAura.perRow or 10,
+							maxRows = oldAura.maxRows or 4,
+							size = oldAura.size or 16,
+							selfScale = oldAura.selfScale or 1.30,
+							anchorPoint = oldAura.anchorPoint or (key == "buffs" and "TL" or "BL"),
+							x = oldAura.x or 0,
+							y = oldAura.y or 0,
+							enlarge = oldAura.enlarge or {},
+							timers = oldAura.timers or {ALL = true},
+						}
+						-- Create new structure with frame 1
+						config.auras[key] = {
+							[1] = newFrame,
+							[2] = {enabled = false, filter = "PLAYER", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+							[3] = {enabled = false, filter = key == "debuffs" and "DISPELLABLE" or "CANCELABLE", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+							[4] = {enabled = false, filter = "RAID", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+						}
+					end
+				end
+				-- Add bossDebuffs if not present
+				if( not config.auras.bossDebuffs ) then
+					config.auras.bossDebuffs = {enabled = false, size = 32, maxAuras = 3, anchorPoint = "C", x = 0, y = 0}
+				end
+			end
+		end
+	end
 end
 
 local function zoneEnabled(zone, zoneList)
@@ -313,8 +375,20 @@ function ShadowUF:LoadUnitDefaults()
 			highlight = {},
 			auraIndicators = {enabled = false},
 			auras = {
-				buffs = {enabled = false, perRow = 10, maxRows = 4, selfScale = 1.30, prioritize = true, show = {player = true, boss = true, raid = true, misc = true}, enlarge = {}, timers = {ALL = true}},
-				debuffs = {enabled = false, perRow = 10, maxRows = 4, selfScale = 1.30, show = {player = true, boss = true, raid = true, misc = true}, enlarge = {SELF = true}, timers = {ALL = true}},
+				buffs = {
+					[1] = {enabled = true, filter = "ALL", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[2] = {enabled = false, filter = "PLAYER", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[3] = {enabled = false, filter = "CANCELABLE", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[4] = {enabled = false, filter = "RAID", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+				},
+				debuffs = {
+					[1] = {enabled = true, filter = "ALL", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[2] = {enabled = false, filter = "PLAYER", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[3] = {enabled = false, filter = "DISPELLABLE", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[4] = {enabled = false, filter = "RAID", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+				},
+				-- Boss debuffs (Private Auras) - player only
+				bossDebuffs = {enabled = false, size = 32, perRow = 3, maxRows = 1, anchorPoint = "C", x = 0, y = 0, showCooldown = true, showCooldownNumbers = true},
 			},
 		}
 
@@ -322,9 +396,9 @@ function ShadowUF:LoadUnitDefaults()
 			self.defaults.profile.units[unit].combatText = {enabled = true, anchorTo = "$parent", anchorPoint = "C", x = 0, y = 0}
 
 			if( unit ~= "battleground" and unit ~= "battlegroundpet" and unit ~= "arena" and unit ~= "arenapet" and unit ~= "boss" ) then
-				self.defaults.profile.units[unit].incHeal = {enabled = true, cap = 1.20}
-				self.defaults.profile.units[unit].incAbsorb = {enabled = true, cap = 1.30}
-				self.defaults.profile.units[unit].healAbsorb = {enabled = true, cap = 1.30}
+				self.defaults.profile.units[unit].incHeal = {enabled = true, cap = 1.20, anchorMode = "healthBar", frameSize = 0.80}
+				self.defaults.profile.units[unit].incAbsorb = {enabled = true, cap = 1.30, anchorMode = "healthBar", frameSize = 0.80}
+				self.defaults.profile.units[unit].healAbsorb = {enabled = true, cap = 1.30, anchorMode = "healthBar", frameSize = 0.80}
 			end
 		end
 
@@ -898,6 +972,41 @@ end
 
 function ShadowUF:Print(msg)
 	DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99Shadow UF|r: " .. msg)
+end
+
+function ShadowUF:SafeMath(func, ...)
+	local success, result = pcall(func, ...)
+	if( success ) then
+		return result
+	end
+	return nil
+end
+
+function ShadowUF:SafeFormatLargeNumber(number)
+	if( type(number) ~= "number" ) then
+		return number
+	end
+	
+	local success, result = pcall(ShadowUF.FormatLargeNumber, self, number)
+	if( success ) then
+		return result
+	end
+	
+	-- Fallback for secret values: return raw number as string (trusted)
+	return tostring(number)
+end
+
+function ShadowUF:SafeSmartFormatNumber(number)
+	if( type(number) ~= "number" ) then
+		return number
+	end
+
+	local success, result = pcall(ShadowUF.SmartFormatNumber, self, number)
+	if( success ) then
+		return result
+	end
+
+	return string.format("%s", number)
 end
 
 CONFIGMODE_CALLBACKS = CONFIGMODE_CALLBACKS or {}

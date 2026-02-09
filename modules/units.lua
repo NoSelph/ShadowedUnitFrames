@@ -71,7 +71,7 @@ local function RegisterNormalEvent(self, event, handler, func, unitOverride)
 		event = "UNIT_HEALTH"
 	end
 
-	if( unitEvents[event] and not ShadowUF.fakeUnits[self.unitRealType] ) then
+	if( unitEvents[event] and event ~= "UNIT_AURA" and not ShadowUF.fakeUnits[self.unitRealType] ) then
 		self:BlizzRegisterUnitEvent(event, unitOverride or self.unitOwner, self.vehicleUnit)
 		if unitOverride then
 			self.unitEventOverrides = self.unitEventOverrides or {}
@@ -190,19 +190,38 @@ end
 
 local function SetBlockColor(self, bar, key, r, g, b)
 	local bgColor = bar.background.overrideColor or bar.background.backgroundColor
-	if( not ShadowUF.db.profile.units[self.unitType][key].invert ) then
-		bar:SetStatusBarColor(r, g, b, ShadowUF.db.profile.bars.alpha)
+	local unitCfg = ShadowUF.db.profile.units[self.unitType][key]
+	local alpha = ShadowUF.db.profile.bars.alpha
+	local bgAlpha = ShadowUF.db.profile.bars.backgroundAlpha
+	local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+	
+	-- Keep the StatusBarColor neutral; real tint is applied to the texture.
+	-- This avoids passing secret values into SetStatusBarColor.
+	bar:SetStatusBarColor(1, 1, 1, 1)
+
+	if( not unitCfg.invert ) then
+		-- Filled bar color
+		if tex then
+			tex:SetVertexColor(r, g, b, alpha)
+		end
+		-- Background color
 		if( not bgColor ) then
-			bar.background:SetVertexColor(r, g, b, ShadowUF.db.profile.bars.backgroundAlpha)
+			bar.background:SetVertexColor(r, g, b, bgAlpha)
 		else
-			bar.background:SetVertexColor(bgColor.r, bgColor.g, bgColor.b, ShadowUF.db.profile.bars.backgroundAlpha)
+			bar.background:SetVertexColor(bgColor.r, bgColor.g, bgColor.b, bgAlpha)
 		end
 	else
-		bar.background:SetVertexColor(r, g, b, ShadowUF.db.profile.bars.alpha)
-		if( not bgColor ) then
-			bar:SetStatusBarColor(0, 0, 0, 1 - ShadowUF.db.profile.bars.backgroundAlpha)
-		else
-			bar:SetStatusBarColor(bgColor.r, bgColor.g, bgColor.b, 1 - ShadowUF.db.profile.bars.backgroundAlpha)
+		-- Inverted: background is the main color, filled bar is bgColor/black.
+		bar.background:SetVertexColor(r, g, b, alpha)
+
+		local fr, fg, fb = 0, 0, 0
+		if bgColor then
+			fr, fg, fb = bgColor.r, bgColor.g, bgColor.b
+		end
+
+		local fillAlpha = 1 - bgAlpha
+		if tex then
+			tex:SetVertexColor(fr, fg, fb, fillAlpha)
 		end
 	end
 end
@@ -328,7 +347,7 @@ local function checkVehicleData(self, elapsed)
 			self:FullUpdate()
 
 		-- Got data, stop checking and do a full frame update
-		elseif( UnitIsConnected(self.unit) or UnitHealthMax(self.unit) > 0 ) then
+		elseif( UnitIsConnected(self.unit) or UnitExists(self.unit) ) then
 			self.timeElapsed = nil
 			self.dataAttempts = nil
 			self:SetScript("OnUpdate", nil)
@@ -348,7 +367,7 @@ function Units:CheckVehicleStatus(frame, event, unit)
 		frame.inVehicle = true
 		frame.unit = frame.vehicleUnit
 
-		if( not UnitIsConnected(frame.unit) or UnitHealthMax(frame.unit) == 0 ) then
+		if( not UnitIsConnected(frame.unit) ) then
 			frame.timeElapsed = 0
 			frame.dataAttempts = 0
 			frame:SetScript("OnUpdate", checkVehicleData)
@@ -369,7 +388,25 @@ end
 -- Handles checking for GUID changes for doing a full update, this fixes frames sometimes showing the wrong unit when they change
 function Units:CheckUnitStatus(frame)
 	local guid = frame.unit and UnitGUID(frame.unit)
-	if( guid ~= frame.unitGUID ) then
+	
+	-- Global 'issecretvalue' check for both current and stored GUID
+	local checkSecret = _G.issecretvalue
+	local isSecret = checkSecret and checkSecret(guid)
+	local wasSecret = checkSecret and checkSecret(frame.unitGUID)
+
+	local changed = false
+
+	if( isSecret and wasSecret ) then
+		changed = false
+	elseif( isSecret ~= wasSecret ) then
+		changed = true
+	else
+		if( guid ~= frame.unitGUID ) then
+			changed = true
+		end
+	end
+
+	if( changed ) then
 		frame.unitGUID = guid
 
 		if( guid ) then
@@ -716,7 +753,7 @@ function Units:CreateUnit(...)
 
 	-- Ensures that text is the absolute highest thing there is
 	frame.highFrame = CreateFrame("Frame", nil, frame)
-	frame.highFrame:SetFrameLevel(frame.topFrameLevel + 2)
+	frame.highFrame:SetFrameLevel(frame.topFrameLevel + 5)
 	frame.highFrame:SetAllPoints(frame)
 
 	frame:HookScript("OnAttributeChanged", OnAttributeChanged)
@@ -1156,6 +1193,7 @@ end
 
 -- Fake headers that are supposed to act like headers to the users, but are really not
 function Units:LoadZoneHeader(type)
+	if( InCombatLockdown() ) then return end
 	if( headerFrames[type] ) then
 		headerFrames[type]:Show()
 		for _, child in pairs(headerFrames[type].children) do
@@ -1501,6 +1539,9 @@ local function checkCurableSpells()
 	if( not curableSpells ) then return end
 
 	table.wipe(Units.canCure)
+	
+	-- Bump version so highlight ColorCurve can invalidate its cache
+	Units.canCureVersion = (Units.canCureVersion or 0) + 1
 
 	for spellID, cures in pairs(curableSpells) do
 		if( IsPlayerSpell(spellID) or IsSpellKnown(spellID, true) ) then
@@ -1566,6 +1607,25 @@ centralFrame:SetScript("OnEvent", function(self, event, unit)
 		self:RegisterEvent("SPELLS_CHANGED")
 		if( playerClass == "WARLOCK" ) then
 			self:RegisterUnitEvent("UNIT_PET", "player", nil)
+		end
+		
+		-- Register key change events that need immediate FullUpdate if frame is already visible
+		self:RegisterEvent("PLAYER_TARGET_CHANGED")
+		self:RegisterEvent("PLAYER_FOCUS_CHANGED")
+
+	-- Handle Target/Focus changes instantly to avoid latency
+	elseif( event == "PLAYER_TARGET_CHANGED" ) then
+		for frame in pairs(ShadowUF.Units.frameList) do
+			if( frame.unit == "target" and frame:IsVisible() ) then
+				frame:FullUpdate()
+			end
+		end
+		
+	elseif( event == "PLAYER_FOCUS_CHANGED" ) then
+		for frame in pairs(ShadowUF.Units.frameList) do
+			if( frame.unit == "focus" and frame:IsVisible() ) then
+				frame:FullUpdate()
+			end
 		end
 
 	-- This is slightly hackish, but it suits the purpose just fine for somthing thats rarely called.

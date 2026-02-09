@@ -50,6 +50,6 @@ function AltPower:Update(frame, event, unit, type)
 	local barInfo = GetUnitPowerBarInfoByID(barID)
 	local minPower = barInfo and barInfo.minPower or 0
 
-	frame.altPowerBar:SetMinMaxValues(minPower, UnitPowerMax(frame.unit, ALTERNATE_POWER_INDEX) or 0)
-	frame.altPowerBar:SetValue(UnitPower(frame.unit, ALTERNATE_POWER_INDEX) or 0)
+	pcall(frame.altPowerBar.SetMinMaxValues, frame.altPowerBar, minPower, UnitPowerMax(frame.unit, ALTERNATE_POWER_INDEX) or 0)
+	pcall(frame.altPowerBar.SetValue, frame.altPowerBar, UnitPower(frame.unit, ALTERNATE_POWER_INDEX) or 0)
 end

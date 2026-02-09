@@ -1,12 +1,12 @@
-## Interface: 110207, 110205
+## Interface: 120000
 ## Title: Shadowed Unit Frames
 ## Notes: Moooooooooooooooooo
 ## Author: Shadowed
-## Version: @project-version@
+## Version: v4.4.18
 ## SavedVariables: ShadowedUFDB
-## X-Website: https://www.wowace.com/addons/shadowed-unit-frames/
+## X-Website: https://www.curseforge.com/wow/addons/shadowed-unit-frames-midnight
 ## OptionalDeps: Ace3, LibSharedMedia-3.0, AceGUI-3.0-SharedMediaWidgets, LibDualSpec-1.0, LibSpellRange-1.0, UTF8, Clique
-## X-Curse-Project-ID: 19268
+## X-Curse-Project-ID: 1449430
 ## X-WoWI-ID: 13494
 ## Category: Unit Frames
 ## Category-deDE: Einheitenfenster
@@ -57,7 +57,7 @@ modules\indicators.lua
 modules\xp.lua
 modules\cast.lua
 modules\auras.lua
-modules\auraindicators.lua
+# modules\auraindicators.lua  -- DISABLED: Not compatible with WoW 12.0
 modules\combattext.lua
 modules\totems.lua
 modules\runes.lua
@@ -80,6 +80,3 @@ modules\priest.lua
 modules\shaman.lua
 modules\arcanecharges.lua
 modules\essence.lua
-#@do-not-package@
-options\config.lua
-#@end-do-not-package@

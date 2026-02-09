@@ -327,26 +327,59 @@ function ShadowUF:Hex(r, g, b)
 	return string.format("|cff%02x%02x%02x", r * 255, g * 255, b * 255)
 end
 
+local largeNumberOptions = {
+	{breakpoint = 100000000, abbreviation = "m", precision = 0},
+	{breakpoint = 1000000, abbreviation = "m", precision = 2},
+	{breakpoint = 1000, abbreviation = "k", precision = 1},
+}
+
 function ShadowUF:FormatLargeNumber(number)
-	if( number < 9999 ) then
-		return number
-	elseif( number < 999999 ) then
-		return string.format("%.1fk", number / 1000)
-	elseif( number < 99999999 ) then
-		return string.format("%.2fm", number / 1000000)
+	if( type(number) ~= "number" ) then return number end
+
+	-- 12.0: Use native Blizzard formatter with custom breakpoints (Handles secrets + precision)
+	if (AbbreviateNumbers) then
+		return AbbreviateNumbers(number, largeNumberOptions)
 	end
 
-	return string.format("%dm", number / 1000000)
+	-- Legacy Fallback
+	local success, result = pcall(function()
+		if( number < 9999 ) then
+			return number
+		elseif( number < 999999 ) then
+			return string.format("%.1fk", number / 1000)
+		elseif( number < 99999999 ) then
+			return string.format("%.2fm", number / 1000000)
+		end
+		return string.format("%dm", number / 1000000)
+	end)
+
+	if( success ) then return result end
+	return string.format("%s", number) -- Secret fallback
 end
 
+local smartNumberOptions = {
+	{breakpoint = 100000000, abbreviation = "m", precision = 0},
+	{breakpoint = 1000000, abbreviation = "m", precision = 2},
+}
+
 function ShadowUF:SmartFormatNumber(number)
-	if( number < 999999 ) then
-		return number
-	elseif( number < 99999999 ) then
-		return string.format("%.2fm", number / 1000000)
+	if( type(number) ~= "number" ) then return number end
+
+	if (AbbreviateNumbers) then
+		return AbbreviateNumbers(number, smartNumberOptions)
 	end
 
-	return string.format("%dm", number / 1000000)
+	local success, result = pcall(function()
+		if( number < 999999 ) then
+			return number
+		elseif( number < 99999999 ) then
+			return string.format("%.2fm", number / 1000000)
+		end
+		return string.format("%dm", number / 1000000)
+	end)
+
+	if( success ) then return result end
+	return string.format("%s", number) -- Secret fallback
 end
 
 function ShadowUF:GetClassColor(unit)
@@ -359,13 +392,19 @@ function ShadowUF:GetClassColor(unit)
 end
 
 function ShadowUF:FormatShortTime(seconds)
-	if( seconds >= 3600 ) then
-		return string.format("%dh", seconds / 3600)
-	elseif( seconds >= 60 ) then
-		return string.format("%dm", seconds / 60)
-	end
+	if( type(seconds) ~= "number" ) then return seconds end
 
-	return string.format("%ds", seconds)
+	local success, result = pcall(function()
+		if( seconds >= 3600 ) then
+			return string.format("%dh", seconds / 3600)
+		elseif( seconds >= 60 ) then
+			return string.format("%dm", seconds / 60)
+		end
+		return string.format("%ds", seconds)
+	end)
+
+	if( success ) then return result end
+	return ""
 end
 
 -- Name abbreviation
@@ -596,13 +635,14 @@ Tags.defaultTags = {
 		return string.format("%s%s|r", color, name)
 	end]],
 	["curpp"] = [[function(unit, unitOwner)
-		if( UnitPowerMax(unit) <= 0 ) then
-			return nil
+		-- Check for secret values in comparison
+		if( ShadowUF:SafeMath(function() return UnitPowerMax(unit) <= 0 end) ) then
+			return ShadowUF:SafeFormatLargeNumber(UnitPower(unit))
 		elseif( UnitIsDeadOrGhost(unit) ) then
 			return 0
 		end
 
-		return ShadowUF:FormatLargeNumber(UnitPower(unit))
+		return ShadowUF:SafeFormatLargeNumber(UnitPower(unit))
 	end]],
 	["curmaxhp"] = [[function(unit, unitOwner)
 		if( UnitIsDead(unit) ) then
@@ -611,9 +651,11 @@ Tags.defaultTags = {
 			return ShadowUF.L["Ghost"]
 		elseif( not UnitIsConnected(unit) ) then
 			return ShadowUF.L["Offline"]
+		elseif( ShadowUF:SafeMath(function() return UnitHealthMax(unit) <= 0 end) ) then
+			return string.format("%s/%s", ShadowUF:SafeFormatLargeNumber(UnitHealth(unit)), ShadowUF:SafeFormatLargeNumber(UnitHealthMax(unit)))
 		end
-
-		return string.format("%s/%s", ShadowUF:FormatLargeNumber(UnitHealth(unit)), ShadowUF:FormatLargeNumber(UnitHealthMax(unit)))
+		
+		return string.format("%s/%s", ShadowUF:SafeFormatLargeNumber(UnitHealth(unit)), ShadowUF:SafeFormatLargeNumber(UnitHealthMax(unit)))
 	end]],
 	["smart:curmaxhp"] = [[function(unit, unitOwner)
 		if( UnitIsDead(unit) ) then
@@ -650,7 +692,7 @@ Tags.defaultTags = {
 	end]],
 	["absmaxhp"] = [[function(unit, unitOwner) return UnitHealthMax(unit) end]],
 	["abscurpp"] = [[function(unit, unitOwner)
-		if( UnitPowerMax(unit) <= 0 ) then
+		if( ShadowUF:SafeMath(function() return UnitPowerMax(unit) <= 0 end) ) then
 			return nil
 		elseif( UnitIsDeadOrGhost(unit) ) then
 			return 0
@@ -660,14 +702,18 @@ Tags.defaultTags = {
 	end]],
 	["absmaxpp"] = [[function(unit, unitOwner)
 		local power = UnitPowerMax(unit)
-		return power > 0 and power or nil
+		-- Check safe compare
+		if( ShadowUF:SafeMath(function() return power > 0 end) ) then
+			return power
+		end
+		return nil
 	end]],
 	["absolutepp"] = [[function(unit, unitOwner)
 		local maxPower = UnitPowerMax(unit)
 		local power = UnitPower(unit)
 		if( UnitIsDeadOrGhost(unit) ) then
 			return string.format("0/%s", maxPower)
-		elseif( maxPower <= 0 ) then
+		elseif( ShadowUF:SafeMath(function() return maxPower <= 0 end) ) then
 			return nil
 		end
 
@@ -677,23 +723,23 @@ Tags.defaultTags = {
 		local maxPower = UnitPowerMax(unit)
 		local power = UnitPower(unit)
 		if( UnitIsDeadOrGhost(unit) ) then
-			return string.format("0/%s", ShadowUF:FormatLargeNumber(maxPower))
-		elseif( maxPower <= 0 ) then
-			return nil
+			return string.format("0/%s", ShadowUF:SafeFormatLargeNumber(maxPower))
+		elseif( ShadowUF:SafeMath(function() return maxPower <= 0 end) ) then
+			return string.format("%s/%s", ShadowUF:SafeFormatLargeNumber(power), ShadowUF:SafeFormatLargeNumber(maxPower))
 		end
 
-		return string.format("%s/%s", ShadowUF:FormatLargeNumber(power), ShadowUF:FormatLargeNumber(maxPower))
+		return string.format("%s/%s", ShadowUF:SafeFormatLargeNumber(power), ShadowUF:SafeFormatLargeNumber(maxPower))
 	end]],
 	["smart:curmaxpp"] = [[function(unit, unitOwner)
 		local maxPower = UnitPowerMax(unit)
 		local power = UnitPower(unit)
 		if( UnitIsDeadOrGhost(unit) ) then
 			return string.format("0/%s", maxPower)
-		elseif( maxPower <= 0 ) then
+		elseif( ShadowUF:SafeMath(function() return maxPower <= 0 end) ) then
 			return nil
 		end
 
-		return string.format("%s/%s", ShadowUF:SmartFormatNumber(power), ShadowUF:SmartFormatNumber(maxPower))
+		return string.format("%s/%s", ShadowUF:SafeSmartFormatNumber(power), ShadowUF:SafeSmartFormatNumber(maxPower))
 	end]],
 	["levelcolor"] = [[function(unit, unitOwner)
 		if( UnitIsWildBattlePet(unit) or UnitIsBattlePetCompanion(unit) ) then
@@ -725,16 +771,16 @@ Tags.defaultTags = {
 		local level = UnitLevel(unit) or 0
 		return level > 0 and level or UnitClassification(unit) ~= "worldboss" and "??" or nil
 	end]],
-	["maxhp"] = [[function(unit, unitOwner) return ShadowUF:FormatLargeNumber(UnitHealthMax(unit)) end]],
+	["maxhp"] = [[function(unit, unitOwner) return ShadowUF:SafeFormatLargeNumber(UnitHealthMax(unit)) end]],
 	["maxpp"] = [[function(unit, unitOwner)
 		local power = UnitPowerMax(unit)
-		if( power <= 0 ) then
-			return nil
+		if( ShadowUF:SafeMath(function() return power <= 0 end) ) then
+			return ShadowUF:SafeFormatLargeNumber(power)
 		elseif( UnitIsDeadOrGhost(unit) ) then
 			return 0
 		end
 
-		return ShadowUF:FormatLargeNumber(power)
+		return ShadowUF:SafeFormatLargeNumber(power)
 	end]],
 	["missinghp"] = [[function(unit, unitOwner)
 		if( UnitIsDead(unit) ) then
@@ -743,21 +789,31 @@ Tags.defaultTags = {
 			return ShadowUF.L["Ghost"]
 		elseif( not UnitIsConnected(unit) ) then
 			return ShadowUF.L["Offline"]
-		end
-
-		local missing = UnitHealthMax(unit) - UnitHealth(unit)
-		if( missing <= 0 ) then return nil end
-		return "-" .. ShadowUF:FormatLargeNumber(missing)
-	end]],
-	["missingpp"] = [[function(unit, unitOwner)
-		local power = UnitPowerMax(unit)
-		if( power <= 0 ) then
+		elseif( ShadowUF:SafeMath(function() return UnitHealthMax(unit) <= 0 end) ) then
 			return nil
 		end
 
-		local missing = power - UnitPower(unit)
-		if( missing <= 0 ) then return nil end
-		return "-" .. ShadowUF:FormatLargeNumber(missing)
+		local success, missing = pcall(function() return UnitHealthMax(unit) - UnitHealth(unit) end)
+		if( success ) then
+			if( missing <= 0 ) then return nil end
+			return "-" .. ShadowUF:SafeFormatLargeNumber(missing)
+		end
+		-- Secret value: Cannot compute missing health.
+		return nil
+	end]],
+	["missingpp"] = [[function(unit, unitOwner)
+		local power = UnitPowerMax(unit)
+		if( ShadowUF:SafeMath(function() return power <= 0 end) ) then
+			return nil
+		end
+
+		local success, missing = pcall(function() return power - UnitPower(unit) end)
+		if( success ) then
+			if( missing <= 0 ) then return nil end
+			return "-" .. ShadowUF:SafeFormatLargeNumber(missing)
+		end
+		-- Secret value: Cannot compute missing power.
+		return nil
 	end]],
 	["def:name"] = [[function(unit, unitOwner)
 		local deficit = ShadowUF.tagFunc.missinghp(unit, unitOwner)
@@ -775,22 +831,29 @@ Tags.defaultTags = {
 		return server ~= "" and server or nil
 	end]],
 	["perhp"] = [[function(unit, unitOwner)
-		local max = UnitHealthMax(unit)
-		if( max <= 0 or UnitIsDead(unit) or UnitIsGhost(unit) or not UnitIsConnected(unit) ) then
+		if UnitIsDead(unit) or UnitIsGhost(unit) or not UnitIsConnected(unit) then
 			return "0%"
 		end
-
-		return math.floor(UnitHealth(unit) / max * 100 + 0.5) .. "%"
+	
+		local percent = UnitHealthPercent(unit, true, CurveConstants and CurveConstants.ScaleTo100 or 100) -- Fallback if CurveConstants missing? Usually present.
+		if percent then
+			return ("%d%%"):format(percent)
+		end
+	
+		return "??"
 	end]],
 	["perpp"] = [[function(unit, unitOwner)
-		local maxPower = UnitPowerMax(unit)
-		if( maxPower <= 0 ) then
-			return nil
-		elseif( UnitIsDeadOrGhost(unit) or not UnitIsConnected(unit) ) then
+		if UnitIsDead(unit) or UnitIsGhost(unit) or not UnitIsConnected(unit) then
 			return "0%"
 		end
 
-		return string.format("%d%%", math.floor(UnitPower(unit) / maxPower * 100 + 0.5))
+		local powerType = UnitPowerType(unit)
+		local percent = UnitPowerPercent(unit, powerType, true, CurveConstants and CurveConstants.ScaleTo100 or 100)
+		if percent then
+			return ("%d%%"):format(percent)
+		end
+
+		return "??"
 	end]],
 	["plus"] = [[function(unit, unitOwner) local classif = UnitClassification(unit) return (classif == "elite" or classif == "rareelite") and "+" end]],
 	["race"] = [[function(unit, unitOwner) return UnitRace(unit) end]],
@@ -845,12 +908,16 @@ Tags.defaultTags = {
 		end
 	end]],
 	["dechp"] = [[function(unit, unitOwner)
-		local maxHealth = UnitHealthMax(unit)
-		if( maxHealth <= 0 ) then
+		if UnitIsDead(unit) or UnitIsGhost(unit) or not UnitIsConnected(unit) then
 			return "0.0%"
 		end
 
-		return string.format("%.1f%%", (UnitHealth(unit) / maxHealth) * 100)
+		local percent = UnitHealthPercent(unit, true, CurveConstants and CurveConstants.ScaleTo100 or 100)
+		if percent then
+			return ("%.1f%%"):format(percent)
+		end
+		
+		return "0.0%"
 	end]],
 	["classification"] = [[function(unit, unitOwner)
 		local classif = UnitClassification(unit)
@@ -991,47 +1058,60 @@ Tags.defaultTags = {
 	["per:incheal"] = [[function(unit, unitOwner, fontString)
 		local heal = UnitGetIncomingHeals(unit)
 		local maxHealth = UnitHealthMax(unit)
-		return heal and heal > 0 and maxHealth > 0 and string.format("%d%%", (heal / maxHealth) * 100)
+		local success, result = pcall(function() 
+			return heal and heal > 0 and maxHealth > 0 and (heal / maxHealth) * 100 
+		end)
+		return success and result and string.format("%d%%", result)
 	end]],
 	["abs:incheal"] = [[function(unit, unitOwner, fontString)
 	    local heal = UnitGetIncomingHeals(unit)
-		return heal and heal > 0 and string.format("%d", heal)
+	    local success, isPositive = pcall(function() return heal and heal > 0 end)
+		return success and isPositive and string.format("%d", heal)
 	end]],
 	["incheal"] = [[function(unit, unitOwner, fontString)
 	    local heal = UnitGetIncomingHeals(unit)
-		return heal and heal > 0 and ShadowUF:FormatLargeNumber(heal)
+	    local success, isPositive = pcall(function() return heal and heal > 0 end)
+		return success and isPositive and ShadowUF:FormatLargeNumber(heal)
 	end]],
 	["incheal:name"] = [[function(unit, unitOwner, fontString)
 	    local heal = UnitGetIncomingHeals(unit)
-		return heal and heal > 0 and string.format("+%d", heal) or ShadowUF.tagFunc.name(unit, unitOwner, fontString)
+	    local success, isPositive = pcall(function() return heal and heal > 0 end)
+		return success and isPositive and string.format("+%d", heal) or ShadowUF.tagFunc.name(unit, unitOwner, fontString)
 	end]],
 	["monk:abs:stagger"] = [[function(unit, unitOwner)
 		local stagger = UnitStagger(unit)
-		return stagger and stagger > 0 and stagger
+		local success, isPositive = pcall(function() return stagger and stagger > 0 end)
+		return success and isPositive and stagger
 	end]],
 	["monk:stagger"] = [[function(unit, unitOwner)
 		local stagger = UnitStagger(unit)
-		return stagger and stagger > 0 and ShadowUF:FormatLargeNumber(stagger)
+		local success, isPositive = pcall(function() return stagger and stagger > 0 end)
+		return success and isPositive and ShadowUF:FormatLargeNumber(stagger)
 	end]],
 	["abs:incabsorb"] = [[function(unit, unitOwner, fontString)
 	    local absorb = UnitGetTotalAbsorbs(unit)
-		return absorb and absorb > 0 and absorb
+	    local success, isPositive = pcall(function() return absorb and absorb > 0 end)
+		return success and isPositive and absorb
 	end]],
 	["incabsorb"] = [[function(unit, unitOwner, fontString)
 	    local absorb = UnitGetTotalAbsorbs(unit)
-		return absorb and absorb > 0 and ShadowUF:FormatLargeNumber(absorb)
+	    local success, isPositive = pcall(function() return absorb and absorb > 0 end)
+		return success and isPositive and ShadowUF:FormatLargeNumber(absorb)
 	end]],
 	["incabsorb:name"] = [[function(unit, unitOwner, fontString)
 	    local absorb = UnitGetTotalAbsorbs(unit)
-		return absorb and absorb > 0 and string.format("+%d", absorb) or ShadowUF.tagFunc.name(unit, unitOwner, fontString)
+	    local success, isPositive = pcall(function() return absorb and absorb > 0 end)
+		return success and isPositive and string.format("+%d", absorb) or ShadowUF.tagFunc.name(unit, unitOwner, fontString)
 	end]],
 	["abs:healabsorb"] = [[function(unit, unitOwner, fontString)
 	    local absorb = UnitGetTotalHealAbsorbs(unit)
-		return absorb and absorb > 0 and absorb
+	    local success, isPositive = pcall(function() return absorb and absorb > 0 end)
+		return success and isPositive and absorb
 	end]],
 	["healabsorb"] = [[function(unit, unitOwner, fontString)
 	    local absorb = UnitGetTotalHealAbsorbs(unit)
-		return absorb and absorb > 0 and ShadowUF:FormatLargeNumber(absorb)
+	    local success, isPositive = pcall(function() return absorb and absorb > 0 end)
+		return success and isPositive and ShadowUF:FormatLargeNumber(absorb)
 	end]],
 	["unit:raid:targeting"] = [[function(unit, unitOwner, fontString)
 		if( GetNumGroupMembers() == 0 ) then return nil end
@@ -1573,7 +1653,7 @@ end
 
 
 -- Checker function, makes sure tags are all happy
---@debug@
+--[==[@debug@
 function Tags:Verify()
 	local fine = true
 	for tag, events in pairs(self.defaultEvents) do
@@ -1618,4 +1698,4 @@ function Tags:Verify()
 		print("Verified tags, everything is fine.")
 	end
 end
---@end-debug@
+--@end-debug@]==]

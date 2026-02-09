@@ -73,30 +73,32 @@ end
 
 -- Updates the timers on runes
 function Runes:UpdateUsable(frame, event, id, usable)
-	if( not id or not frame.runeBar.runes[id] ) then
-		return
-	end
+	-- Update ALL runes to be safe.
+	for i = 1, 6 do
+		if( frame.runeBar.runes[i] ) then
+			local rune = frame.runeBar.runes[i]
+			local startTime, cooldown, cooled = GetRuneCooldown(i)
+			
+			-- If index is somehow secret or not ready, result might be nil
+			if( cooled ~= nil ) then
+				if( not cooled ) then
+					rune.endTime = startTime + cooldown
+					rune:SetMinMaxValues(startTime, rune.endTime)
+					rune:SetValue(GetTime())
+					rune:SetAlpha(0.40)
+					rune:SetScript("OnUpdate", runeMonitor)
+				else
+					rune:SetMinMaxValues(0, 1)
+					rune:SetValue(1)
+					rune:SetAlpha(1.0)
+					rune:SetScript("OnUpdate", nil)
+					rune.endTime = nil
+				end
 
-	local rune = frame.runeBar.runes[id]
-	local startTime, cooldown, cooled = GetRuneCooldown(id)
-	-- Blizzard changed something with this API apparently and now it can be true/false/nil
-	if( cooled == nil ) then return end
-
-	if( not cooled ) then
-		rune.endTime = startTime + cooldown
-		rune:SetMinMaxValues(startTime, rune.endTime)
-		rune:SetValue(GetTime())
-		rune:SetAlpha(0.40)
-		rune:SetScript("OnUpdate", runeMonitor)
-	else
-		rune:SetMinMaxValues(0, 1)
-		rune:SetValue(1)
-		rune:SetAlpha(1.0)
-		rune:SetScript("OnUpdate", nil)
-		rune.endTime = nil
-	end
-
-	if( rune.fontString ) then
-		rune.fontString:UpdateTags()
+				if( rune.fontString ) then
+					rune.fontString:UpdateTags()
+				end
+			end
+		end
 	end
 end

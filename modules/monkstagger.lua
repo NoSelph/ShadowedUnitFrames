@@ -35,20 +35,22 @@ function Stagger:UpdateMinMax(frame)
 end
 
 function Stagger:Update(frame)
-	local stagger = UnitStagger(frame.unit)
-	if( not stagger ) then return end
+	-- tonumber handles secret values that aren't nil but can't be used for arithmetic
+	local stagger = tonumber(UnitStagger(frame.unit)) or 0
+	local maxHealth = frame.staggerBar.maxHealth or UnitHealthMax(frame.unit) or 1
 
 	-- Figure out how screwed they are
-	local percent = stagger / frame.staggerBar.maxHealth
+	local percent = maxHealth > 0 and stagger / maxHealth or 0
 	local state
-	if( percent < STAGGER_STATES.YELLOW.threshold ) then
-		state = "STAGGER_GREEN"
-	elseif( percent < STAGGER_STATES.RED.threshold ) then
+	if( percent >= STAGGER_STATES.RED.threshold ) then
+		state = "STAGGER_RED"
+	elseif( percent >= STAGGER_STATES.YELLOW.threshold ) then
 		state = "STAGGER_YELLOW"
 	else
-		state = "STAGGER_RED"
+		state = "STAGGER_GREEN"
 	end
 
+	-- Always update color and value
 	frame:SetBarColor("staggerBar", ShadowUF.db.profile.powerColors[state].r, ShadowUF.db.profile.powerColors[state].g, ShadowUF.db.profile.powerColors[state].b)
 	frame.staggerBar:SetValue(stagger)
 end

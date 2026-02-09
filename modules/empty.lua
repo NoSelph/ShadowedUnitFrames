@@ -1,5 +1,6 @@
 local Empty = {}
 local fallbackColor
+local issecretvalue = _G.issecretvalue
 ShadowUF:RegisterModule(Empty, "emptyBar", ShadowUF.L["Empty bar"], true)
 
 function Empty:OnEnable(frame)
@@ -53,7 +54,9 @@ function Empty:UpdateColor(frame)
 		end
 	elseif( ShadowUF.db.profile.units[frame.unitType].emptyBar.class and ( UnitIsPlayer(frame.unit) or UnitCreatureFamily(frame.unit) ) ) then
 		local class = UnitCreatureFamily(frame.unit) or frame:UnitClassToken()
-		color = class and ShadowUF.db.profile.classColors[class]
+		if class and not (issecretvalue and issecretvalue(class)) then
+			color = ShadowUF.db.profile.classColors[class]
+		end
 	end
 
 	color = color or frame.emptyBar.background.overrideColor or fallbackColor

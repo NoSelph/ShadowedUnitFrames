@@ -13,8 +13,13 @@ local Range = {
 		["PALADIN"] = GetSpellName(19750), -- Flash of Light
 		["SHAMAN"] = GetSpellName(8004), -- Healing Surge
 		["WARLOCK"] = GetSpellName(5697), -- Unending Breath
-		--["DEATHKNIGHT"] = GetSpellName(47541), -- Death Coil
+		["DEATHKNIGHT"] = GetSpellName(61999), -- Raise Ally
 		["MONK"] = GetSpellName(115450), -- Detox
+		["MAGE"] = GetSpellName(130), -- Slow Fall
+		["WARRIOR"] = GetSpellName(3411), -- Intervene
+		["EVOKER"] = GetSpellName(361469), -- Living Flame
+		--["ROGUE"] = GetSpellName(57934), -- Tricks of the Trade (100yd)
+		--["DEMONHUNTER"] = nil, 
 	},
 	hostile = {
 		["DEATHKNIGHT"] = {
@@ -36,10 +41,15 @@ local Range = {
 		["MONK"] = GetSpellName(115546), -- Provoke
 		["PALADIN"] = GetSpellName(62124), -- Hand of Reckoning
 		["PRIEST"] = GetSpellName(585), -- Smite
-		--["ROGUE"] = GetSpellName(1725), -- Distract
+		["ROGUE"] = {
+			(GetSpellName(185565)), -- Poisoned Knife
+			(GetSpellName(185763)), -- Pistol Shot
+			(GetSpellName(114014)), -- Shuriken Toss
+		},
 		["SHAMAN"] = GetSpellName(188196), -- Lightning Bolt
 		["WARLOCK"] = GetSpellName(686), -- Shadow Bolt
 		["WARRIOR"] = GetSpellName(355), -- Taunt
+		["EVOKER"] = GetSpellName(361469), -- Living Flame
 	},
 }
 
@@ -53,34 +63,88 @@ local rangeSpells = {}
 local UnitPhaseReason_o = UnitPhaseReason
 local UnitPhaseReason = function(unit)
 	local phase = UnitPhaseReason_o(unit)
-	if (phase == Enum.PhaseReason.WarMode or phase == Enum.PhaseReason.ChromieTime or Enum.PhaseReason.TimerunningHwt) and UnitIsVisible(unit) then
+	if (phase == Enum.PhaseReason.WarMode or phase == Enum.PhaseReason.ChromieTime or phase == Enum.PhaseReason.TimerunningHwt) and UnitIsVisible(unit) then
 		return nil
 	end
 	return phase
 end
 
+local function SafeAlphaFromBool(v, inAlpha, oorAlpha)
+    local ok, alpha = pcall(function()
+        return v and inAlpha or oorAlpha
+    end)
+    if ok then
+        return alpha
+    end
+    -- If v is a secret boolean (or otherwise forbidden), we can't branch on it.
+    -- Default to "in range" so we don't dim incorrectly and don't error.
+    return inAlpha
+end
+
+local scrub = scrubsecretvalues or function(v) return v end
+
+
+local function SafeIsSpellInRange(spell, unit)
+    local ok, res = pcall(LSR.IsSpellInRange, spell, unit)
+    if not ok then return nil end
+
+    -- res can also become secret; do the compare inside pcall.
+    local ok2, inRange = pcall(function() return res == 1 end)
+    if not ok2 then return nil end
+
+    return inRange
+end
+
+
 local function checkRange(self)
-	local frame = self.parent
+    local frame = self.parent
+    local cfg = ShadowUF.db.profile.units[frame.unitType].range
+    local inAlpha, oorAlpha = cfg.inAlpha, cfg.oorAlpha
 
-	-- Check which spell to use
-	local spell
-	if( UnitCanAssist("player", frame.unit) ) then
-		spell = rangeSpells.friendly
-	elseif( UnitCanAttack("player", frame.unit) ) then
-		spell = rangeSpells.hostile
-	end
+    -- Check which spell to use
+    local spell
+    if UnitCanAssist("player", frame.unit) then
+        spell = rangeSpells.friendly
+    elseif UnitCanAttack("player", frame.unit) then
+        spell = rangeSpells.hostile
+    end
 
-	if( not UnitIsConnected(frame.unit) or UnitPhaseReason(frame.unit) ) then
-		frame:SetRangeAlpha(ShadowUF.db.profile.units[frame.unitType].range.oorAlpha)
-	elseif( spell ) then
-		frame:SetRangeAlpha(LSR.IsSpellInRange(spell, frame.unit) == 1 and ShadowUF.db.profile.units[frame.unitType].range.inAlpha or ShadowUF.db.profile.units[frame.unitType].range.oorAlpha)
-	-- That didn't work, but they are grouped lets try the actual API for this, it's a bit flaky though and not that useful generally
-	elseif( UnitInRaid(frame.unit) or UnitInParty(frame.unit) ) then
-		frame:SetRangeAlpha(UnitInRange(frame.unit, "player") and ShadowUF.db.profile.units[frame.unitType].range.inAlpha or ShadowUF.db.profile.units[frame.unitType].range.oorAlpha)
-	-- Nope, just show in range :(
-	else
-		frame:SetRangeAlpha(ShadowUF.db.profile.units[frame.unitType].range.inAlpha)
-	end
+    if (not UnitIsConnected(frame.unit)) or UnitPhaseReason(frame.unit) then
+        frame:SetRangeAlpha(oorAlpha)
+        return
+    end
+
+    if spell then
+        local inRange = SafeIsSpellInRange(spell, frame.unit)
+        if inRange == nil then
+            -- Can't safely evaluate (secret/taint/etc). Don't error; just keep bright.
+            frame:SetRangeAlpha(inAlpha)
+        else
+            frame:SetRangeAlpha(inRange and inAlpha or oorAlpha)
+        end
+        return
+    end
+
+    -- Group fallback: UnitInRange can return secret booleans; don't branch on it directly.
+if UnitInRaid(frame.unit) or UnitInParty(frame.unit) then
+    local ok, inRange, checkedRange = pcall(UnitInRange, frame.unit)
+
+    -- checkedRange can be a secret boolean; scrub it before branching
+    local checked = ok and scrub(checkedRange)
+
+    if checked then
+        -- inRange may also be secret; SafeAlphaFromBool already handles that safely
+        frame:SetRangeAlpha(SafeAlphaFromBool(inRange, inAlpha, oorAlpha))
+    else
+        -- If we can't safely check range, keep bright (no errors, no false-dimming)
+        frame:SetRangeAlpha(inAlpha)
+    end
+    return
+end
+
+
+    -- Default
+    frame:SetRangeAlpha(inAlpha)
 end
 
 local function updateSpellCache(category)
@@ -121,7 +185,9 @@ local function cancelTimer(frame)
 end
 
 function Range:ForceUpdate(frame)
-	if( UnitIsUnit(frame.unit, "player") ) then
+	-- UnitIsUnit can return secret values for fake units, boolean test must be inside pcall
+	local ok, isPlayer = pcall(function() return UnitIsUnit(frame.unit, "player") and true or false end)
+	if( ok and isPlayer ) then
 		frame:SetRangeAlpha(ShadowUF.db.profile.units[frame.unitType].range.inAlpha)
 		cancelTimer(frame)
 	else
