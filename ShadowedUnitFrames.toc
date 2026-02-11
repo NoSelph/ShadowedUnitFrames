@@ -1,10 +1,10 @@
-## Interface: 120000
+## Interface: 120000,120001
 ## Title: Shadowed Unit Frames
 ## Notes: Moooooooooooooooooo
 ## Author: Shadowed
 ## Version: v4.4.18
 ## SavedVariables: ShadowedUFDB
-## X-Website: https://www.curseforge.com/wow/addons/shadowed-unit-frames-midnight
+## X-Website: https://www.curseforge.com/wow/addons/shadowed-unit-frames
 ## OptionalDeps: Ace3, LibSharedMedia-3.0, AceGUI-3.0-SharedMediaWidgets, LibDualSpec-1.0, LibSpellRange-1.0, UTF8, Clique
 ## X-Curse-Project-ID: 1449430
 ## X-WoWI-ID: 13494
