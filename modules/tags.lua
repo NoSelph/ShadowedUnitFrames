@@ -566,7 +566,10 @@ Tags.defaultTags = {
 		if( not UnitIsConnected(unitOwner) ) then return end
 
 		local afkStatus = ShadowUF.Tags.afkStatus
-		local status = UnitIsAFK(unitOwner) and ShadowUF.L["AFK:%s"] or UnitIsDND(unitOwner) and ShadowUF.L["DND:%s"]
+		local status = ShadowUF:SafeMath(function()
+			return UnitIsAFK(unitOwner) and ShadowUF.L["AFK:%s"] or UnitIsDND(unitOwner) and ShadowUF.L["DND:%s"]
+		end)
+		
 		if( status ) then
 			afkStatus[unitOwner] = afkStatus[unitOwner] or GetTime()
 			return string.format(status, ShadowUF:FormatShortTime(GetTime() - afkStatus[unitOwner]))
@@ -582,7 +585,9 @@ Tags.defaultTags = {
 		return string.format(ShadowUF.L["PVP:%s"], ShadowUF:FormatShortTime(GetPVPTimer() / 1000))
 	end]],
 	["afk"] = [[function(unit, unitOwner, fontString)
-		return UnitIsAFK(unitOwner) and ShadowUF.L["AFK"] or UnitIsDND(unitOwner) and ShadowUF.L["DND"]
+		return ShadowUF:SafeMath(function()
+			return UnitIsAFK(unitOwner) and ShadowUF.L["AFK"] or UnitIsDND(unitOwner) and ShadowUF.L["DND"]
+		end)
 	end]],
 	["close"] = [[function(unit, unitOwner) return "|r" end]],
 	["smartrace"] = [[function(unit, unitOwner)
