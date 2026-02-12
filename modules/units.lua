@@ -279,7 +279,20 @@ local function SetVisibility(self)
 			if( key == "auras" or key == "indicators" or key == "highlight" ) then
 				enabled = nil
 				for _, option in pairs(ShadowUF.db.profile.units[self.unitType][key]) do
-					if( type(option) == "table" and option.enabled or option == true ) then
+					if( type(option) == "table" ) then
+						if( option.enabled ) then
+							enabled = true
+							break
+						end
+						-- Check for new multi-frame auras format (buffs[1].enabled, debuffs[1].enabled, etc.)
+						for subKey, subOption in pairs(option) do
+							if( type(subKey) == "number" and type(subOption) == "table" and subOption.enabled ) then
+								enabled = true
+								break
+							end
+						end
+						if( enabled ) then break end
+					elseif( option == true ) then
 						enabled = true
 						break
 					end

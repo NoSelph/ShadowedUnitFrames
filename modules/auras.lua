@@ -447,7 +447,7 @@ local RemovePrivateAuraAnchor = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnc
 
 function Auras:ClearBossDebuffs(frame)
 	if not frame.bossDebuffs then return end
-	
+
 	local anchors = frame.bossDebuffs.anchorIDs
 	if anchors and RemovePrivateAuraAnchor then
 		for i = 1, #anchors do
@@ -457,7 +457,14 @@ function Auras:ClearBossDebuffs(frame)
 			end
 		end
 	end
-	
+
+	-- Hide config mode placeholders
+	if frame.bossDebuffs.testButtons then
+		for i = 1, #frame.bossDebuffs.testButtons do
+			frame.bossDebuffs.testButtons[i]:Hide()
+		end
+	end
+
 	if frame.bossDebuffs.container then
 		frame.bossDebuffs.container:Hide()
 	end
@@ -465,61 +472,74 @@ function Auras:ClearBossDebuffs(frame)
 end
 
 function Auras:SetupBossDebuffs(frame, config)
-	if not AddPrivateAuraAnchor then return end
-	
-	-- Create container frame if needed
+	-- Create container even without AddPrivateAuraAnchor so config mode placeholders work
 	if not frame.bossDebuffs then
 		frame.bossDebuffs = {}
 		frame.bossDebuffs.anchorIDs = {}
+		frame.bossDebuffs.testButtons = {}
 		frame.bossDebuffs.container = CreateFrame("Frame", nil, frame.highFrame)
 	end
-	
+
 	local container = frame.bossDebuffs.container
 	local perRow = config.perRow or 3
 	local maxRows = config.maxRows or 1
 	local maxAuras = perRow * maxRows
 	local iconSize = config.size or 32
 	local spacing = 2
-	
+
 	-- Calculate total size
 	local totalWidth = (iconSize * perRow) + (spacing * (perRow - 1))
 	local totalHeight = (iconSize * maxRows) + (spacing * (maxRows - 1))
-	
+
 	container:SetSize(totalWidth, totalHeight)
 	container:ClearAllPoints()
-	
+
 	-- Position based on anchorPoint
 	local point = ShadowUF.Layout:GetPoint(config.anchorPoint)
 	local relativePoint = ShadowUF.Layout:GetRelative(config.anchorPoint)
 	container:SetPoint(point, frame, relativePoint, config.x or 0, config.y or 0)
 	container:SetFrameLevel(frame.highFrame:GetFrameLevel() + 2)
 	container:Show()
-	
+
 	-- Store config for update
 	frame.bossDebuffs.config = config
 	frame.bossDebuffs.maxAuras = maxAuras
 	frame.bossDebuffs.perRow = perRow
 	frame.bossDebuffs.iconSize = iconSize
 	frame.bossDebuffs.spacing = spacing
-	
+
 	-- Force update
 	frame.bossDebuffs.unit = nil
 	Auras:UpdateBossDebuffs(frame)
 end
 
 function Auras:UpdateBossDebuffs(frame)
-	if not AddPrivateAuraAnchor then return end
 	if not frame.bossDebuffs or not frame.bossDebuffs.container then return end
-	
+
+	-- Config mode: show placeholders (same pattern as scanConfigMode for regular auras)
+	if frame.configMode then
+		self:ShowBossDebuffsPlaceholders(frame)
+		return
+	end
+
+	-- Hide placeholders when leaving config mode
+	if frame.bossDebuffs.testButtons then
+		for i = 1, #frame.bossDebuffs.testButtons do
+			frame.bossDebuffs.testButtons[i]:Hide()
+		end
+	end
+
+	if not AddPrivateAuraAnchor then return end
+
 	local unit = frame.unit
 	if not unit then
 		self:ClearBossDebuffs(frame)
 		return
 	end
-	
+
 	-- Check if unit changed, need to re-anchor
 	if frame.bossDebuffs.unit == unit then return end
-	
+
 	-- Clear old anchors
 	local anchors = frame.bossDebuffs.anchorIDs
 	if RemovePrivateAuraAnchor then
@@ -530,21 +550,21 @@ function Auras:UpdateBossDebuffs(frame)
 			end
 		end
 	end
-	
+
 	local config = frame.bossDebuffs.config
 	local container = frame.bossDebuffs.container
 	local maxAuras = frame.bossDebuffs.maxAuras
 	local perRow = frame.bossDebuffs.perRow
 	local iconSize = frame.bossDebuffs.iconSize
 	local spacing = frame.bossDebuffs.spacing
-	
+
 	-- Create anchor points for Private Auras
 	for i = 1, maxAuras do
 		local row = math.floor((i - 1) / perRow)
 		local col = (i - 1) % perRow
 		local xOffset = col * (iconSize + spacing)
 		local yOffset = -row * (iconSize + spacing)
-		
+
 		local auraAnchor = {
 			unitToken = unit,
 			auraIndex = i,
@@ -564,14 +584,121 @@ function Auras:UpdateBossDebuffs(frame)
 				},
 			},
 		}
-		
+
 		local anchorID = AddPrivateAuraAnchor(auraAnchor)
 		if anchorID then
 			anchors[i] = anchorID
 		end
 	end
-	
+
 	frame.bossDebuffs.unit = unit
+end
+
+-- Config mode placeholders for Private Auras
+-- Same visual structure as scanConfigMode buttons (icon, border, cooldown, stack)
+-- Grid positioning matches the real AddPrivateAuraAnchor layout
+local bossTestTextures = {
+	"Interface\\Icons\\Spell_Shadow_AuraOfDarkness",
+	"Interface\\Icons\\Spell_Shadow_CurseOfTongues",
+	"Interface\\Icons\\Spell_Fire_Incinerate",
+	"Interface\\Icons\\Spell_Shadow_UnholyFrenzy",
+	"Interface\\Icons\\Spell_Nature_Earthquake",
+	"Interface\\Icons\\Spell_Fire_FelFlameRing",
+}
+
+function Auras:ShowBossDebuffsPlaceholders(frame)
+	local bd = frame.bossDebuffs
+	local container = bd.container
+	local maxAuras = bd.maxAuras
+	local perRow = bd.perRow
+	local iconSize = bd.iconSize
+	local spacing = bd.spacing
+	local config = bd.config
+
+	for i = 1, maxAuras do
+		local button = bd.testButtons[i]
+		if not button then
+			-- Same structure as updateButton: icon, border, cooldown, stack
+			button = CreateFrame("Button", nil, container)
+
+			button.cooldown = CreateFrame("Cooldown", (frame:GetName() or "SUFBossAura") .. "BossAura" .. i .. "Cooldown", button, "CooldownFrameTemplate")
+			button.cooldown:SetAllPoints(button)
+			button.cooldown:SetReverse(true)
+			button.cooldown:SetDrawEdge(false)
+			button.cooldown:SetDrawSwipe(true)
+			button.cooldown:SetSwipeColor(0, 0, 0, 0.8)
+			button.cooldown:Hide()
+
+			button.stack = button:CreateFontString(nil, "OVERLAY")
+			button.stack:SetFont("Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", 10, "OUTLINE")
+			button.stack:SetShadowColor(0, 0, 0, 1.0)
+			button.stack:SetShadowOffset(0.50, -0.50)
+			button.stack:SetHeight(1)
+			button.stack:SetWidth(1)
+			button.stack:SetAllPoints(button)
+			button.stack:SetJustifyV("BOTTOM")
+			button.stack:SetJustifyH("RIGHT")
+
+			button.border = button:CreateTexture(nil, "OVERLAY")
+			button.border:SetPoint("CENTER", button)
+
+			button.icon = button:CreateTexture(nil, "BACKGROUND")
+			button.icon:SetAllPoints(button)
+			button.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+
+			bd.testButtons[i] = button
+		end
+
+		-- Sizing (same as updateButton)
+		button:SetSize(iconSize, iconSize)
+		button.border:SetSize(iconSize + 1, iconSize + 1)
+		button.stack:SetFont("Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", math.floor((iconSize * 0.60) + 0.5), "OUTLINE")
+		button.cooldown:SetHideCountdownNumbers(ShadowUF.db.profile.blizzardcc)
+
+		-- Grid position (matches AddPrivateAuraAnchor layout)
+		local row = math.floor((i - 1) / perRow)
+		local col = (i - 1) % perRow
+		button:ClearAllPoints()
+		button:SetPoint("TOPLEFT", container, "TOPLEFT", col * (iconSize + spacing), -row * (iconSize + spacing))
+
+		-- Test texture
+		local texIndex = ((i - 1) % #bossTestTextures) + 1
+		button.icon:SetTexture(bossTestTextures[texIndex])
+
+		-- Border (same logic as updateButton)
+		if ShadowUF.db.profile.auras.borderType == "" then
+			button.border:Hide()
+		elseif ShadowUF.db.profile.auras.borderType == "blizzard" then
+			button.border:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
+			button.border:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
+			button.border:Show()
+		else
+			button.border:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. ShadowUF.db.profile.auras.borderType)
+			button.border:SetTexCoord(0, 1, 0, 1)
+			button.border:Show()
+		end
+		button.border:SetVertexColor(0.80, 0.20, 0.80)
+
+		-- Test cooldown
+		if config.showCooldown ~= false then
+			button.cooldown:SetCooldown(GetTime() - (i * 15), 300)
+			button.cooldown:Show()
+		else
+			button.cooldown:Hide()
+		end
+
+		-- Test stack (some with stacks like scanConfigMode)
+		local testStacks = (i % 3 == 0) and math.random(2, 5) or 0
+		button.stack:SetText(testStacks > 0 and testStacks or "")
+
+		Auras:UpdateCooldownText(button)
+		button:Show()
+	end
+
+	-- Hide extra buttons from previous config
+	for i = maxAuras + 1, #bd.testButtons do
+		bd.testButtons[i]:Hide()
+	end
 end
 
 -- Temporary enchant support
@@ -850,6 +977,34 @@ local function scanConfigMode(parent, frame, type, config, displayConfig, filter
 end
 
 -- Scan for auras
+-- Helper: process a single auraData and call renderAura
+local function processAura(parent, frame, type, config, displayConfig, filter, unit, isFriendly, curable, index, auraData)
+	local name = auraData.name or "Unknown"
+	local texture = auraData.icon or "Interface\\Icons\\INV_Misc_QuestionMark"
+	local count = auraData.applications
+	local durationObject = auraData
+	local baseFilter = (type == "debuffs") and "HARMFUL" or "HELPFUL"
+
+	local isPlayerAura = (config.filter == "PLAYER") or
+		not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, baseFilter .. "|PLAYER")
+
+	local isRaid = (config.filter == "RAID") or
+		not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, baseFilter .. "|RAID")
+
+	local isStealable = false
+	if( type == "buffs" ) then
+		isStealable = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, "HELPFUL|STEALABLE")
+	end
+
+	local canApplyAura = (type == "buffs") and isRaid
+	local isRemovable = (type == "debuffs" and isRaid) or (type == "buffs" and isStealable)
+	local caster = isPlayerAura and "player" or nil
+	local spellID = auraData.spellId or 0
+	local auraType = auraData.dispelName
+
+	renderAura(parent, frame, type, config, displayConfig, index, filter, isFriendly, curable, name, texture, count, auraType, durationObject, caster, isRemovable, auraData.nameplateShowPersonal, spellID, canApplyAura, isPlayerAura, auraData.auraInstanceID)
+end
+
 local function scan(parent, frame, type, config, displayConfig, filter)
 	if( frame.totalAuras >= frame.maxAuras or not config.enabled ) then return end
 
@@ -858,55 +1013,31 @@ local function scan(parent, frame, type, config, displayConfig, filter)
 		return scanConfigMode(parent, frame, type, config, displayConfig, filter)
 	end
 
-	-- UnitIsFriend returns true during a duel, which breaks stealable/curable detection
 	if not frame.parent.unit then return end
-	local isFriendly = not UnitIsEnemy(frame.parent.unit, "player")
+	local unit = frame.parent.unit
+
+	-- UnitIsFriend returns true during a duel, which breaks stealable/curable detection
+	local isFriendly = not UnitIsEnemy(unit, "player")
 	local curable = (isFriendly and type == "debuffs")
-	
-	-- 12.0 iteration using GetAuraSlots
-	local slots = {C_UnitAuras.GetAuraSlots(frame.parent.unit, filter)}
-	
-	-- Index 1 is continuation token (if any), slots start at 2
+
+	-- 12.0: All aura APIs use UnitTokenRestrictedForAddOns which blocks compound unit tokens
+	-- (focustarget, boss1target, etc.) except "targettarget" which is explicitly exempted.
+	-- pcall to silently skip unsupported units instead of throwing errors.
+	local ok, slots = pcall(function() return {C_UnitAuras.GetAuraSlots(unit, filter)} end)
+	if( not ok ) then
+		for i = frame.totalAuras + 1, #(frame.buttons) do frame.buttons[i]:Hide() end
+		return
+	end
+
+	-- Index 1 is continuation token, slots start at 2
 	for i = 2, #slots do
 		local index = slots[i]
-		
-		-- Use GetAuraDataBySlot
-		local auraData = C_UnitAuras.GetAuraDataBySlot(frame.parent.unit, index)
+		local auraData = C_UnitAuras.GetAuraDataBySlot(unit, index)
 		if( auraData ) then
-		local name = auraData.name or "Unknown"
-			local texture = auraData.icon or "Interface\\Icons\\INV_Misc_QuestionMark"
-			local count = auraData.applications
-			local durationObject = auraData
-			
-			-- Use base filter (HARMFUL/HELPFUL)
-			local baseFilter = (type == "debuffs") and "HARMFUL" or "HELPFUL"
-			
-			local isPlayerAura = (config.filter == "PLAYER") or 
-				not C_UnitAuras.IsAuraFilteredOutByInstanceID(frame.parent.unit, auraData.auraInstanceID, baseFilter .. "|PLAYER")
-			
-			local isRaid = (config.filter == "RAID") or 
-				not C_UnitAuras.IsAuraFilteredOutByInstanceID(frame.parent.unit, auraData.auraInstanceID, baseFilter .. "|RAID")
-			
-			-- Check Stealable
-			local isStealable = false
-			if( type == "buffs" ) then
-				isStealable = not C_UnitAuras.IsAuraFilteredOutByInstanceID(frame.parent.unit, auraData.auraInstanceID, "HELPFUL|STEALABLE")
-			end
-			
-			local canApplyAura = (type == "buffs") and isRaid
-			local isRemovable = (type == "debuffs" and isRaid) or (type == "buffs" and isStealable)
-			
-			local caster = isPlayerAura and "player" or nil
-			local spellID = auraData.spellId or 0
-			local auraType = auraData.dispelName
-			
-			local relativeIndex = i - 1
-			renderAura(parent, frame, type, config, displayConfig, relativeIndex, filter, isFriendly, curable, name, texture, count, auraType, durationObject, caster, isRemovable, auraData.nameplateShowPersonal, spellID, canApplyAura, isPlayerAura, auraData.auraInstanceID)
+			processAura(parent, frame, type, config, displayConfig, filter, unit, isFriendly, curable, i - 1, auraData)
 		end
-		
-		-- Too many auras shown, break out
 		if( frame.totalAuras >= frame.maxAuras ) then break end
-	end -- end for loop
+	end
 
 	for i=frame.totalAuras + 1, #(frame.buttons) do frame.buttons[i]:Hide() end
 end

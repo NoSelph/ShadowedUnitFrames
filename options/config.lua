@@ -5003,7 +5003,14 @@ local function loadUnitOptions()
 				order = 5,
 				name = L["Auras"],
 				type = "group",
-				hidden = isModifiersSet,
+				hidden = function(info)
+					if( isModifiersSet(info) ) then return true end
+					-- 12.0: Aura APIs block compound unit tokens (focustarget, targettargettarget, boss1target, etc) :(
+					-- "targettarget" is the only exempted compound token
+					local unit = info[2]
+					if( unit ~= "global" and ShadowUF.fakeUnits[unit] and unit ~= "targettarget" ) then return true end
+					return false
+				end,
 				set = setUnit,
 				get = getUnit,
 				childGroups = "tree",
@@ -5390,8 +5397,10 @@ local function loadFilterOptions()
 
 	local function reloadUnitAuras()
 		for _, frame in pairs(ShadowUF.Units.unitFrames) do
-			if( UnitExists(frame.unit) and frame.visibility.auras ) then
-				ShadowUF.modules.auras:UpdateFilter(frame)
+			if( UnitExists(frame.unit) ) then
+				-- Re-evaluate visibility (handles enabling/disabling aura frames)
+				frame:SetVisibility()
+				ShadowUF.Layout:Load(frame)
 				frame:FullUpdate()
 			end
 		end
