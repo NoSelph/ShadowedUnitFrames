@@ -2476,6 +2476,12 @@ local function loadUnitOptions()
 		type = "group",
 		name = L["Boss Debuffs"],
 		order = 3,
+		hidden = function(info)
+			-- Private auras only work with stable unit tokens (player, party, raid)
+			local unit = info[2]
+			if unit == "global" then return false end
+			return unit ~= "player" and unit ~= "party" and unit ~= "raid"
+		end,
 		args = {
 			description = {
 				order = 0,

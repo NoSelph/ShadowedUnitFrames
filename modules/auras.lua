@@ -442,8 +442,14 @@ function Auras:OnLayoutApplied(frame, config)
 end
 
 -- Private Auras (Boss Debuffs) support
+-- Current implementation only works with stable unit tokens (player, party, raid)
 local AddPrivateAuraAnchor = C_UnitAuras and C_UnitAuras.AddPrivateAuraAnchor
 local RemovePrivateAuraAnchor = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnchor
+local privateAuraUnits = {
+	player = true,
+	party = true,
+	raid = true,
+}
 
 function Auras:ClearBossDebuffs(frame)
 	if not frame.bossDebuffs then return end
@@ -472,6 +478,11 @@ function Auras:ClearBossDebuffs(frame)
 end
 
 function Auras:SetupBossDebuffs(frame, config)
+	if not privateAuraUnits[frame.unitType] then
+		self:ClearBossDebuffs(frame)
+		return
+	end
+
 	-- Create container even without AddPrivateAuraAnchor so config mode placeholders work
 	if not frame.bossDebuffs then
 		frame.bossDebuffs = {}
@@ -516,6 +527,8 @@ end
 function Auras:UpdateBossDebuffs(frame)
 	if not frame.bossDebuffs or not frame.bossDebuffs.container then return end
 
+	if not privateAuraUnits[frame.unitType] then return end
+
 	-- Config mode: show placeholders (same pattern as scanConfigMode for regular auras)
 	if frame.configMode then
 		self:ShowBossDebuffsPlaceholders(frame)
@@ -537,7 +550,6 @@ function Auras:UpdateBossDebuffs(frame)
 		return
 	end
 
-	-- Check if unit changed, need to re-anchor
 	if frame.bossDebuffs.unit == unit then return end
 
 	-- Clear old anchors
