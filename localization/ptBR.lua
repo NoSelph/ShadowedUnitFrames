@@ -23,7 +23,7 @@ L["1 aura group disabled"] = [=[1 grupo de aura desativado
 ]=]
 L["2D"] = "2D"
 L["3D"] = "3D"
-L["Abbreviates unit names above 10 characters, \"Dark Rune Champion\" becomes \"D.R.Champion\" and \"Dark Rune Commoner\" becomes \"D.R.Commoner\"."] = "Abrevia os nomes das unidades com mais de 10 caracteres, \"Dark Rune Champion\" passa a \"D.R.Champion\" e \"Dark Rune Commoner\" passa a  \"D.R.Commoner\"."
+L["Abbreviates unit names above 10 characters, \"Dark Rune Champion\" becomes \"D.R.Champion\" and \"Dark Rune Commoner\" becomes \"D.R.Commoner\".|n|nIn combat, shows full (non-abbreviated) name on enemy units."] = "Abrevia os nomes das unidades com mais de 10 caracteres, \"Dark Rune Champion\" passa a \"D.R.Champion\" e \"Dark Rune Commoner\" passa a  \"D.R.Commoner\".|n|nEm combate, mostra o nome completo (não abreviado) em unidades inimigas."
 L["Absolute damage absorption value on the unit, if 10,000 damage will be absorbed, it will show 10,000."] = [=[Valor absoluto de absorção de danos na unidade, se 10.000 danos forem absorvidos, ele mostrará 10.000.
 
 ]=]
@@ -123,8 +123,8 @@ L["Alternate power is used for things like quests and dungeons."] = [=[O poder a
 L["Alternate Spell Name"] = "Nome de feitiço alternativo"
 L["Alternatively friendly spell to use to check range."] = "Alternativamente, feitiço amigável para usar para verificar o alcance."
 L["Ammo"] = "Munições"
-L["Amount of health missing, if none is missing nothing is shown. Uses a short format, -18500 is shown as -18.5k, values below 10000 are formatted as is."] = "Quantidade de vida em falta, se há 0 em falta nada é mostrado. Utiliza um formato curto, -18500 é mostrado como -18.5k, valores abaixo de 10000 são formatados assim mesmo."
-L["Amount of power missing,  if none is missing nothing is shown. Uses a short format, -13850 is shown as 13.8k, values below 10000 are formatted as is."] = "Quantidade de power em falta, se faltar 0 nada será mostrado. Usa um formato curto, -13850 é mostrado como 13.8k, valores abaixo de 10000 são formatados assim mesmo."
+L["Amount of health missing, if none is missing nothing is shown. Uses a short format, -18500 is shown as -18.5k, values below 10000 are formatted as is.|n|nIn combat, may show -0 at full health due to secret values."] = "Quantidade de vida em falta, se há 0 em falta nada é mostrado. Utiliza um formato curto, -18500 é mostrado como -18.5k, valores abaixo de 10000 são formatados assim mesmo.|n|nEm combate, pode mostrar -0 com vida cheia devido a valores secretos."
+L["Amount of power missing,  if none is missing nothing is shown. Uses a short format, -13850 is shown as 13.8k, values below 10000 are formatted as is.|n|nIn combat, may show -0 at full power due to secret values."] = "Quantidade de power em falta, se faltar 0 nada será mostrado. Usa um formato curto, -13850 é mostrado como 13.8k, valores abaixo de 10000 são formatados assim mesmo.|n|nEm combate, pode mostrar -0 com poder cheio devido a valores secretos."
 L["Anchor point"] = "Ponto de ancoragem"
 L["Anchor to"] = "Ancorar a"
 L["Anchor to another frame"] = "Ancorar a outra moldura"
@@ -1184,7 +1184,7 @@ L["Per row"] = [=[Por linha
 L["Percent HP"] = [=[Porcentagem de HP
 
 ]=]
-L["Percent of the players current health that's being healed, if they have 100,000 total health and 15,000 is incoming then 15% is shown."] = [=[Porcentagem da saúde atual dos jogadores que está sendo curada, se eles têm 100.000 saúde total e 15.000 está chegando, então 15% é mostrado.
+L["Percent of the players current health that's being healed, if they have 100,000 total health and 15,000 is incoming then 15% is shown.|n|nIn combat, only works on allied units."] = [=[Porcentagem da saúde atual dos jogadores que está sendo curada, se eles têm 100.000 saúde total e 15.000 está chegando, então 15% é mostrado.
 
 ]=]
 L["Percent power"] = "Poder percentual"
@@ -1454,7 +1454,7 @@ L["Short elite indicator"] = [=[Indicador de elite curto
 L["Short version of [druidform], C = Cat, B = Bear, F = Flight and so on."] = [=[Versão curta de [druidform], C = Cat, B = Bear, F = Flight e assim por diante.
 
 ]=]
-L["Shorten damage absorption, if 13,000 damage will e absorbed, it will show 13k."] = [=[Encurtar a absorção de danos, se 13.000 danos forem absorvidos, ele mostrará 13k.
+L["Shorten damage absorption, if 13,000 damage will be absorbed, it will show 13k."] = [=[Encurtar a absorção de danos, se 13.000 danos forem absorvidos, ele mostrará 13k.
 
 ]=]
 L["Shorten heal absorb value, if 17,000 healing will be absorbed, it will show 17k."] = [=[Encurte o valor de absorção da cura, se 17.000 cicatrizes forem absorvidas, ela mostrará 17k.
@@ -1822,7 +1822,7 @@ L["Unit name"] = [=[Nome da unidade
 L["Unit name (Class colored)"] = [=[Nome da unidade (Classe colorida)
 
 ]=]
-L["Unit name colored by class."] = [=[Nome da unidade colorido por classe.
+L["Unit name colored by class.|n|nIn combat, shows uncolored name on enemy units."] = [=[Nome da unidade colorido por classe.|n|nEm combate, mostra o nome sem cor em unidades inimigas.
 
 ]=]
 L["Unit scaled threat"] = [=[Ameaça dimensionada pela unidade
@@ -1890,7 +1890,7 @@ L["What group this aura belongs to, this is where you will find it when configur
 L["What type of auras should be enlarged, use the scaled aura size option to change the size."] = [=[Que tipo de auras deve ser ampliado, use a opção de tamanho de aura dimensionada para alterar o tamanho.
 
 ]=]
-L["When the unit is mising health, the [missinghp] tag is shown, when they are at full health then the [name] tag is shown. This lets you see -1000 when they are missing 1000 HP, but their name when they are not missing any."] = [=[Quando a unidade está com a saúde debilitada, a tag [missinghp] é mostrada, quando eles estão em plena saúde, a tag [name] é mostrada. Isso permite que você veja -1000 quando eles estão faltando 1000 HP, mas seu nome quando eles não estão faltando nenhum.
+L["When the unit is mising health, the [missinghp] tag is shown, when they are at full health then the [name] tag is shown. This lets you see -1000 when they are missing 1000 HP, but their name when they are not missing any.|n|nIn combat, health deficit only works on allied units."] = [=[Quando a unidade está com a saúde debilitada, a tag [missinghp] é mostrada, quando eles estão em plena saúde, a tag [name] é mostrada. Isso permite que você veja -1000 quando eles estão faltando 1000 HP, mas seu nome quando eles não estão faltando nenhum.|n|nEm combate, o déficit de vida funciona apenas em unidades aliadas.
 
 ]=]
 L["When this filter is active, apply the filter to buffs."] = [=[Quando esse filtro estiver ativo, aplique o filtro aos buffs.

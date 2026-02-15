@@ -317,11 +317,19 @@ end
 -- Helper functions for tags, the reason I store it in ShadowUF is it's easier to type ShadowUF than ShadowUF.modules.Tags, and simpler for users who want to implement it.
 function ShadowUF:Hex(r, g, b)
 	if( type(r) == "table" ) then
+		if( r.GenerateHexColorMarkup ) then
+			return r:GenerateHexColorMarkup()
+		end
 		if( r.r ) then
 			r, g, b = r.r, r.g, r.b
 		else
 			r, g, b = unpack(r)
 		end
+	end
+
+	if( issecretvalue(r) or issecretvalue(g) or issecretvalue(b) ) then
+		local color = CreateColor(r, g, b, 1)
+		return color:GenerateHexColorMarkup()
 	end
 
 	return string.format("|cff%02x%02x%02x", r * 255, g * 255, b * 255)
@@ -336,7 +344,7 @@ local largeNumberOptions = {
 function ShadowUF:FormatLargeNumber(number)
 	if( type(number) ~= "number" ) then return number end
 
-	-- 12.0: Use native Blizzard formatter with custom breakpoints (Handles secrets + precision)
+	-- Use native Blizzard formatter with custom breakpoints (Handles secrets + precision)
 	if (AbbreviateNumbers) then
 		return AbbreviateNumbers(number, largeNumberOptions)
 	end
@@ -487,7 +495,8 @@ Tags.defaultTags = {
 		return GetGuildInfo(unitOwner)
 	end]],
 	["abbrev:name"] = [[function(unit, unitOwner)
-		local name = UnitName(unitOwner) or UNKNOWN
+		local name = UnitName(unitOwner)
+		if issecretvalue(name) then return name end
 		return string.len(name) > 10 and ShadowUF.Tags.abbrevCache[name] or name
 	end]],
 	["unit:situation"] = [[function(unit, unitOwner)
@@ -618,7 +627,11 @@ Tags.defaultTags = {
 		return UnitIsPlayer(unit) and UnitClass(unit)
 	end]],
 	["classcolor"] = [[function(unit, unitOwner) return ShadowUF:GetClassColor(unit) end]],
-	["creature"] = [[function(unit, unitOwner) return UnitCreatureFamily(unit) or UnitCreatureType(unit) end]],
+	["creature"] = [[function(unit, unitOwner)
+		local family = UnitCreatureFamily(unit)
+		if issecretvalue(family) then return family end
+		return family or UnitCreatureType(unit)
+	end]],
 	["curhp"] = [[function(unit, unitOwner)
 		if( UnitIsDead(unit) ) then
 			return ShadowUF.L["Dead"]
@@ -631,8 +644,9 @@ Tags.defaultTags = {
 		return ShadowUF:FormatLargeNumber(UnitHealth(unit))
 	end]],
 	["colorname"] = [[function(unit, unitOwner)
+		local name = UnitName(unitOwner)
+		if issecretvalue(name) then return name end
 		local color = ShadowUF:GetClassColor(unitOwner)
-		local name = UnitName(unitOwner) or UNKNOWN
 		if( not color ) then
 			return name
 		end
@@ -707,11 +721,8 @@ Tags.defaultTags = {
 	end]],
 	["absmaxpp"] = [[function(unit, unitOwner)
 		local power = UnitPowerMax(unit)
-		-- Check safe compare
-		if( ShadowUF:SafeMath(function() return power > 0 end) ) then
-			return power
-		end
-		return nil
+		if issecretvalue(power) then return power end
+		return power > 0 and power or nil
 	end]],
 	["absolutepp"] = [[function(unit, unitOwner)
 		local maxPower = UnitPowerMax(unit)
@@ -794,41 +805,50 @@ Tags.defaultTags = {
 			return ShadowUF.L["Ghost"]
 		elseif( not UnitIsConnected(unit) ) then
 			return ShadowUF.L["Offline"]
-		elseif( ShadowUF:SafeMath(function() return UnitHealthMax(unit) <= 0 end) ) then
-			return nil
 		end
 
-		local success, missing = pcall(function() return UnitHealthMax(unit) - UnitHealth(unit) end)
-		if( success ) then
-			if( missing <= 0 ) then return nil end
+		-- 12.0: Use native API (handles secrets, returns UnitHealthMax - UnitHealth)
+		local missing = UnitHealthMissing(unit)
+		if issecretvalue(missing) then
 			return "-" .. ShadowUF:SafeFormatLargeNumber(missing)
 		end
-		-- Secret value: Cannot compute missing health.
-		return nil
+		if( missing <= 0 ) then return nil end
+		return "-" .. ShadowUF:SafeFormatLargeNumber(missing)
 	end]],
 	["missingpp"] = [[function(unit, unitOwner)
-		local power = UnitPowerMax(unit)
-		if( ShadowUF:SafeMath(function() return power <= 0 end) ) then
-			return nil
-		end
+		if( UnitIsDeadOrGhost(unit) ) then return nil end
 
-		local success, missing = pcall(function() return power - UnitPower(unit) end)
-		if( success ) then
-			if( missing <= 0 ) then return nil end
+		-- 12.0: Use native API (handles secrets, returns UnitPowerMax - UnitPower)
+		local missing = UnitPowerMissing(unit)
+		if issecretvalue(missing) then
 			return "-" .. ShadowUF:SafeFormatLargeNumber(missing)
 		end
-		-- Secret value: Cannot compute missing power.
-		return nil
+		if( missing <= 0 ) then return nil end
+		return "-" .. ShadowUF:SafeFormatLargeNumber(missing)
 	end]],
+	-- 12.0: can't distinguish 0 from non-0 deficit when secret, shows "-0" at full health or always name.
+	--[==[
 	["def:name"] = [[function(unit, unitOwner)
-		local deficit = ShadowUF.tagFunc.missinghp(unit, unitOwner)
-		if( deficit ) then return deficit end
+		if( UnitIsDead(unit) ) then return ShadowUF.L["Dead"]
+		elseif( UnitIsGhost(unit) ) then return ShadowUF.L["Ghost"]
+		elseif( not UnitIsConnected(unit) ) then return ShadowUF.L["Offline"]
+		end
+
+		local missing = UnitHealthMissing(unit)
+		if issecretvalue(missing) then
+			return "-" .. ShadowUF:SafeFormatLargeNumber(missing)
+		end
+		if missing > 0 then
+			return "-" .. ShadowUF:SafeFormatLargeNumber(missing)
+		end
 
 		return ShadowUF.tagFunc.name(unit, unitOwner)
 	end]],
-	["name"] = [[function(unit, unitOwner) return UnitName(unitOwner) or UNKNOWN end]],
+	]==]--
+	["name"] = [[function(unit, unitOwner) return UnitName(unitOwner) end]],
 	["server"] = [[function(unit, unitOwner)
 		local server = select(2, UnitName(unitOwner))
+		if issecretvalue(server) then return nil end
 		if( UnitRealmRelationship(unitOwner) == LE_REALM_RELATION_VIRTUAL ) then
 			return nil
 		end
@@ -876,20 +896,23 @@ Tags.defaultTags = {
 	end]],
 	["sshards"] = [[function(unit, unitOwner)
 		local points = UnitPower(ShadowUF.playerUnit, Enum.PowerType.SoulShards)
+		if issecretvalue(points) then return points end
 		return points and points > 0 and points
 	end]],
 	["hpower"] = [[function(unit, unitOwner)
 		local points = UnitPower(ShadowUF.playerUnit, Enum.PowerType.HolyPower)
+		if issecretvalue(points) then return points end
 		return points and points > 0 and points
 	end]],
 	["monk:chipoints"] = [[function(unit, unitOwner)
 		local points = UnitPower(ShadowUF.playerUnit, Enum.PowerType.Chi)
+		if issecretvalue(points) then return points end
 		return points and points > 0 and points
 	end]],
 	["cpoints"] = [[function(unit, unitOwner)
 		if( UnitHasVehicleUI("player") and UnitHasVehiclePlayerFrameUI("player") ) then
 			local points = GetComboPoints("vehicle")
-			if( points == 0 ) then
+			if( not issecretvalue(points) and points == 0 ) then
 				points = GetComboPoints("vehicle", "vehicle")
 			end
 
@@ -947,6 +970,7 @@ Tags.defaultTags = {
 	["group"] = [[function(unit, unitOwner)
 		if( not UnitInRaid(unitOwner) ) then return nil end
 		local name, server = UnitName(unitOwner)
+		if issecretvalue(name) then return nil end
 		if( server and server ~= "" ) then
 			name = string.format("%s-%s", name, server)
 		end
@@ -981,7 +1005,7 @@ Tags.defaultTags = {
 		local power = UnitPower(unit, Enum.PowerType.Mana)
 		if( UnitIsDeadOrGhost(unit) ) then
 			return string.format("0/%s", ShadowUF:FormatLargeNumber(maxPower))
-		elseif( maxPower == 0 and power == 0 ) then
+		elseif( not issecretvalue(maxPower) and maxPower == 0 and power == 0 ) then
 			return nil
 		end
 
@@ -1039,7 +1063,7 @@ Tags.defaultTags = {
 		local power = UnitPower(unit, Enum.PowerType.Mana)
 		if( UnitIsDeadOrGhost(unit) ) then
 			return string.format("0/%s", ShadowUF:FormatLargeNumber(maxPower))
-		elseif( maxPower == 0 and power == 0 ) then
+		elseif( not issecretvalue(maxPower) and maxPower == 0 and power == 0 ) then
 			return nil
 		end
 
@@ -1060,64 +1084,83 @@ Tags.defaultTags = {
 
 		return UnitPower(unit, Enum.PowerType.Mana)
 	end]],
+	-- Requires math on secret values.
+	--[==[
 	["per:incheal"] = [[function(unit, unitOwner, fontString)
 		local heal = UnitGetIncomingHeals(unit)
 		local maxHealth = UnitHealthMax(unit)
-		local success, result = pcall(function() 
-			return heal and heal > 0 and maxHealth > 0 and (heal / maxHealth) * 100 
+		local success, result = pcall(function()
+			return heal and heal > 0 and maxHealth > 0 and (heal / maxHealth) * 100
 		end)
 		return success and result and string.format("%d%%", result)
 	end]],
+	]==]--
 	["abs:incheal"] = [[function(unit, unitOwner, fontString)
-	    local heal = UnitGetIncomingHeals(unit)
-	    local success, isPositive = pcall(function() return heal and heal > 0 end)
-		return success and isPositive and string.format("%d", heal)
+		local heal = UnitGetIncomingHeals(unit)
+		if not heal then return nil end
+		if issecretvalue(heal) then return string.format("%d", heal) end
+		return heal > 0 and string.format("%d", heal)
 	end]],
 	["incheal"] = [[function(unit, unitOwner, fontString)
-	    local heal = UnitGetIncomingHeals(unit)
-	    local success, isPositive = pcall(function() return heal and heal > 0 end)
-		return success and isPositive and ShadowUF:FormatLargeNumber(heal)
+		local heal = UnitGetIncomingHeals(unit)
+		if not heal then return nil end
+		if issecretvalue(heal) then return ShadowUF:FormatLargeNumber(heal) end
+		return heal > 0 and ShadowUF:FormatLargeNumber(heal)
 	end]],
 	["incheal:name"] = [[function(unit, unitOwner, fontString)
-	    local heal = UnitGetIncomingHeals(unit)
-	    local success, isPositive = pcall(function() return heal and heal > 0 end)
-		return success and isPositive and string.format("+%d", heal) or ShadowUF.tagFunc.name(unit, unitOwner, fontString)
+		local heal = UnitGetIncomingHeals(unit)
+		if heal then
+			if issecretvalue(heal) then return string.format("+%d", heal) end
+			if heal > 0 then return string.format("+%d", heal) end
+		end
+		return ShadowUF.tagFunc.name(unit, unitOwner, fontString)
 	end]],
 	["monk:abs:stagger"] = [[function(unit, unitOwner)
 		local stagger = UnitStagger(unit)
-		local success, isPositive = pcall(function() return stagger and stagger > 0 end)
-		return success and isPositive and stagger
+		if not stagger then return nil end
+		if issecretvalue(stagger) then return stagger end
+		return stagger > 0 and stagger
 	end]],
 	["monk:stagger"] = [[function(unit, unitOwner)
 		local stagger = UnitStagger(unit)
-		local success, isPositive = pcall(function() return stagger and stagger > 0 end)
-		return success and isPositive and ShadowUF:FormatLargeNumber(stagger)
+		if not stagger then return nil end
+		if issecretvalue(stagger) then return ShadowUF:FormatLargeNumber(stagger) end
+		return stagger > 0 and ShadowUF:FormatLargeNumber(stagger)
 	end]],
 	["abs:incabsorb"] = [[function(unit, unitOwner, fontString)
-	    local absorb = UnitGetTotalAbsorbs(unit)
-	    local success, isPositive = pcall(function() return absorb and absorb > 0 end)
-		return success and isPositive and absorb
+		local absorb = UnitGetTotalAbsorbs(unit)
+		if not absorb then return nil end
+		if issecretvalue(absorb) then return absorb end
+		return absorb > 0 and absorb
 	end]],
 	["incabsorb"] = [[function(unit, unitOwner, fontString)
-	    local absorb = UnitGetTotalAbsorbs(unit)
-	    local success, isPositive = pcall(function() return absorb and absorb > 0 end)
-		return success and isPositive and ShadowUF:FormatLargeNumber(absorb)
+		local absorb = UnitGetTotalAbsorbs(unit)
+		if not absorb then return nil end
+		if issecretvalue(absorb) then return ShadowUF:FormatLargeNumber(absorb) end
+		return absorb > 0 and ShadowUF:FormatLargeNumber(absorb)
 	end]],
 	["incabsorb:name"] = [[function(unit, unitOwner, fontString)
-	    local absorb = UnitGetTotalAbsorbs(unit)
-	    local success, isPositive = pcall(function() return absorb and absorb > 0 end)
-		return success and isPositive and string.format("+%d", absorb) or ShadowUF.tagFunc.name(unit, unitOwner, fontString)
+		local absorb = UnitGetTotalAbsorbs(unit)
+		if absorb then
+			if issecretvalue(absorb) then return string.format("+%d", absorb) end
+			if absorb > 0 then return string.format("+%d", absorb) end
+		end
+		return ShadowUF.tagFunc.name(unit, unitOwner, fontString)
 	end]],
 	["abs:healabsorb"] = [[function(unit, unitOwner, fontString)
-	    local absorb = UnitGetTotalHealAbsorbs(unit)
-	    local success, isPositive = pcall(function() return absorb and absorb > 0 end)
-		return success and isPositive and absorb
+		local absorb = UnitGetTotalHealAbsorbs(unit)
+		if not absorb then return nil end
+		if issecretvalue(absorb) then return absorb end
+		return absorb > 0 and absorb
 	end]],
 	["healabsorb"] = [[function(unit, unitOwner, fontString)
-	    local absorb = UnitGetTotalHealAbsorbs(unit)
-	    local success, isPositive = pcall(function() return absorb and absorb > 0 end)
-		return success and isPositive and ShadowUF:FormatLargeNumber(absorb)
+		local absorb = UnitGetTotalHealAbsorbs(unit)
+		if not absorb then return nil end
+		if issecretvalue(absorb) then return ShadowUF:FormatLargeNumber(absorb) end
+		return absorb > 0 and ShadowUF:FormatLargeNumber(absorb)
 	end]],
+	-- UnitGUID is SecretWhenUnitIdentityRestricted, GUID comparisons crash in combat. No workaround.
+	--[==[
 	["unit:raid:targeting"] = [[function(unit, unitOwner, fontString)
 		if( GetNumGroupMembers() == 0 ) then return nil end
 		local guid = UnitGUID(unit)
@@ -1146,6 +1189,7 @@ Tags.defaultTags = {
 		end
 		return total
 	end]],
+	]==]--
 }
 
 -- Default tag events
@@ -1156,7 +1200,7 @@ Tags.defaultEvents = {
 	["short:druidform"]			= "UNIT_AURA",
 	["druidform"]				= "UNIT_AURA",
 	["guild"]					= "UNIT_NAME_UPDATE",
-	["per:incheal"]				= "UNIT_HEAL_PREDICTION",
+	-- ["per:incheal"]			= "UNIT_HEAL_PREDICTION", -- 12.0: Disabled
 	["abs:incheal"]				= "UNIT_HEAL_PREDICTION",
 	["incheal:name"]			= "UNIT_HEAL_PREDICTION",
 	["incheal"]					= "UNIT_HEAL_PREDICTION",
@@ -1195,7 +1239,7 @@ Tags.defaultEvents = {
 	["level"]               	= "UNIT_LEVEL UNIT_FACTION PLAYER_LEVEL_UP",
 	["levelcolor"]				= "UNIT_LEVEL UNIT_FACTION PLAYER_LEVEL_UP",
 	["maxhp"]               	= "UNIT_MAXHEALTH",
-	["def:name"]				= "UNIT_NAME_UPDATE UNIT_MAXHEALTH UNIT_HEALTH",
+	-- ["def:name"]				= "UNIT_NAME_UPDATE UNIT_MAXHEALTH UNIT_HEALTH", -- 12.0: Disabled
 	["absmaxhp"]				= "UNIT_MAXHEALTH",
 	["maxpp"]               	= "SUF_POWERTYPE:CURRENT UNIT_MAXPOWER",
 	["absmaxpp"]				= "SUF_POWERTYPE:CURRENT UNIT_MAXPOWER",
@@ -1225,7 +1269,7 @@ Tags.defaultEvents = {
 	["unit:scaled:threat"]		= "UNIT_THREAT_SITUATION_UPDATE",
 	["unit:color:sit"]			= "UNIT_THREAT_SITUATION_UPDATE",
 	["unit:situation"]			= "UNIT_THREAT_SITUATION_UPDATE",
-	["monk:chipoints"]			= "SUF_POWERTYPE:LIGHT_FORCE UNIT_POWER_FREQUENT",
+	["monk:chipoints"]			= "SUF_POWERTYPE:CHI UNIT_POWER_FREQUENT",
 }
 
 -- Default update frequencies for tag updating, used if it's needed to override the update speed
@@ -1237,8 +1281,9 @@ Tags.defaultFrequents = {
 	["pvp:time"] = 1,
 	["scaled:threat"] = 1,
 	["unit:scaled:threat"] = 1,
-	["unit:raid:targeting"] = 0.50,
-	["unit:raid:assist"] = 0.50,
+	-- 12.0: Disabled
+	--["unit:raid:targeting"] = 0.50,
+	--["unit:raid:assist"] = 0.50,
 	["monk:stagger"] = 0.25,
 	["monk:abs:stagger"] = 0.25
 }
@@ -1251,7 +1296,7 @@ Tags.defaultCategories = {
 	["abs:incabsorb"]			= "health",
 	["incabsorb"]				= "health",
 	["incabsorb:name"]			= "health",
-	["per:incheal"]				= "health",
+	-- ["per:incheal"]			= "health", -- 12.0: Disabled
 	["abs:incheal"]				= "health",
 	["incheal"]					= "health",
 	["incheal:name"]			= "health",
@@ -1292,7 +1337,7 @@ Tags.defaultCategories = {
 	["curmaxhp"]				= "health",
 	["curmaxpp"]				= "power",
 	["levelcolor"]				= "classification",
-	["def:name"]				= "health",
+	-- ["def:name"]				= "health", -- 12.0: Disabled
 	["faction"]					= "classification",
 	["colorname"]				= "misc",
 	["guild"]					= "misc",
@@ -1326,8 +1371,9 @@ Tags.defaultCategories = {
 	["unit:color:sit"]			= "threat",
 	["unit:situation"]			= "threat",
 	["unit:color:aggro"]		= "threat",
-	["unit:raid:assist"]		= "raid",
-	["unit:raid:targeting"] 	= "raid",
+	-- 12.0: Disabled
+	--["unit:raid:assist"]		= "raid",
+	--["unit:raid:targeting"] 	= "raid",
 	["monk:chipoints"]			= "classspec",
 	["monk:stagger"]			= "classspec",
 	["monk:abs:stagger"]		= "classspec"
@@ -1338,13 +1384,13 @@ Tags.defaultHelp = {
 	["totem:timer"]				= L["How many seconds a totem has left before disappearing."],
 	["rune:timer"]				= L["How many seconds before a rune recharges."],
 	["abs:incabsorb"]			= L["Absolute damage absorption value on the unit, if 10,000 damage will be absorbed, it will show 10,000."],
-	["incabsorb"]				= L["Shorten damage absorption, if 13,000 damage will e absorbed, it will show 13k."],
+	["incabsorb"]				= L["Shorten damage absorption, if 13,000 damage will be absorbed, it will show 13k."],
 	["incabsorb:name"]			= L["If the unit has a damage absorption shield on them, it will show the absolute absorb value, otherwise the units name."],
 	["hp:color"]				= L["Color code based on percentage of HP left on the unit, this works the same way as the color by health option. But for text instead of the entire bar."],
 	["guild"]					= L["Show's the units guild name if they are in a guild."],
 	["short:druidform"]			= L["Short version of [druidform], C = Cat, B = Bear, F = Flight and so on."],
 	["druidform"]				= L["Returns the units current form if they are a druid, Cat for Cat Form, Moonkin for Moonkin and so on."],
-	["per:incheal"]				= L["Percent of the players current health that's being healed, if they have 100,000 total health and 15,000 is incoming then 15% is shown."],
+	-- ["per:incheal"]			= L["..."], -- 12.0: Disabled
 	["abs:incheal"]				= L["Absolute incoming heal value, if 10,000 healing is incoming it will show 10,000."],
 	["incheal"]					= L["Shorten incoming heal value, if 13,000 healing is incoming it will show 13k."],
 	["abs:healabsorb"]			= L["Absolute heal absorb value, if 16,000 healing will be absorbed, it will show 16,000."],
@@ -1372,8 +1418,8 @@ Tags.defaultHelp = {
 	["level"]					= L["Level without any coloring."],
 	["maxhp"]					= L["Max health, uses a short format, 17750 is formatted as 17.7k, values below 10000 are formatted as is."],
 	["maxpp"]					= L["Max power, uses a short format, 16000 is formatted as 16k, values below 10000 are formatted as is."],
-	["missinghp"]				= L["Amount of health missing, if none is missing nothing is shown. Uses a short format, -18500 is shown as -18.5k, values below 10000 are formatted as is."],
-	["missingpp"]				= L["Amount of power missing,  if none is missing nothing is shown. Uses a short format, -13850 is shown as 13.8k, values below 10000 are formatted as is."],
+	["missinghp"]				= L["Amount of health missing, if none is missing nothing is shown. Uses a short format, -18500 is shown as -18.5k, values below 10000 are formatted as is.|n|nIn combat, may show -0 at full health due to secret values."],
+	["missingpp"]				= L["Amount of power missing,  if none is missing nothing is shown. Uses a short format, -13850 is shown as 13.8k, values below 10000 are formatted as is.|n|nIn combat, may show -0 at full power due to secret values."],
 	["name"]					= L["Unit name"],
 	["server"]					= L["Unit server, if they are from your server then nothing is shown."],
 	["perhp"]					= L["Returns current health as a percentage, if the unit is dead or offline than that is shown instead."],
@@ -1386,9 +1432,9 @@ Tags.defaultHelp = {
 	["curmaxhp"]				= L["Current and maximum health, formatted as [curhp]/[maxhp], if the unit is dead or offline then that is shown instead."],
 	["curmaxpp"]				= L["Current and maximum power, formatted as [curpp]/[maxpp]."],
 	["levelcolor"]				= L["Returns the color code based off of the units level compared to yours. If you cannot attack them then no color is returned."],
-	["def:name"]				= L["When the unit is mising health, the [missinghp] tag is shown, when they are at full health then the [name] tag is shown. This lets you see -1000 when they are missing 1000 HP, but their name when they are not missing any."],
+	-- ["def:name"]				= L["..."], -- 12.0: Disabled
 	["faction"]					= L["Units alignment, Thrall will return Horde, Magni Bronzebeard will return Alliance."],
-	["colorname"]				= L["Unit name colored by class."],
+	["colorname"]				= L["Unit name colored by class.|n|nIn combat, shows uncolored name on enemy units."],
 	["absolutepp"]				= L["Shows current and maximum power in absolute form, 18000 power will be showed as 18000 power."],
 	["absolutehp"]				= L["Shows current and maximum health in absolute form, 17500 health will be showed as 17500 health."],
 	["absmaxhp"]				= L["Shows maximum health in absolute form, 14000 health is showed as 14000 health."],
@@ -1397,7 +1443,7 @@ Tags.defaultHelp = {
 	["abscurpp"]				= L["Shows current power value in absolute form, 15000 power will be displayed as 1500 still."],
 	["reactcolor"]				= L["Reaction color code, use [reactcolor][name][close] to color the units name by their reaction."],
 	["dechp"]					= L["Shows the units health as a percentage rounded to the first decimal, meaning 61 out of 110 health is shown as 55.4%."],
-	["abbrev:name"]				= L["Abbreviates unit names above 10 characters, \"Dark Rune Champion\" becomes \"D.R.Champion\" and \"Dark Rune Commoner\" becomes \"D.R.Commoner\"."],
+	["abbrev:name"]				= L["Abbreviates unit names above 10 characters, \"Dark Rune Champion\" becomes \"D.R.Champion\" and \"Dark Rune Commoner\" becomes \"D.R.Commoner\".|n|nIn combat, shows full (non-abbreviated) name on enemy units."],
 	["group"]					= L["Shows current group number of the unit."],
 	["close"]					= L["Closes a color code, prevents colors from showing up on text that you do not want it to."],
 	["druid:curpp"]         	= string.format(L["Works the same as [%s], but this is only shown if the unit is in Cat or Bear form."], "currpp"),
@@ -1418,8 +1464,9 @@ Tags.defaultHelp = {
 	["unit:situation"]			= L["Returns text based on the units general threat situation: Aggro for Aggro, High for being close to taking aggro, and Medium as a warning to be wary.|nThis cannot be used on target of target or focus target types of units."],
 	["unit:color:aggro"]		= L["Same as [unit:color:sit] except it only returns red if the unit has aggro, rather than transiting from yellow -> orange -> red."],
 	["color:aggro"]				= L["Same as [color:sit] except it only returns red if you have aggro, rather than transiting from yellow -> orange -> red."],
-	["unit:raid:targeting"]		= L["How many people in your raid are targeting the unit, for example if you put this on yourself it will show how many people are targeting you. This includes you in the count!"],
-	["unit:raid:assist"]		= L["How many people are assisting the unit, for example if you put this on yourself it will show how many people are targeting your target. This includes you in the count!"],
+	-- 12.0: Disabled
+	--["unit:raid:targeting"]		= L["How many people in your raid are targeting the unit, for example if you put this on yourself it will show how many people are targeting you. This includes you in the count!|n|nDisabled - unit identity comparisons are restricted in combat."],
+	--["unit:raid:assist"]		= L["How many people are assisting the unit, for example if you put this on yourself it will show how many people are targeting your target. This includes you in the count!|n|nDisabled - unit identity comparisons are restricted in combat."],
 	["monk:chipoints"]			= L["How many Chi points you currently have."],
 	["monk:stagger"]			= L["Shows the current staggered damage, if 12,000 damage is staggered, shows 12k."],
 	["monk:abs:stagger"]		= L["Shows the absolute staggered damage, if 16,000 damage is staggered, shows 16,000."]
@@ -1431,7 +1478,7 @@ Tags.defaultNames = {
 	["abs:incabsorb"]			= L["Damage absorption (Absolute)"],
 	["incabsorb"]				= L["Damage absorption (Short)"],
 	["incabsorb:name"]			= L["Damage absorption/Name"],
-	["per:incheal"]				= L["Incoming heal (Percent)"],
+	-- ["per:incheal"]			= L["Incoming heal (Percent)"], -- 12.0: Disabled
 	["incheal:name"]			= L["Incoming heal/Name"],
 	["abs:healabsorb"]			= L["Heal Absorb (Absolute)"],
 	["healabsorb"]				= L["Heal Absorb (Short)"],
@@ -1481,7 +1528,7 @@ Tags.defaultNames = {
 	["curmaxhp"]				= L["Cur/Max HP (Short)"],
 	["curmaxpp"]				= L["Cur/Max Power (Short)"],
 	["levelcolor"]				= L["Level (Colored)"],
-	["def:name"]				= L["Deficit/Unit Name"],
+	-- ["def:name"]				= L["Deficit/Unit Name"], -- 12.0: Disabled
 	["faction"]					= L["Unit faction"],
 	["colorname"]				= L["Unit name (Class colored)"],
 	["absolutepp"]				= L["Cur/Max power (Absolute)"],
@@ -1509,8 +1556,9 @@ Tags.defaultNames = {
 	["color:gensit"]			= L["Color code for general situation"],
 	["color:aggro"]				= L["Color code on aggro"],
 	["unit:color:aggro"]		= L["Unit color code on aggro"],
-	["unit:raid:targeting"]		= L["Raid targeting unit"],
-	["unit:raid:assist"]		= L["Raid assisting unit"],
+	-- 12.0: Disabled
+	--["unit:raid:targeting"]		= L["Raid targeting unit"],
+	--["unit:raid:assist"]		= L["Raid assisting unit"],
 	["monk:chipoints"]			= L["Chi Points"],
 	["monk:stagger"]			= L["Stagger (Monk)"],
 	["monk:abs:stagger"]		= L["Stagger (Monk/Absolute)"]
