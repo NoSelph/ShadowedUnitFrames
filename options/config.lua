@@ -63,7 +63,7 @@ local INDICATOR_DESC = {
 		["role"] = L["Raid role indicator, adds a shield indicator for main tanks and a sword icon for main assists."], ["status"] = L["Status indicator, shows if the unit is currently in combat. For the player it will also show if you are rested."], ["class"] = L["Class icon for players."],
 		["arenaSpec"] = L["Talent spec of your arena opponents."]
 }
-local TAG_GROUPS = {["classification"] = L["Classifications"], ["health"] = L["Health"], ["misc"] = L["Miscellaneous"], ["playerthreat"] = L["Player threat"], ["power"] = L["Power"], ["status"] = L["Status"], ["threat"] = L["Threat"], ["raid"] = L["Raid"], ["classspec"] = L["Class Specific"], ["classtimer"] = L["Class Timer"]}
+local TAG_GROUPS = {["classification"] = L["Classifications"], ["health"] = L["Health"], ["misc"] = L["Miscellaneous"], ["playerthreat"] = L["Player threat"], ["power"] = L["Power"], ["status"] = L["Status"], ["threat"] = L["Threat"], --[==[["raid"] = L["Raid"],]==] ["classspec"] = L["Class Specific"], ["classtimer"] = L["Class Timer"]}
 
 local pointPositions = {["BOTTOM"] = L["Bottom"], ["TOP"] = L["Top"], ["LEFT"] = L["Left"], ["RIGHT"] = L["Right"], ["TOPLEFT"] = L["Top Left"], ["TOPRIGHT"] = L["Top Right"], ["BOTTOMLEFT"] = L["Bottom Left"], ["BOTTOMRIGHT"] = L["Bottom Right"], ["CENTER"] = L["Center"]}
 local positionList = {["C"] = L["Center"], ["RT"] = L["Right Top"], ["RC"] = L["Right Center"], ["RB"] = L["Right Bottom"], ["LT"] = L["Left Top"], ["LC"] = L["Left Center"], ["LB"] = L["Left Bottom"], ["BL"] = L["Bottom Left"], ["BC"] = L["Bottom Center"], ["BR"] = L["Bottom Right"], ["TR"] = L["Top Right"], ["TC"] = L["Top Center"], ["TL"] = L["Top Left"]}
@@ -471,6 +471,9 @@ local function loadGeneralOptions()
 		name = "",
 	}
 
+	local rebuildTextEntries
+	local ensureTextsReady
+
 	local addText = {
 		order = function(info) return info[#(info)] + 0.5 end,
 		type = "execute",
@@ -495,14 +498,120 @@ local function loadGeneralOptions()
 		confirm = true,
 		func = function(info)
 			local id = tonumber(info[#(info)])
+			ensureTextsReady()
 			for _, unit in pairs(ShadowUF.unitList) do
 				table.remove(ShadowUF.db.profile.units[unit].text, id)
 			end
 
-			addTextParent.args[info[#(info)]] = nil
+			rebuildTextEntries()
 			ShadowUF.Layout:Reload()
 		end,
 	}
+
+	-- Materializes all unit text tables so table.insert/table.remove work correctly.
+	-- Also cleans up orphaned entries from past buggy deletes that left text entries on some units but not on player.
+	local NUM_DEFAULT_TEXTS = 6
+	ensureTextsReady = function()
+		local playerText = ShadowUF.db.profile.units.player.text
+
+		for i = 1, NUM_DEFAULT_TEXTS do
+			local _ = playerText[i]
+		end
+
+		local playerCount = NUM_DEFAULT_TEXTS
+		while rawget(playerText, playerCount + 1) ~= nil do
+			playerCount = playerCount + 1
+		end
+
+		for _, unit in pairs(ShadowUF.unitList) do
+			local text = ShadowUF.db.profile.units[unit].text
+
+			for i = 1, NUM_DEFAULT_TEXTS do
+				local _ = text[i]
+			end
+
+			for i = NUM_DEFAULT_TEXTS + 1, playerCount do
+				local pEntry = rawget(playerText, i)
+				if pEntry then
+					if not rawget(text, i) then
+						-- Entry missing: create from player
+						text[i] = {
+							enabled = pEntry.enabled,
+							name = pEntry.name or "",
+							text = "",
+							anchorTo = pEntry.anchorTo or "",
+							anchorPoint = pEntry.anchorPoint or "C",
+							width = pEntry.width or 0.50,
+							size = pEntry.size or 0,
+							x = pEntry.x or 0,
+							y = pEntry.y or 0,
+						}
+					else
+						-- Entry exists but may have stale structural data from past index shifts. Force-sync name and anchor from player.
+						local uEntry = rawget(text, i)
+						uEntry.name = pEntry.name
+						uEntry.anchorTo = pEntry.anchorTo
+					end
+				end
+			end
+
+			-- Delete ALL orphaned entries, leftovers from past buggy deletes.
+			local j = playerCount + 1
+			while rawget(text, j) do
+				rawset(text, j, nil)
+				j = j + 1
+			end
+		end
+	end
+
+	-- Rebuilds all text management UI entries and tag wizard entries from current data.
+	rebuildTextEntries = function()
+		table.wipe(addTextParent.args)
+
+		-- Remove anchor parent groups from text management options
+		local keysToRemove = {}
+		for key in pairs(options.args.general.args.text.args) do
+			if type(key) == "string" and string.sub(key, 1, 1) == "$" then
+				keysToRemove[#keysToRemove + 1] = key
+			end
+		end
+		for _, key in ipairs(keysToRemove) do
+			options.args.general.args.text.args[key] = nil
+		end
+
+		-- Wipe
+		if Config.parentTable then
+			local savedHelp = Config.parentTable.args.help
+			table.wipe(Config.parentTable.args)
+			if savedHelp then
+				Config.parentTable.args.help = savedHelp
+			end
+		end
+
+		table.wipe(quickIDMap)
+
+		-- Rebuild from current data
+		for id, text in pairs(ShadowUF.db.profile.units.player.text) do
+			
+			if text.anchorTo ~= "" and not text.default then
+				addTextParent.args[id .. ":label"] = addTextLabel
+				addTextParent.args[tostring(id)] = addText
+				addTextParent.args[id .. ":sep"] = addTextSep
+				options.args.general.args.text.args[text.anchorTo] = addTextParent
+			end
+
+			if Config.parentTable and text.anchorTo and text.anchorTo ~= "" then
+				local parent = string.sub(text.anchorTo, 2)
+				local module = ShadowUF.modules[parent]
+				if not (module and module.moduleClass and module.moduleClass ~= playerClass) then
+					Config.tagWizard[parent] = Config.tagWizard[parent] or Config.parentTable
+					Config.tagWizard[parent].args[tostring(id)] = Config.tagTextTable
+					Config.tagWizard[parent].args[tostring(id) .. ":adv"] = Config.advanceTextTable
+					quickIDMap[tostring(id) .. ":adv"] = id
+				end
+			end
+		end
+	end
 
 	local function validateSpell(info, spell)
 		if( spell and spell ~= "" and not GetSpellName(spell) ) then
@@ -1553,24 +1662,15 @@ local function loadGeneralOptions()
 									textData.name = string.trim(textData.name)
 									textData.name = textData.name ~= "" and textData.name or nil
 
+									-- Ensure all units have their text tables materialized
+									ensureTextsReady()
+
 									-- Add the new entry
 									for _, unit in pairs(ShadowUF.unitList) do
 										table.insert(ShadowUF.db.profile.units[unit].text, {enabled = true, name = textData.name or "??", text = "", anchorTo = textData.parent, x = 0, y = 0, anchorPoint = "C", size = 0, width = 0.50})
 									end
 
-									-- Add it to the GUI
-									local id = tostring(#(ShadowUF.db.profile.units.player.text))
-									addTextParent.args[id .. ":label"] = addTextLabel
-									addTextParent.args[id] = addText
-									addTextParent.args[id .. ":sep"] = addTextSep
-									options.args.general.args.text.args[textData.parent] = options.args.general.args.text.args[textData.parent] or addTextParent
-
-									local parent = string.sub(textData.parent, 2)
-									Config.tagWizard[parent] = Config.tagWizard[parent] or Config.parentTable
-									Config.tagWizard[parent].args[id] = Config.tagTextTable
-									Config.tagWizard[parent].args[id .. ":adv"] = Config.advanceTextTable
-
-									quickIDMap[id .. ":adv"] = #(ShadowUF.db.profile.units.player.text)
+									rebuildTextEntries()
 
 									-- Reset
 									textData.name = nil
@@ -1585,6 +1685,9 @@ local function loadGeneralOptions()
 			layout = layoutManager,
 		},
 	}
+
+	-- Sync all unit text tables on load (repairs any existing desyncs from past bugs)
+	ensureTextsReady()
 
 	-- Load text
 	for id, text in pairs(ShadowUF.db.profile.units.player.text) do
