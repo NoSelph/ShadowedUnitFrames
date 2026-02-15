@@ -69,21 +69,6 @@ local UnitPhaseReason = function(unit)
 	return phase
 end
 
-local function SafeAlphaFromBool(v, inAlpha, oorAlpha)
-    local ok, alpha = pcall(function()
-        return v and inAlpha or oorAlpha
-    end)
-    if ok then
-        return alpha
-    end
-    -- If v is a secret boolean (or otherwise forbidden), we can't branch on it.
-    -- Default to "in range" so we don't dim incorrectly and don't error.
-    return inAlpha
-end
-
-local scrub = scrubsecretvalues or function(v) return v end
-
-
 local function SafeIsSpellInRange(spell, unit)
     local ok, res = pcall(LSR.IsSpellInRange, spell, unit)
     if not ok then return nil end
@@ -125,22 +110,19 @@ local function checkRange(self)
         return
     end
 
-    -- Group fallback: UnitInRange can return secret booleans; don't branch on it directly.
-if UnitInRaid(frame.unit) or UnitInParty(frame.unit) then
-    local ok, inRange, checkedRange = pcall(UnitInRange, frame.unit)
+    -- Group fallback:
+    -- EvaluateColorValueFromBoolean converts a secret boolean to a secret number and SetAlpha also accepts secret numbers.
+    if UnitInRaid(frame.unit) or UnitInParty(frame.unit) then
+        local ok, inRange = pcall(UnitInRange, frame.unit)
+        if not ok then
+            frame:SetRangeAlpha(inAlpha)
+            return
+        end
 
-    -- checkedRange can be a secret boolean; scrub it before branching
-    local checked = ok and scrub(checkedRange)
-
-    if checked then
-        -- inRange may also be secret; SafeAlphaFromBool already handles that safely
-        frame:SetRangeAlpha(SafeAlphaFromBool(inRange, inAlpha, oorAlpha))
-    else
-        -- If we can't safely check range, keep bright (no errors, no false-dimming)
-        frame:SetRangeAlpha(inAlpha)
+        local alpha = C_CurveUtil.EvaluateColorValueFromBoolean(inRange, inAlpha, oorAlpha)
+        frame:SetRangeAlpha(alpha)
+        return
     end
-    return
-end
 
 
     -- Default
