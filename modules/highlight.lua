@@ -2,34 +2,20 @@ local Highlight = {}
 local goldColor, mouseColor = {r = 0.75, g = 0.75, b = 0.35}, {r = 0.75, g = 0.75, b = 0.50}
 local rareColor, eliteColor = {r = 0, g = 0.63, b = 1}, {r = 1, g = 0.81, b = 0}
 
-local canCure = ShadowUF.Units.canCure
 ShadowUF:RegisterModule(Highlight, "highlight", ShadowUF.L["Highlight"])
 
--- 12.0: DebuffTypeColor global is deprecated/removed.
-local DebuffTypeColor = DebuffTypeColor or {
-	["Magic"]	= { r = 0.20, g = 0.60, b = 1.00 },
-	["Curse"]	= { r = 0.60, g = 0.00, b = 1.00 },
-	["Disease"]	= { r = 0.60, g = 0.40, b = 0.00 },
-	["Poison"]	= { r = 0.00, g = 0.60, b = 0.00 },
-	[""]		= { r = 0.80, g = 0.00, b = 0.00 }, -- default/none
-	["none"]	= { r = 0.80, g = 0.00, b = 0.00 }
-}
-
--- 12.0: ColorCurve for dispellable debuff highlighting (update when Midnight Release if there's a better option)
+-- 12.0: ColorCurve for dispellable debuff highlighting
 local highlightColorCurve = nil
-local highlightColorCurveVersion = 0
 
 function Highlight:GetColorCurve()
-	-- Check if canCure changed (version is bumped on spec/spell changes)
-	local currentVersion = ShadowUF.Units.canCureVersion or 0
-	if highlightColorCurve and highlightColorCurveVersion == currentVersion then
+	if highlightColorCurve then
 		return highlightColorCurve
 	end
-	
+
 	if not C_CurveUtil or not C_CurveUtil.CreateColorCurve then
 		return nil
 	end
-	
+
 	local curve = C_CurveUtil.CreateColorCurve()
 	local E = Enum and Enum.AuraDispelType
 	local noneID = (E and E.None) or 0
@@ -37,34 +23,23 @@ function Highlight:GetColorCurve()
 	local curseID = (E and E.Curse) or 2
 	local diseaseID = (E and E.Disease) or 3
 	local poisonID = (E and E.Poison) or 4
-	
+
 	if curve.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step then
 		curve:SetType(Enum.LuaCurveType.Step)
 	end
-	
-	-- Map dispel type IDs to colors with alpha based on canCure
-	-- Alpha = 0 means invisible (can't cure)
-	local function getAlpha(auraType)
-		return canCure[auraType] and 1 or 0
-	end
-	
-	curve:AddPoint(noneID, CreateColor(0.8, 0, 0, 0)) -- None/default: always invisible
-	curve:AddPoint(magicID, CreateColor(0.2, 0.6, 1, getAlpha("Magic")))
-	curve:AddPoint(curseID, CreateColor(0.6, 0, 1, getAlpha("Curse")))
-	curve:AddPoint(diseaseID, CreateColor(0.6, 0.4, 0, getAlpha("Disease")))
-	curve:AddPoint(poisonID, CreateColor(0, 0.6, 0, getAlpha("Poison")))
-	
-	-- Cap point for any unknown types
-	local capID = math.max(noneID, magicID, curseID, diseaseID, poisonID) + 1
-	curve:AddPoint(capID, CreateColor(0.8, 0, 0, 0))
-	curve:AddPoint(255, CreateColor(0.8, 0, 0, 0))
-	
+
+	-- RAID_PLAYER_DISPELLABLE already filters by class, so all types get full alpha
+	curve:AddPoint(noneID, CreateColor(0.8, 0, 0, 1))
+	curve:AddPoint(magicID, CreateColor(0.2, 0.6, 1, 1))
+	curve:AddPoint(curseID, CreateColor(0.6, 0, 1, 1))
+	curve:AddPoint(diseaseID, CreateColor(0.6, 0.4, 0, 1))
+	curve:AddPoint(poisonID, CreateColor(0, 0.6, 0, 1))
+
 	if curve.SetMinMaxValues then
 		curve:SetMinMaxValues(0, 255)
 	end
-	
+
 	highlightColorCurve = curve
-	highlightColorCurveVersion = currentVersion
 	return curve
 end
 
@@ -257,18 +232,16 @@ function Highlight:UpdateAura(frame)
 		return
 	end
 	
-	-- 12.0: Use ColorCurve to determine curable debuffs
-	-- Non-curable debuffs will have invisible highlight (alpha 0)
+	-- 12.0: Use RAID_PLAYER_DISPELLABLE filter + ColorCurve for dispellable debuff highlighting
 	local curve = self:GetColorCurve()
 	if not curve or not C_UnitAuras.GetAuraDispelTypeColor then
 		self:Update(frame)
 		return
 	end
-	
-	local slots = {C_UnitAuras.GetAuraSlots(frame.unit, "HARMFUL")}
+
+	local slots = {C_UnitAuras.GetAuraSlots(frame.unit, "HARMFUL|RAID_PLAYER_DISPELLABLE")}
 	for i = 2, #slots do
-		local index = slots[i]
-		local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, index)
+		local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, slots[i])
 		if auraData and auraData.auraInstanceID then
 			local color = C_UnitAuras.GetAuraDispelTypeColor(frame.unit, auraData.auraInstanceID, curve)
 			if color then

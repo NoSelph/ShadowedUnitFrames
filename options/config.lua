@@ -2227,8 +2227,8 @@ local function loadUnitOptions()
 		return buffs.anchorPoint == debuffs.anchorPoint
 	end
 
-	local defaultAuraList = {["BL"] = L["Bottom"], ["TL"] = L["Top"], ["LT"] = L["Left"], ["RT"] = L["Right"]}
-	local advancedAuraList = {["BL"] = L["Bottom Left"], ["BR"] = L["Bottom Right"], ["TL"] = L["Top Left"], ["TR"] = L["Top Right"], ["RT"] = L["Right Top"], ["RB"] = L["Right Bottom"], ["LT"] = L["Left Top"], ["LB"] = L["Left Bottom"]}
+	local defaultAuraList = {["BL"] = L["Bottom"], ["TL"] = L["Top"], ["LT"] = L["Left"], ["RT"] = L["Right"], ["C"] = L["Center"], ["CLI"] = L["Center Left"], ["CRI"] = L["Center Right"]}
+	local advancedAuraList = {["BL"] = L["Bottom Left"], ["BR"] = L["Bottom Right"], ["TL"] = L["Top Left"], ["TR"] = L["Top Right"], ["RT"] = L["Right Top"], ["RB"] = L["Right Bottom"], ["LT"] = L["Left Top"], ["LB"] = L["Left Bottom"], ["C"] = L["Center"], ["CLI"] = L["Center Left"], ["CRI"] = L["Center Right"]}
 	local function getAuraAnchors()
 		return ShadowUF.db.profile.advanced and advancedAuraList or defaultAuraList
 	end
@@ -2255,17 +2255,56 @@ local function loadUnitOptions()
 	local aurasDisabled = function(info) return not getVariable(info[2], "auras", info[#(info) - 2], "enabled") end
 
 	-- 12.0: New multi-frame aura configuration
-	-- Supports up to 4 frames per type (buffs/debuffs) with filter dropdown
+	-- Supports up to 6 frames per type (buffs/debuffs) with filter dropdown
+	local filterDescriptions = {
+		buffs = {
+			["ALL"] = L["Shows all buffs on the unit without any filtering."],
+			["PLAYER"] = L["Only shows buffs you cast yourself."],
+			["RAID"] = L["Only shows buff types that your class can cast (e.g. a Priest sees Fortitude and Renew), regardless of who cast them."],
+			["PLAYER|RAID"] = L["Only shows your class buff types that you cast yourself."],
+			["BIG_DEFENSIVE"] = L["Only shows major defensive cooldowns (Shield Wall, Ice Block, Divine Shield, etc.). List maintained by Blizzard."],
+			["PLAYER|BIG_DEFENSIVE"] = L["Only shows major defensive cooldowns that you activated yourself."],
+			["EXTERNAL_DEFENSIVE"] = L["Only shows defensive buffs received from another player (Pain Suppression, Ironbark, Life Cocoon, etc.)."],
+			["PLAYER|EXTERNAL_DEFENSIVE"] = L["Only shows external defensives that you cast on someone."],
+			["RAID_PLAYER_DISPELLABLE"] = L["Only shows buffs that can be purged, stolen or dispelled by your class."],
+			["RAID_IN_COMBAT"] = L["Only shows buffs deemed useful in combat (e.g. HoTs)."],
+			["IMPORTANT"] = L["Only shows buffs marked as important by Blizzard. Server-maintained list."],
+		},
+		debuffs = {
+			["ALL"] = L["Shows all debuffs on the unit without any filtering."],
+			["PLAYER"] = L["Only shows debuffs you applied yourself."],
+			["RAID"] = L["Shows debuffs relevant in a group or raid context (boss mechanics, important debuffs)."],
+			["PLAYER|RAID"] = L["Only shows debuffs you applied that are relevant in a group or raid context."],
+			["RAID_PLAYER_DISPELLABLE"] = L["Only shows debuffs whose dispel type matches your class (Holy Priest = Magic + Disease, Resto Druid = Magic + Curse + Poison, etc.)."],
+			["CROWD_CONTROL"] = L["Only shows crowd control effects (Stun, Root, Silence, Fear, Polymorph, Cyclone, etc.)."],
+			["RAID_IN_COMBAT"] = L["Only shows debuffs deemed useful in combat by Blizzard."],
+			["IMPORTANT"] = L["Only shows debuffs marked as important by Blizzard. Server-maintained list."],
+		}
+	}
+
 	local filterValues = {
 		buffs = {
 			["ALL"] = L["All Auras"],
 			["PLAYER"] = L["My Auras"],
-			["RAID"] = L["Class auras (group, raid)"],
+			["RAID"] = L["Class-filtered auras"],
+			["PLAYER|RAID"] = L["My class auras"],
+			["BIG_DEFENSIVE"] = L["Big defensive cooldowns"],
+			["PLAYER|BIG_DEFENSIVE"] = L["My big defensives"],
+			["EXTERNAL_DEFENSIVE"] = L["External defensives"],
+			["PLAYER|EXTERNAL_DEFENSIVE"] = L["My external defensives"],
+			["RAID_PLAYER_DISPELLABLE"] = L["Purgeable/Stealable"],
+			["RAID_IN_COMBAT"] = L["Combat auras"],
+			["IMPORTANT"] = L["Important auras"],
 		},
 		debuffs = {
 			["ALL"] = L["All Auras"],
 			["PLAYER"] = L["My Auras"],
-			["RAID"] = L["Contextual auras (group, raid)"],
+			["RAID"] = L["Group/Raid debuffs"],
+			["PLAYER|RAID"] = L["My group/raid debuffs"],
+			["RAID_PLAYER_DISPELLABLE"] = L["Dispellable by me"],
+			["CROWD_CONTROL"] = L["Crowd control effects"],
+			["RAID_IN_COMBAT"] = L["Combat debuffs"],
+			["IMPORTANT"] = L["Important auras"],
 		}
 	}
 
@@ -2356,7 +2395,14 @@ local function loadUnitOptions()
 					order = 2,
 					type = "select",
 					name = L["Filter"],
-					desc = L["Which auras to show in this frame"],
+					width = "full",
+					desc = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						local currentFilter = cfg and cfg.filter or "ALL"
+						local descs = filterDescriptions[auraType] or filterDescriptions.buffs
+						return descs[currentFilter] or L["Which auras to show in this frame"]
+					end,
 					values = function(info)
 						local auraType = info[#(info) - 2]
 						return filterValues[auraType] or filterValues.buffs
@@ -2570,6 +2616,8 @@ local function loadUnitOptions()
 			frame2 = createAuraFrameOptions(2),
 			frame3 = createAuraFrameOptions(3),
 			frame4 = createAuraFrameOptions(4),
+			frame5 = createAuraFrameOptions(5),
+			frame6 = createAuraFrameOptions(6),
 		}
 	}
 

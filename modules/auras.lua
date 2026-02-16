@@ -367,7 +367,7 @@ function Auras:OnLayoutApplied(frame, config)
 	-- Hide all existing aura buttons first
 	if( frame.auras ) then
 		for auraType, _ in pairs({buffs = true, debuffs = true}) do
-			for i = 1, 4 do
+			for i = 1, 6 do
 				local groupKey = auraType .. i
 				if( frame.auras[groupKey] and frame.auras[groupKey].buttons ) then
 					for _, button in pairs(frame.auras[groupKey].buttons) do
@@ -384,7 +384,7 @@ function Auras:OnLayoutApplied(frame, config)
 	for _, auraType in pairs({"buffs", "debuffs"}) do
 		local typeConfig = config.auras[auraType]
 		if( typeConfig ) then
-			for i = 1, 4 do
+			for i = 1, 6 do
 				local frameConfig = typeConfig[i]
 				if( frameConfig and frameConfig.enabled ) then
 					local groupKey = auraType .. i
@@ -402,7 +402,7 @@ function Auras:OnLayoutApplied(frame, config)
 	-- Setup anchor-to-anchor logic
 	frame.auras.anchorPairs = {}
 	
-	for i = 1, 4 do
+	for i = 1, 6 do
 		local buffsConfig = config.auras.buffs and config.auras.buffs[i]
 		local debuffsConfig = config.auras.debuffs and config.auras.debuffs[i]
 		local buffsGroup = frame.auras["buffs" .. i]
@@ -835,7 +835,7 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 
 	-- Show debuff border, or a special colored border if it's stealable
 	local button = frame.buttons[frame.totalAuras]
-	if( isRemovable and not isFriendly and not ShadowUF.db.profile.auras.disableColor ) then
+	if( isRemovable and not ShadowUF.db.profile.auras.disableColor ) then
 		button.border:SetVertexColor(ShadowUF.db.profile.auraColors.removable.r, ShadowUF.db.profile.auraColors.removable.g, ShadowUF.db.profile.auraColors.removable.b)
 	elseif( not ShadowUF.db.profile.auras.disableColor ) then
 		-- 12.0: GetAuraDispelTypeColor to color auras.
@@ -1003,13 +1003,9 @@ local function processAura(parent, frame, type, config, displayConfig, filter, u
 	local isRaid = (config.filter == "RAID") or
 		not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, baseFilter .. "|RAID")
 
-	local isStealable = false
-	if( type == "buffs" ) then
-		isStealable = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, "HELPFUL|STEALABLE")
-	end
+	local isRemovable = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, baseFilter .. "|RAID_PLAYER_DISPELLABLE")
 
 	local canApplyAura = (type == "buffs") and isRaid
-	local isRemovable = (type == "debuffs" and isRaid) or (type == "buffs" and isStealable)
 	local caster = isPlayerAura and "player" or nil
 	local spellID = auraData.spellId or 0
 	local auraType = auraData.dispelName
@@ -1096,26 +1092,23 @@ function Auras:Update(frame)
 	for _, auraType in pairs({"buffs", "debuffs"}) do
 		local typeConfig = config[auraType]
 		if( typeConfig ) then
-			for i = 1, 4 do
+			for i = 1, 6 do
 				local frameConfig = typeConfig[i]
 				local groupKey = auraType .. i
 				local group = frame.auras[groupKey]
-				
+
 				if( group and frameConfig and frameConfig.enabled ) then
 					group.totalAuras = (groupKey == "buffs1") and group.temporaryEnchants or 0
-					
+
 					-- Build the filter string based on configuration
 					local baseFilter = auraType == "buffs" and "HELPFUL" or "HARMFUL"
 					local filterValue = frameConfig.filter or "ALL"
 					local effectiveFilter = baseFilter
-					
-					if filterValue == "PLAYER" then
-						effectiveFilter = baseFilter .. "|PLAYER"
-					elseif filterValue == "RAID" then
-						effectiveFilter = baseFilter .. "|RAID"
-					-- "ALL" = just base filter (no additional filtering)
+
+					if filterValue ~= "ALL" then
+						effectiveFilter = baseFilter .. "|" .. filterValue
 					end
-					
+
 					local ok, err = pcall(scan, frame.auras, group, auraType, frameConfig, frameConfig, effectiveFilter)
 					if not ok and not group.hasErrored then
 						ShadowUF:Print("Error scanning " .. groupKey .. " (logged once): " .. tostring(err))
@@ -1129,7 +1122,7 @@ function Auras:Update(frame)
 	-- Apply anchor-to-anchor positioning for each configured pair
 	-- This dynamically anchors the child group to the last visible aura of the parent group
 	if( frame.auras.anchorPairs ) then
-		for i = 1, 4 do
+		for i = 1, 6 do
 			local pair = frame.auras.anchorPairs[i]
 			if( pair and pair.parent and pair.child ) then
 				anchorGroupToGroup(frame, pair.parentConfig, pair.parent, pair.childConfig, pair.child)

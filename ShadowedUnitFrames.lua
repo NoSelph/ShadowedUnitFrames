@@ -293,8 +293,10 @@ function ShadowUF:CheckUpgrade()
 						config.auras[key] = {
 							[1] = newFrame,
 							[2] = {enabled = false, filter = "PLAYER", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-							[3] = {enabled = false, filter = key == "debuffs" and "DISPELLABLE" or "CANCELABLE", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+							[3] = {enabled = false, filter = key == "debuffs" and "RAID_PLAYER_DISPELLABLE" or "RAID", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 							[4] = {enabled = false, filter = "RAID", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+							[5] = {enabled = false, filter = key == "debuffs" and "CROWD_CONTROL" or "BIG_DEFENSIVE", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+							[6] = {enabled = false, filter = "IMPORTANT", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 						}
 					end
 				end
@@ -378,14 +380,18 @@ function ShadowUF:LoadUnitDefaults()
 				buffs = {
 					[1] = {enabled = true, filter = "ALL", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 					[2] = {enabled = false, filter = "PLAYER", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[3] = {enabled = false, filter = "CANCELABLE", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[4] = {enabled = false, filter = "RAID", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[3] = {enabled = false, filter = "RAID", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[4] = {enabled = false, filter = "BIG_DEFENSIVE", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[5] = {enabled = false, filter = "EXTERNAL_DEFENSIVE", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[6] = {enabled = false, filter = "IMPORTANT", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 				},
 				debuffs = {
 					[1] = {enabled = true, filter = "ALL", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
 					[2] = {enabled = false, filter = "PLAYER", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[3] = {enabled = false, filter = "DISPELLABLE", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[3] = {enabled = false, filter = "RAID_PLAYER_DISPELLABLE", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
 					[4] = {enabled = false, filter = "RAID", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[5] = {enabled = false, filter = "CROWD_CONTROL", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[6] = {enabled = false, filter = "IMPORTANT", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BL", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
 				},
 				-- Boss debuffs (Private Auras) - player only
 				bossDebuffs = {enabled = false, size = 32, perRow = 3, maxRows = 1, anchorPoint = "C", x = 0, y = 0, showCooldown = true, showCooldownNumbers = true},

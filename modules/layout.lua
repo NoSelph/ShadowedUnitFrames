@@ -188,7 +188,7 @@ end
 
 local preDefPoint = {C = "CENTER", CLI = "LEFT", RT = "TOPLEFT", BC = "TOP", CRI = "RIGHT", LT = "TOPRIGHT", TR = "BOTTOMRIGHT", BL = "TOPLEFT", LB = "BOTTOMRIGHT", LC = "RIGHT", RB = "BOTTOMLEFT", RC = "LEFT", TC = "BOTTOM", BR = "TOPRIGHT", TL = "BOTTOMLEFT", BRI = "BOTTOMRIGHT", BLI = "BOTTOMLEFT", TRI = "TOPRIGHT", TLI = "TOPLEFT"}
 local preDefRelative = {C = "CENTER", CLI = "LEFT", RT = "TOPRIGHT", BC = "BOTTOM", CRI = "RIGHT", LT = "TOPLEFT", TR = "TOPRIGHT", BL = "BOTTOMLEFT", LB = "BOTTOMLEFT", LC = "LEFT", RB = "BOTTOMRIGHT", RC = "RIGHT", TC = "TOP", BR = "BOTTOMRIGHT", TL = "TOPLEFT", BRI = "BOTTOMRIGHT", BLI = "BOTTOMLEFT", TRI = "TOPRIGHT", TLI = "TOPLEFT"}
-local columnDirection = {RT = "RIGHT", C = "RIGHT", BC = "BOTTOM", LT = "LEFT", TR = "TOP", BL = "BOTTOM", LB = "LEFT", LC = "LEFT", TRI = "TOP", RB = "RIGHT", RC = "RIGHT", TC = "TOP", CLI = "RIGHT", TL = "TOP", BR = "BOTTOM", IBL = "RIGHT", IBR = "RIGHT", CRI = "RIGHT", TLI = "TOP"}
+local columnDirection = {RT = "RIGHT", C = "BOTTOM", BC = "BOTTOM", LT = "LEFT", TR = "TOP", BL = "BOTTOM", LB = "LEFT", LC = "LEFT", TRI = "TOP", RB = "RIGHT", RC = "RIGHT", TC = "TOP", CLI = "BOTTOM", TL = "TOP", BR = "BOTTOM", IBL = "RIGHT", IBR = "RIGHT", CRI = "BOTTOM", TLI = "TOP"}
 local auraDirection = {RT = "BOTTOM", C = "LEFT", BC = "LEFT", LT = "BOTTOM", TR = "LEFT", BL = "RIGHT", LB = "TOP", LC = "LEFT", TRI = "LEFT", RB = "TOP", RC = "LEFT", TC = "LEFT", CLI = "RIGHT", TL = "RIGHT", BR = "LEFT", IBL = "TOP", IBR = "TOP", CRI = "LEFT", TLI = "RIGHT"}
 
 -- Figures out how text should be justified based on where it's anchoring

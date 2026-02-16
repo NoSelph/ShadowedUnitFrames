@@ -2047,5 +2047,43 @@ L["Zone configuration units"] = [=[Unidades de configuração de zona
 
 ]=]
 
+-- 12.0 Aura filters
+L["Big defensive cooldowns"] = "Grandes defensivos"
+L["Center Left"] = "Centro Esquerda"
+L["Center Right"] = "Centro Direita"
+L["Class-filtered auras"] = "Auras filtradas por classe"
+L["Combat auras"] = "Auras de combate"
+L["Combat debuffs"] = "Penalidades de combate"
+L["Crowd control effects"] = "Efeitos de controle"
+L["Dispellable by me"] = "Dissipável por mim"
+L["External defensives"] = "Defensivos externos"
+L["Group/Raid Auras"] = "Auras de grupo/raide"
+L["Group/Raid debuffs"] = "Penalidades de grupo/raide"
+L["Important auras"] = "Auras importantes"
+L["My big defensives"] = "Meus grandes defensivos"
+L["My class auras"] = "Minhas auras de classe"
+L["My external defensives"] = "Meus defensivos externos"
+L["My group/raid debuffs"] = "Minhas penalidades de grupo/raide"
+L["Only shows debuffs you applied that are relevant in a group or raid context."] = "Mostra apenas penalidades que você aplicou e que são relevantes em contexto de grupo ou raide."
+L["Purgeable/Stealable"] = "Purgável/Roubável"
+L["Only shows buffs deemed useful in combat (e.g. HoTs)."] = "Mostra apenas bônus considerados úteis em combate pela Blizzard (ex. HoTs)."
+L["Only shows buffs marked as important by Blizzard. Server-maintained list."] = "Mostra apenas bônus marcados como importantes pela Blizzard. Lista mantida pelo servidor."
+L["Only shows buffs that can be purged, stolen or dispelled by your class."] = "Mostra apenas bônus que podem ser purgados, roubados ou dissipados pela sua classe."
+L["Only shows buffs you cast yourself."] = "Mostra apenas bônus que você lançou."
+L["Only shows buff types that your class can cast (e.g. a Priest sees Fortitude and Renew), regardless of who cast them."] = "Mostra apenas tipos de bônus que sua classe pode lançar (ex. um Sacerdote vê Resistência e Renovar), independente de quem os lançou."
+L["Only shows crowd control effects (Stun, Root, Silence, Fear, Polymorph, Cyclone, etc.)."] = "Mostra apenas efeitos de controle (Atordoar, Enraizar, Silêncio, Medo, Polimorfia, Ciclone, etc.)."
+L["Only shows debuffs deemed useful in combat by Blizzard."] = "Mostra apenas penalidades consideradas úteis em combate pela Blizzard."
+L["Only shows debuffs marked as important by Blizzard. Server-maintained list."] = "Mostra apenas penalidades marcadas como importantes pela Blizzard. Lista mantida pelo servidor."
+L["Only shows debuffs whose dispel type matches your class (Holy Priest = Magic + Disease, Resto Druid = Magic + Curse + Poison, etc.)."] = "Mostra apenas penalidades cujo tipo de dissipação corresponde à sua classe (Sacerdote Sagrado = Magia + Doença, Druida Restauração = Magia + Maldição + Veneno, etc.)."
+L["Only shows debuffs you applied yourself."] = "Mostra apenas penalidades que você aplicou."
+L["Only shows defensive buffs received from another player (Pain Suppression, Ironbark, Life Cocoon, etc.)."] = "Mostra apenas bônus defensivos recebidos de outro jogador (Supressão de Dor, Cascaferro, Casulo de Vida, etc.)."
+L["Only shows external defensives that you cast on someone."] = "Mostra apenas defensivos externos que você lançou em alguém."
+L["Only shows major defensive cooldowns (Shield Wall, Ice Block, Divine Shield, etc.). List maintained by Blizzard."] = "Mostra apenas grandes tempos de recarga defensivos (Muro de Escudo, Bloco de Gelo, Escudo Divino, etc.). Lista mantida pela Blizzard."
+L["Only shows major defensive cooldowns that you activated yourself."] = "Mostra apenas grandes defensivos que você ativou."
+L["Only shows your class buff types that you cast yourself."] = "Mostra apenas tipos de bônus da sua classe que você lançou."
+L["Shows all buffs on the unit without any filtering."] = "Mostra todos os bônus da unidade sem filtro."
+L["Shows all debuffs on the unit without any filtering."] = "Mostra todas as penalidades da unidade sem filtro."
+L["Shows debuffs relevant in a group or raid context (boss mechanics, important debuffs)."] = "Mostra penalidades relevantes em contexto de grupo ou raide (mecânicas de chefe, penalidades importantes)."
+
 local ShadowUF = select(2, ...)
 ShadowUF.L = setmetatable(L, {__index = ShadowUF.L})
