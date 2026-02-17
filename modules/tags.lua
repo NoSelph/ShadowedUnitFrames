@@ -496,6 +496,7 @@ Tags.defaultTags = {
 	end]],
 	["abbrev:name"] = [[function(unit, unitOwner)
 		local name = UnitName(unitOwner)
+		if not name then return end
 		if issecretvalue(name) then return name end
 		return string.len(name) > 10 and ShadowUF.Tags.abbrevCache[name] or name
 	end]],
