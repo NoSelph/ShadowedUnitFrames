@@ -2268,6 +2268,7 @@ local function loadUnitOptions()
 			["PLAYER|EXTERNAL_DEFENSIVE"] = L["Only shows external defensives that you cast on someone."],
 			["RAID_PLAYER_DISPELLABLE"] = L["Only shows buffs that can be purged, stolen or dispelled by your class."],
 			["RAID_IN_COMBAT"] = L["Only shows buffs deemed useful in combat (e.g. HoTs)."],
+			["PLAYER|RAID_IN_COMBAT"] = L["Only shows your buffs deemed useful in combat by Blizzard."],
 			["IMPORTANT"] = L["Only shows buffs marked as important by Blizzard. Server-maintained list."],
 		},
 		debuffs = {
@@ -2294,6 +2295,7 @@ local function loadUnitOptions()
 			["PLAYER|EXTERNAL_DEFENSIVE"] = L["My external defensives"],
 			["RAID_PLAYER_DISPELLABLE"] = L["Purgeable/Stealable"],
 			["RAID_IN_COMBAT"] = L["Combat auras"],
+			["PLAYER|RAID_IN_COMBAT"] = L["My combat auras"],
 			["IMPORTANT"] = L["Important auras"],
 		},
 		debuffs = {

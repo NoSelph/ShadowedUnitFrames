@@ -776,6 +776,14 @@ function Units:CreateUnit(...)
 	frame:SetScript("OnShow", OnShow)
 	frame:SetScript("OnHide", OnHide)
 
+	-- 3D portrait models don't inherit parent alpha for their 3D rendering,
+	-- so we propagate alpha changes explicitly (same pattern as tempAuraFader)
+	hooksecurefunc(frame, "SetAlpha", function(self, alpha)
+		if self.portraitModel and self.portraitModel:IsShown() then
+			self.portraitModel:SetAlpha(alpha)
+		end
+	end)
+
 	frame.OnEnter = SUF_OnEnter
 	frame.OnLeave = SUF_OnLeave
 
