@@ -287,6 +287,12 @@ function Movers:Enable()
 
 	-- Setup the headers
 	for _, header in pairs(ShadowUF.Units.headerFrames) do
+		-- Force show headers hidden by state monitors
+		-- so SecureGroupHeaderTemplate creates children with negative startingIndex
+		if( ShadowUF.db.profile.units[header.unitType].enabled and not header:IsShown() ) then
+			header:Show()
+		end
+
 		for key in pairs(attributeBlacklist) do
 			header:SetAttribute(key, nil)
 		end
