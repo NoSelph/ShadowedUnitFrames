@@ -121,9 +121,10 @@ function Health:UpdateAura(frame)
 		-- The filter already checks the player's class dispel capability
 		local curve = getDispelColorCurve()
 		if( curve and C_UnitAuras.GetAuraDispelTypeColor ) then
-			local slots = {C_UnitAuras.GetAuraSlots(frame.unit, "HARMFUL|RAID_PLAYER_DISPELLABLE")}
-			for i = 2, #slots do
-				local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, slots[i])
+			local results = {pcall(C_UnitAuras.GetAuraSlots, frame.unit, "HARMFUL|RAID_PLAYER_DISPELLABLE")}
+			if not results[1] then return end
+			for i = 3, #results do
+				local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, results[i])
 				if( auraData and auraData.auraInstanceID ) then
 					local color = C_UnitAuras.GetAuraDispelTypeColor(frame.unit, auraData.auraInstanceID, curve)
 					if( color ) then

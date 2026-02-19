@@ -3183,7 +3183,7 @@ local function loadUnitOptions()
 								name = L["On curable debuff"],
 								desc = L["Highlight units that are debuffed with something you can cure."],
 								arg = "highlight.debuff",
-								hidden = function(info) return info[2] ~= "boss" and ( ShadowUF.Units.zoneUnits[info[2]] or info[2] == "battlegroundpet" or info[2] == "arenapet" ) end,
+								hidden = function(info) return info[2] ~= "boss" and ( ShadowUF.Units.zoneUnits[info[2]] or info[2] == "battlegroundpet" or info[2] == "arenapet" or (ShadowUF.fakeUnits[info[2]] and info[2] ~= "targettarget") ) end,
 							},
 							raremob = {
 								order = 6.10,

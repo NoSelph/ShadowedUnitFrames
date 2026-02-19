@@ -239,9 +239,14 @@ function Highlight:UpdateAura(frame)
 		return
 	end
 
-	local slots = {C_UnitAuras.GetAuraSlots(frame.unit, "HARMFUL|RAID_PLAYER_DISPELLABLE")}
-	for i = 2, #slots do
-		local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, slots[i])
+	-- GetAuraSlots rejects compound unit tokens and player names
+	local results = {pcall(C_UnitAuras.GetAuraSlots, frame.unit, "HARMFUL|RAID_PLAYER_DISPELLABLE")}
+	if not results[1] then
+		self:Update(frame)
+		return
+	end
+	for i = 3, #results do
+		local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, results[i])
 		if auraData and auraData.auraInstanceID then
 			local color = C_UnitAuras.GetAuraDispelTypeColor(frame.unit, auraData.auraInstanceID, curve)
 			if color then
