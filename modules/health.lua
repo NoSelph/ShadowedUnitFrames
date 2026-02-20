@@ -36,7 +36,7 @@ local function getGradientColor(unit)
 	-- Curve Interpolation
 	if UnitHealthPercent and Health._gradientCurve then
 		local ok, color = pcall(UnitHealthPercent, unit, true, Health._gradientCurve)
-		if ok and color and color.GetRGB then
+		if ok and type(color) == "table" and color.GetRGB then
 			return color:GetRGB()
 		end
 	end
@@ -237,10 +237,17 @@ end
 
 function Health:Update(frame)
 	local unit = frame.unit
+	if( not unit or not UnitExists(unit) ) then return end
+
 	local isOffline = not UnitIsConnected(unit)
 	frame.isDead = UnitIsDeadOrGhost(unit)
-	frame.healthBar.currentHealth = UnitHealth(unit)
-	frame.healthBar:SetMinMaxValues(0, UnitHealthMax(unit))
+
+	local okH, currentHealth = pcall(UnitHealth, unit)
+	local okM, maxHealth = pcall(UnitHealthMax, unit)
+	if( not okH or not okM ) then return end
+
+	frame.healthBar.currentHealth = currentHealth
+	frame.healthBar:SetMinMaxValues(0, maxHealth)
 
 	-- Safe SetValue
 	local isDead = UnitIsDeadOrGhost(unit)

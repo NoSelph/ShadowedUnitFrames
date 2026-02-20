@@ -93,6 +93,7 @@ end
 
 -- Update the cached power type
 function Tags:UpdatePowerType(frame)
+	if( not frame.unit or not UnitExists(frame.unit) ) then return end
 	local powerID, powerType = UnitPowerType(frame.unit)
 	if( not powerMap[powerType] ) then powerType = powerMap[powerID] or "ENERGY" end
 
@@ -220,7 +221,7 @@ local function createTagFunction(tags, resetCache)
 	frequencyCache[tags] = lowestFrequency < 9999 and lowestFrequency or nil
 	tagPool[tags] = function(fontString, frame, event, unit, powerType)
 		-- we can only run on frames with units set
-		if not fontString.parent.unit then
+		if not fontString.parent.unit or (not fontString.parent.configMode and not UnitExists(fontString.parent.unit)) then
 			return
 		end
 

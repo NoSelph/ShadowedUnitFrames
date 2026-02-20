@@ -31,6 +31,7 @@ RegisterStateDriver(petBattleFrame, "petbattle", "[petbattle] active; none")
 
 -- Frame shown, do a full update
 local function FullUpdate(self)
+	if( not self.unit or (not self.configMode and not UnitExists(self.unit)) ) then return end
 	for i=1, #(self.fullUpdates), 2 do
 		local handler = self.fullUpdates[i]
 		handler[self.fullUpdates[i + 1]](handler, self)
@@ -360,7 +361,7 @@ local function checkVehicleData(self, elapsed)
 			self:FullUpdate()
 
 		-- Got data, stop checking and do a full frame update
-		elseif( UnitIsConnected(self.unit) or UnitExists(self.unit) ) then
+		elseif( UnitExists(self.unit) ) then
 			self.timeElapsed = nil
 			self.dataAttempts = nil
 			self:SetScript("OnUpdate", nil)
@@ -376,7 +377,7 @@ function Units:CheckVehicleStatus(frame, event, unit)
 	if( event and frame.unitOwner ~= unit ) then return end
 
 	-- Not in a vehicle yet, and they entered one that has a UI or they were in a vehicle but the GUID changed (vehicle -> vehicle)
-	if( ( not frame.inVehicle or frame.unitGUID ~= UnitGUID(frame.vehicleUnit) ) and UnitHasVehicleUI(frame.unitOwner) and UnitHasVehiclePlayerFrameUI(frame.unitOwner) and not ShadowUF.db.profile.units[frame.unitType].disableVehicle ) then
+	if( ( not frame.inVehicle or (UnitExists(frame.vehicleUnit) and frame.unitGUID ~= UnitGUID(frame.vehicleUnit)) ) and UnitHasVehicleUI(frame.unitOwner) and UnitHasVehiclePlayerFrameUI(frame.unitOwner) and not ShadowUF.db.profile.units[frame.unitType].disableVehicle ) then
 		frame.inVehicle = true
 		frame.unit = frame.vehicleUnit
 
@@ -393,14 +394,21 @@ function Units:CheckVehicleStatus(frame, event, unit)
 	elseif( frame.inVehicle and ( not UnitHasVehicleUI(frame.unitOwner) or not UnitHasVehiclePlayerFrameUI(frame.unitOwner) or ShadowUF.db.profile.units[frame.unitType].disableVehicle ) ) then
 		frame.inVehicle = false
 		frame.unit = frame.unitOwner
-		frame.unitGUID = UnitGUID(frame.unit)
+		frame.unitGUID = UnitExists(frame.unit) and UnitGUID(frame.unit) or nil
 		frame:FullUpdate()
 	end
 end
 
 -- Handles checking for GUID changes for doing a full update, this fixes frames sometimes showing the wrong unit when they change
 function Units:CheckUnitStatus(frame)
-	local guid = frame.unit and UnitGUID(frame.unit)
+	if( not frame.unit or not UnitExists(frame.unit) ) then
+		if( frame.unitGUID ) then
+			frame.unitGUID = nil
+		end
+		return
+	end
+
+	local guid = UnitGUID(frame.unit)
 	
 	-- Global 'issecretvalue' check for both current and stored GUID
 	local checkSecret = _G.issecretvalue
@@ -446,7 +454,7 @@ function Units:CheckGroupedUnitStatus(frame)
 		frame.unit = frame.unitOwner
 		frame.unitGUID = UnitGUID(frame.unit)
 		frame:FullUpdate()
-	else
+	elseif( UnitExists(frame.unit) ) then
 		frame.unitGUID = UnitGUID(frame.unit)
 		frame:FullUpdate()
 	end
@@ -734,6 +742,7 @@ end
 
 -- Create the generic things that we want in every secure frame regardless if it's a button or a header
 local function ClassToken(self)
+	if( not self.unit or not UnitExists(self.unit) ) then return nil end
 	return (select(2, UnitClass(self.unit)))
 end
 
