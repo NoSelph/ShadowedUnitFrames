@@ -1003,7 +1003,9 @@ local function processAura(parent, frame, type, config, displayConfig, filter, u
 	local isRaid = (config.filter == "RAID") or
 		not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, baseFilter .. "|RAID")
 
-	local isRemovable = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, baseFilter .. "|RAID_PLAYER_DISPELLABLE")
+	-- Removable = dispellable debuffs on friendlies OR stealable/purgeable buffs on enemies
+	local canRemove = (type == "debuffs" and isFriendly) or (type == "buffs" and not isFriendly)
+	local isRemovable = canRemove and not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, baseFilter .. "|RAID_PLAYER_DISPELLABLE")
 
 	local canApplyAura = (type == "buffs") and isRaid
 	local caster = isPlayerAura and "player" or nil
