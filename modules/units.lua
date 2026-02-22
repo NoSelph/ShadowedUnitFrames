@@ -792,6 +792,12 @@ function Units:CreateUnit(...)
 			self.portraitModel:SetAlpha(alpha)
 		end
 	end)
+	-- Separate C method for secret UnitInRange booleans
+	hooksecurefunc(frame, "SetAlphaFromBoolean", function(self, value, alphaIfTrue, alphaIfFalse)
+		if self.portraitModel and self.portraitModel:IsShown() then
+			self.portraitModel:SetAlphaFromBoolean(value, alphaIfTrue, alphaIfFalse)
+		end
+	end)
 
 	frame.OnEnter = SUF_OnEnter
 	frame.OnLeave = SUF_OnLeave

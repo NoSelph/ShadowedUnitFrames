@@ -13,7 +13,7 @@ local Range = {
 		["PALADIN"] = GetSpellName(19750), -- Flash of Light
 		["SHAMAN"] = GetSpellName(8004), -- Healing Surge
 		["WARLOCK"] = GetSpellName(5697), -- Unending Breath
-		["DEATHKNIGHT"] = GetSpellName(61999), -- Raise Ally
+		--["DEATHKNIGHT"] = GetSpellName(61999), -- Raise Ally (resurrection only, nil on living targets)
 		["MONK"] = GetSpellName(115450), -- Detox
 		["MAGE"] = GetSpellName(130), -- Slow Fall
 		["WARRIOR"] = GetSpellName(3411), -- Intervene
@@ -86,13 +86,9 @@ local scrub = scrubsecretvalues or function(v) return v end
 
 local function SafeIsSpellInRange(spell, unit)
     local ok, res = pcall(LSR.IsSpellInRange, spell, unit)
-    if not ok then return nil end
-
-    -- res can also become secret; do the compare inside pcall.
-    local ok2, inRange = pcall(function() return res == 1 end)
-    if not ok2 then return nil end
-
-    return inRange
+    if not ok or res == nil then return nil end
+    -- C_Spell.IsSpellInRange never returns secrets; direct comparison is safe.
+    return res == 1
 end
 
 
@@ -114,33 +110,32 @@ local function checkRange(self)
         return
     end
 
+    -- Primary: spell-based range check (most accurate)
     if spell then
         local inRange = SafeIsSpellInRange(spell, frame.unit)
-        if inRange == nil then
-            -- Can't safely evaluate (secret/taint/etc). Don't error; just keep bright.
-            frame:SetRangeAlpha(inAlpha)
-        else
+        if inRange ~= nil then
             frame:SetRangeAlpha(inRange and inAlpha or oorAlpha)
+            return
         end
+        -- nil = inconclusive (e.g. C_Spell.IsSpellInRange returns nil for raidN tokens)
+        -- Fall through to UnitInRange for group members
+    end
+
+    -- Fallback: UnitInRange for group members (handles secret booleans via SetAlphaFromBoolean)
+    if UnitInRaid(frame.unit) or UnitInParty(frame.unit) then
+        local ok, inRange = pcall(UnitInRange, frame.unit)
+        if ok and not frame.disableRangeAlpha then
+            if frame.SetAlphaFromBoolean then
+                frame:SetAlphaFromBoolean(inRange, inAlpha, oorAlpha)
+            else
+                frame:SetRangeAlpha(SafeAlphaFromBool(inRange, inAlpha, oorAlpha))
+            end
+        elseif not ok then
+            frame:SetRangeAlpha(inAlpha)
+        end
+        -- When disableRangeAlpha (fader active): skip, next tick after release will reapply.
         return
     end
-
-    -- Group fallback: UnitInRange can return secret booleans; don't branch on it directly.
-if UnitInRaid(frame.unit) or UnitInParty(frame.unit) then
-    local ok, inRange, checkedRange = pcall(UnitInRange, frame.unit)
-
-    -- checkedRange can be a secret boolean; scrub it before branching
-    local checked = ok and scrub(checkedRange)
-
-    if checked then
-        -- inRange may also be secret; SafeAlphaFromBool already handles that safely
-        frame:SetRangeAlpha(SafeAlphaFromBool(inRange, inAlpha, oorAlpha))
-    else
-        -- If we can't safely check range, keep bright (no errors, no false-dimming)
-        frame:SetRangeAlpha(inAlpha)
-    end
-    return
-end
 
 
     -- Default

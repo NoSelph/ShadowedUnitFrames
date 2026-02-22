@@ -33,13 +33,14 @@ local function faderUpdate(self, elapsed)
 		return
 	end
 
+	local a
 	if( self.fadeType == "in" ) then
-		self.parent:SetAlpha((self.timeElapsed / self.fadeTime) * (self.alphaEnd - self.alphaStart) + self.alphaStart)
+		a = (self.timeElapsed / self.fadeTime) * (self.alphaEnd - self.alphaStart) + self.alphaStart
 	else
-		self.parent:SetAlpha(((self.fadeTime - self.timeElapsed) / self.fadeTime) * (self.alphaStart - self.alphaEnd) + self.alphaEnd)
+		a = ((self.fadeTime - self.timeElapsed) / self.fadeTime) * (self.alphaStart - self.alphaEnd) + self.alphaEnd
 	end
-
-	tempAuraFader(self.parent, self.parent:GetAlpha())
+	self.parent:SetAlpha(a)
+	tempAuraFader(self.parent, a)
 end
 
 local function startFading(self, type, alpha, speedyFade)
@@ -51,8 +52,14 @@ local function startFading(self, type, alpha, speedyFade)
 	self.fader.fadeTime = speedyFade and 0.15 or type == "in" and 0.25 or type == "out" and 0.75
 	self.fader.fadeType = type
 	self.fader.timeElapsed = 0
+	-- GetAlpha() returns secret if range used SetAlphaFromBoolean with secret values.
+	-- Use previous fade target as best approximation when alpha is secret.
+	if self.HasSecretAspect and self:HasSecretAspect(Enum.SecretAspect.Alpha) then
+		self.fader.alphaStart = self.fader.alphaEnd or 1.0
+	else
+		self.fader.alphaStart = self:GetAlpha()
+	end
 	self.fader.alphaEnd = alpha
-	self.fader.alphaStart = self:GetAlpha()
 	self.fader:Show()
 end
 
