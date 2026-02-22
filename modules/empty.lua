@@ -52,7 +52,7 @@ function Empty:UpdateColor(frame)
 				color = ShadowUF.db.profile.healthColors.hostile
 			end
 		end
-	elseif( ShadowUF.db.profile.units[frame.unitType].emptyBar.class and ( UnitIsPlayer(frame.unit) or UnitCreatureFamily(frame.unit) ) ) then
+	elseif( ShadowUF.db.profile.units[frame.unitType].emptyBar.class and ( UnitIsPlayer(frame.unit) or UnitCreatureFamily(frame.unit) or UnitPlayerOrPetInRaid(frame.unit) or UnitPlayerOrPetInParty(frame.unit) ) ) then
 		local class = UnitCreatureFamily(frame.unit) or frame:UnitClassToken()
 		if class and not (issecretvalue and issecretvalue(class)) then
 			color = ShadowUF.db.profile.classColors[class]
