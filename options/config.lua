@@ -4711,8 +4711,18 @@ local function loadUnitOptions()
 									order = 2,
 									type = "select",
 									name = L["Anchor mode"],
-									desc = L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."] .. "\n\n" .. L["Bar anchored to the right edge of the frame, growing inward with reverse fill."],
-									values = {["healthBar"] = L["Attached to health bar"], ["frame"] = L["Attached to frame"]},
+									width = "full",
+									desc = function(info)
+										local mode = getVariable(info[2], "healAbsorb", nil, "anchorMode") or "healthBar"
+										local descs = {
+											healthBar = L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."],
+											frame = L["Bar anchored to the frame edge, growing inward with reverse fill."],
+											overlay = L["Bar overlaid on the health bar with reverse fill, growing inward from the health fill edge."],
+											healthBarOverflow = L["Bar fills missing health then overflows as reverse overlay on the health bar."],
+										}
+										return descs[mode] or ""
+									end,
+									values = {["healthBar"] = L["Health bar"], ["frame"] = L["Frame"], ["overlay"] = L["Health fill (reverse)"], ["healthBarOverflow"] = L["Health bar (fill + reverse overlay)"]},
 									arg = "healAbsorb.anchorMode",
 									hidden = false,
 								},
@@ -4723,16 +4733,7 @@ local function loadUnitOptions()
 									desc = L["Percentage value of how far outside the unit frame the absorbed health bar can go. 130% means it will go 30% outside the frame, 100% means it will not go outside."],
 									min = 1, max = 1.50, step = 0.05, isPercent = true,
 									arg = "healAbsorb.cap",
-									hidden = function(info) return getVariable(info[2], "healAbsorb", nil, "anchorMode") == "frame" end,
-								},
-							frameSize = {
-								order = 4,
-								min = 0.50, max = 0.90, step = 0.05, isPercent = true,
-								type = "range",
-								name = L["Bar interior"],
-								desc = L["Percentage value of how far inside the unit frame the absorbed health bar can go. 90% means it will go 10% inside the frame, 50% means it will go up to the middle of the frame."],
-								arg = "healAbsorb.frameSize",
-								hidden = function(info) return getVariable(info[2], "healAbsorb", nil, "anchorMode") ~= "frame" end,
+									hidden = function(info) return getVariable(info[2], "healAbsorb", nil, "anchorMode") ~= "healthBar" end,
 								},
 						},
 					},
@@ -4760,8 +4761,18 @@ local function loadUnitOptions()
 								order = 2,
 								type = "select",
 								name = L["Anchor mode"],
-								desc = L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."] .. "\n\n" .. L["Bar anchored to the right edge of the frame, growing inward with reverse fill."],
-								values = {["healthBar"] = L["Attached to health bar"], ["frame"] = L["Attached to frame"]},
+								width = "full",
+								desc = function(info)
+									local mode = getVariable(info[2], "incHeal", nil, "anchorMode") or "healthBar"
+									local descs = {
+										healthBar = L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."],
+										frame = L["Bar anchored to the frame edge, growing inward with reverse fill."],
+										overlay = L["Bar overlaid on the health bar with reverse fill, growing inward from the health fill edge."],
+										healthBarOverflow = L["Bar fills missing health then overflows as reverse overlay on the health bar."],
+									}
+									return descs[mode] or ""
+								end,
+								values = {["healthBar"] = L["Health bar"], ["frame"] = L["Frame"], ["overlay"] = L["Health fill (reverse)"], ["healthBarOverflow"] = L["Health bar (fill + reverse overlay)"]},
 								arg = "incHeal.anchorMode",
 								hidden = false,
 							},
@@ -4772,16 +4783,7 @@ local function loadUnitOptions()
 								desc = L["Percentage value of how far outside the unit frame the incoming heal bar can go. 130% means it will go 30% outside the frame, 100% means it will not go outside."],
 								min = 1, max = 1.50, step = 0.05, isPercent = true,
 								arg = "incHeal.cap",
-								hidden = function(info) return getVariable(info[2], "incHeal", nil, "anchorMode") == "frame" end,
-							},
-							frameSize = {
-								order = 4,
-								type = "range",
-								name = L["Bar interior"],
-								desc = L["Percentage value of how far inside the unit frame the incoming heal bar can go. 90% means it will go 10% inside the frame, 50% means it will go up to the middle of the frame."],
-								min = 0.50, max = 0.90, step = 0.05, isPercent = true,
-								arg = "incHeal.frameSize",
-								hidden = function(info) return getVariable(info[2], "incHeal", nil, "anchorMode") ~= "frame" end,
+								hidden = function(info) return getVariable(info[2], "incHeal", nil, "anchorMode") ~= "healthBar" end,
 							},
 						},
 					},
@@ -4809,8 +4811,18 @@ local function loadUnitOptions()
 								order = 2,
 								type = "select",
 								name = L["Anchor mode"],
-								desc = L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."] .. "\n\n" .. L["Bar anchored to the right edge of the frame, growing inward with reverse fill."],
-								values = {["healthBar"] = L["Attached to health bar"], ["frame"] = L["Attached to frame"]},
+								width = "full",
+								desc = function(info)
+									local mode = getVariable(info[2], "incAbsorb", nil, "anchorMode") or "healthBar"
+									local descs = {
+										healthBar = L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."],
+										frame = L["Bar anchored to the frame edge, growing inward with reverse fill."],
+										overlay = L["Bar overlaid on the health bar with reverse fill, growing inward from the health fill edge."],
+										healthBarOverflow = L["Bar fills missing health then overflows as reverse overlay on the health bar."],
+									}
+									return descs[mode] or ""
+								end,
+								values = {["healthBar"] = L["Health bar"], ["frame"] = L["Frame"], ["overlay"] = L["Health fill (reverse)"], ["healthBarOverflow"] = L["Health bar (fill + reverse overlay)"]},
 								arg = "incAbsorb.anchorMode",
 								hidden = false,
 							},
@@ -4821,16 +4833,7 @@ local function loadUnitOptions()
 								desc = L["Percentage value of how far outside the unit frame the incoming absorb bar can go. 130% means it will go 30% outside the frame, 100% means it will not go outside."],
 								min = 1, max = 1.50, step = 0.05, isPercent = true,
 								arg = "incAbsorb.cap",
-								hidden = function(info) return getVariable(info[2], "incAbsorb", nil, "anchorMode") == "frame" end,
-							},
-							frameSize = {
-								order = 4,
-								type = "range",
-								name = L["Bar interior"],
-								desc = L["Percentage value of how far inside the unit frame the incoming absorb bar can go. 90% means it will go 10% inside the frame, 50% means it will go up to the middle of the frame."],
-								min = 0.50, max = 0.90, step = 0.05, isPercent = true,
-								arg = "incAbsorb.frameSize",
-								hidden = function(info) return getVariable(info[2], "incAbsorb", nil, "anchorMode") ~= "frame" end,
+								hidden = function(info) return getVariable(info[2], "incAbsorb", nil, "anchorMode") ~= "healthBar" end,
 							},
 						},
 					},

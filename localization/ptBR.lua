@@ -1153,6 +1153,15 @@ L["Out of range alpha"] = [=[Alfa fora do alcance
 ]=]
 L["Outline"] = "Contorno"
 L["Outside bar limit"] = "Fora da barra limite"
+L["Anchor mode"] = "Modo de ancoragem"
+L["Health bar"] = "Barra de vida"
+L["Frame"] = "Moldura"
+L["Health fill (reverse)"] = "Preenchimento de vida (inverso)"
+L["Health bar (fill + reverse overlay)"] = "Barra de vida (preenchimento + sobreposição inversa)"
+L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."] = "Barra ancorada no final da barra de vida, crescendo para fora (usa limite de excesso)."
+L["Bar anchored to the frame edge, growing inward with reverse fill."] = "Barra ancorada na borda da moldura, crescendo para dentro com preenchimento inverso."
+L["Bar overlaid on the health bar with reverse fill, growing inward from the health fill edge."] = "Barra sobreposta na barra de vida com preenchimento inverso, crescendo para dentro a partir da borda do preenchimento."
+L["Bar fills missing health then overflows as reverse overlay on the health bar."] = "Barra preenche a vida faltante e depois transborda como sobreposição inversa na barra de vida."
 L["Override background"] = [=[Substituir plano de fundo
 
 ]=]

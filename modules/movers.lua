@@ -59,6 +59,17 @@ local function createConfigEnv()
 		UnitGetTotalAbsorbs = function(unit)
 			return getValue("UnitGetTotalAbsorbs", unit, math.random(2500, 5000))
 		end,
+		UnitGetDetailedHealPrediction = function(unit, healerUnit, calculator)
+			local unitKey = string.gsub(unit, "(%d+)", "")
+			calculator:SetPredictedValues({
+				health = getValue("UnitHealth", unitKey, math.random(20000, 50000)),
+				healthMax = 50000,
+				totalIncomingHeals = getValue("UnitGetIncomingHeals", unitKey, math.random(10000, 15000)),
+				totalIncomingHealsFromHealer = 0,
+				totalDamageAbsorbs = getValue("UnitGetTotalAbsorbs", unitKey, math.random(2500, 5000)),
+				totalHealAbsorbs = getValue("UnitGetTotalHealAbsorbs", unitKey, math.random(5000, 10000)),
+			})
+		end,
 		UnitPowerMax = function(unit, powerType)
 			if( powerType == Enum.PowerType.Rage or powerType == Enum.PowerType.Energy or powerType == Enum.PowerType.RunicPower
 			 or powerType == Enum.PowerType.LunarPower or powerType == Enum.PowerType.Maelstrom or powerType == Enum.PowerType.Insanity

@@ -332,6 +332,15 @@ L["Only shows your class buff types that you cast yourself."] = "Solo muestra ti
 L["Shows all buffs on the unit without any filtering."] = "Muestra todos los beneficios de la unidad sin filtrar."
 L["Shows all debuffs on the unit without any filtering."] = "Muestra todos los perjuicios de la unidad sin filtrar."
 L["Shows debuffs relevant in a group or raid context (boss mechanics, important debuffs)."] = "Muestra perjuicios relevantes en contexto de grupo o banda (mecánicas de jefe, perjuicios importantes)."
+L["Anchor mode"] = "Modo de anclaje"
+L["Health bar"] = "Barra de vida"
+L["Frame"] = "Marco"
+L["Health fill (reverse)"] = "Relleno de vida (inverso)"
+L["Health bar (fill + reverse overlay)"] = "Barra de vida (relleno + superposición inversa)"
+L["Bar anchored to the end of the health bar, growing outward (uses overflow limit)."] = "Barra anclada al final de la barra de vida, creciendo hacia fuera (usa límite de desbordamiento)."
+L["Bar anchored to the frame edge, growing inward with reverse fill."] = "Barra anclada al borde del marco, creciendo hacia dentro con relleno inverso."
+L["Bar overlaid on the health bar with reverse fill, growing inward from the health fill edge."] = "Barra superpuesta en la barra de vida con relleno inverso, creciendo hacia dentro desde el borde del relleno."
+L["Bar fills missing health then overflows as reverse overlay on the health bar."] = "Barra que rellena la vida faltante y luego desborda como superposición inversa en la barra de vida."
 
 local ShadowUF = select(2, ...)
 ShadowUF.L = setmetatable(L, {__index = ShadowUF.L})

@@ -2,32 +2,94 @@ local IncHeal = {["frameKey"] = "incHeal", ["colorKey"] = "inc", ["frameLevelMod
 ShadowUF.IncHeal = IncHeal
 ShadowUF:RegisterModule(IncHeal, "incHeal", ShadowUF.L["Incoming heals"])
 
+local function ensureCropper(bar, parent)
+	if( not bar.cropper ) then
+		bar.cropper = CreateFrame("Frame", nil, parent)
+		bar.cropper:SetClipsChildren(true)
+	end
+	return bar.cropper
+end
+
 function IncHeal:OnEnable(frame)
 	frame.incHeal = frame.incHeal or ShadowUF.Units:CreateBar(frame)
 
+	-- Create the shared calculator once per frame
+	if( not frame.healCalc ) then
+		frame.healCalc = CreateUnitHealPredictionCalculator()
+		frame.healCalc:SetHealAbsorbMode(1) -- Total: no cross-reduction between heals and heal absorbs
+	end
+
+	-- All prediction events — shared calculator populated once per frame via GetTime() guard
 	frame:RegisterUnitEvent("UNIT_MAXHEALTH", self, "UpdateFrame")
 	frame:RegisterUnitEvent("UNIT_HEALTH", self, "UpdateFrame")
 	frame:RegisterUnitEvent("UNIT_HEAL_PREDICTION", self, "UpdateFrame")
+	frame:RegisterUnitEvent("UNIT_ABSORB_AMOUNT_CHANGED", self, "UpdateFrame")
+	frame:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", self, "UpdateFrame")
 
 	frame:RegisterUpdateFunc(self, "UpdateFrame")
 end
 
 function IncHeal:OnDisable(frame)
 	frame:UnregisterAll(self)
+	frame[self.frameKey].total = nil
 	frame[self.frameKey]:Hide()
+	self:CancelSafetyTicker(frame)
+end
+
+-- Populate the shared calculator — called once per frame across all 3 modules
+function IncHeal:PopulateCalculator(frame)
+	local calc = frame.healCalc
+	if( not calc ) then return false end
+
+	local now = GetTime()
+	if( frame.healCalcTime == now ) then return frame.healCalcValid end
+
+	frame.healCalcTime = now
+	frame.healCalcValid = false
+
+	local ok = pcall(UnitGetDetailedHealPrediction, frame.unit, "player", calc)
+	if( not ok ) then
+		calc:ResetPredictedValues()
+		return false
+	end
+
+	frame.healCalcValid = true
+	return true
+end
+
+-- Safety ticker: forces periodic recalculation while any prediction bar is visible.
+-- Catches stale data when WoW events don't fire (e.g. HoT expiry out of combat).
+function IncHeal:EnsureSafetyTicker(frame)
+	if( frame.healSafetyTicker ) then return end
+	frame.healSafetyTicker = C_Timer.NewTicker(0.5, function()
+		if( not frame.unit or not UnitExists(frame.unit) ) then
+			frame.healSafetyTicker:Cancel()
+			frame.healSafetyTicker = nil
+			return
+		end
+		frame.healCalcTime = nil
+		local m = ShadowUF.modules
+		if( frame.incHeal and frame.incHeal.total ) then m.incHeal:UpdateFrame(frame) end
+		if( frame.healAbsorb and frame.healAbsorb.total ) then m.healAbsorb:UpdateFrame(frame) end
+		if( frame.incAbsorb and frame.incAbsorb.total ) then m.incAbsorb:UpdateFrame(frame) end
+	end)
+end
+
+function IncHeal:CancelSafetyTicker(frame)
+	if( (frame.incHeal and frame.incHeal.total)
+		or (frame.healAbsorb and frame.healAbsorb.total)
+		or (frame.incAbsorb and frame.incAbsorb.total) ) then return end
+	if( frame.healSafetyTicker ) then
+		frame.healSafetyTicker:Cancel()
+		frame.healSafetyTicker = nil
+	end
 end
 
 function IncHeal:OnLayoutApplied(frame)
 	local bar = frame[self.frameKey]
 	if( not frame.visibility[self.frameKey] or not frame.visibility.healthBar ) then return end
 
-	if( frame.visibility.healAbsorb ) then
-		frame:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", self, "UpdateFrame")
-	else
-		frame:UnregisterSingleEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", self, "UpdateFrame")
-	end
-
-	-- Since we're hiding, reset state
+	-- Reset state
 	bar.total = nil
 
 	bar:SetSize(frame.healthBar:GetSize())
@@ -37,284 +99,320 @@ function IncHeal:OnLayoutApplied(frame)
 	bar:SetOrientation(frame.healthBar:GetOrientation())
 	bar:SetReverseFill(frame.healthBar:GetReverseFill())
 	bar:Hide()
+	self:CancelSafetyTicker(frame)
 
+	local anchorMode = ShadowUF.db.profile.units[frame.unitType][self.frameKey].anchorMode or "healthBar"
 	local cap = ShadowUF.db.profile.units[frame.unitType][self.frameKey].cap or 1.30
 
-	-- When we can cheat and put the incoming bar right behind the health bar, we can efficiently show the incoming heal bar
-	-- if the main bar has a transparency set, then we need a more complicated method to stop the health bar from being darker with incoming heals up
-	if( ( ShadowUF.db.profile.units[frame.unitType].healthBar.invert and ShadowUF.db.profile.bars.backgroundAlpha == 0 ) or ( not ShadowUF.db.profile.units[frame.unitType].healthBar.invert and ShadowUF.db.profile.bars.alpha == 1 ) ) then
-		bar.simple = true
-		bar:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
-
-		if( bar:GetOrientation() == "HORIZONTAL" ) then
-			bar:SetWidth(frame.healthBar:GetWidth() * cap)
+	-- Set frame level for healthBar mode (depends on health bar transparency)
+	if( anchorMode == "healthBar" ) then
+		if( ( ShadowUF.db.profile.units[frame.unitType].healthBar.invert and ShadowUF.db.profile.bars.backgroundAlpha == 0 ) or ( not ShadowUF.db.profile.units[frame.unitType].healthBar.invert and ShadowUF.db.profile.bars.alpha == 1 ) ) then
+			bar:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
 		else
-			bar:SetHeight(frame.healthBar:GetHeight() * cap)
+			bar:SetFrameLevel(frame.topFrameLevel - self.frameLevelMod + 3)
+		end
+	end
+
+	-- Pre-create and configure overflow elements for healthBarOverflow mode
+	if( anchorMode == "healthBarOverflow" ) then
+		local overflowKey = self.frameKey .. "Overflow"
+		if( not frame[overflowKey] ) then
+			frame[overflowKey] = ShadowUF.Units:CreateBar(frame)
 		end
 
-		bar:ClearAllPoints()
-
-		local point = bar:GetReverseFill() and "RIGHT" or "LEFT"
-		bar:SetPoint("TOP" .. point, frame.healthBar)
-		bar:SetPoint("BOTTOM" .. point, frame.healthBar)
-	else
-		bar.simple = nil
-		bar:SetFrameLevel(frame.topFrameLevel - self.frameLevelMod + 3)
-		bar:SetWidth(1)
-		bar:SetMinMaxValues(0, 1)
-		bar:SetValue(1)
-		bar:ClearAllPoints()
-
-		bar.orientation = bar:GetOrientation()
-		bar.reverseFill = bar:GetReverseFill()
-
-		if( bar.orientation == "HORIZONTAL" ) then
-			bar.healthSize = frame.healthBar:GetWidth()
-			bar.positionPoint = bar.reverseFill and "TOPRIGHT" or "TOPLEFT"
-			bar.positionRelative = bar.reverseFill and "BOTTOMRIGHT" or "BOTTOMLEFT"
-		else
-			bar.healthSize = frame.healthBar:GetHeight()
-			bar.positionPoint = bar.reverseFill and "TOPLEFT" or "BOTTOMLEFT"
-			bar.positionRelative = bar.reverseFill and "TOPRIGHT" or "BOTTOMRIGHT"
+		local clipKey = self.frameKey .. "OverflowClip"
+		if( not frame[clipKey] ) then
+			local clip = CreateFrame("Frame", nil, frame.healthBar)
+			clip:SetClipsChildren(true)
+			frame[clipKey] = clip
 		end
 
-		bar.positionMod = bar.reverseFill and -1 or 1
-		bar.maxSize = bar.healthSize * cap
+		-- Static properties (only change on layout, not per-update)
+		local overflowBar = frame[overflowKey]
+		overflowBar:SetStatusBarTexture(ShadowUF.Layout.mediaPath.statusbar)
+		overflowBar:SetStatusBarColor(ShadowUF.db.profile.healthColors[self.colorKey].r,
+			ShadowUF.db.profile.healthColors[self.colorKey].g,
+			ShadowUF.db.profile.healthColors[self.colorKey].b,
+			ShadowUF.db.profile.bars.alpha * 0.7)
+		overflowBar:GetStatusBarTexture():SetHorizTile(false)
+		overflowBar:SetOrientation(frame.healthBar:GetOrientation())
+		overflowBar:SetReverseFill(true)
 	end
 end
 
-function IncHeal:PositionBar(frame, incAmount)
+function IncHeal:PositionBar(frame, incAmount, maxHealth)
 	local bar = frame[self.frameKey]
+	local calc = frame.healCalc
 
-	-- If incoming is <= 0 or health is <= 0 we can hide it
-	-- Use pcall to check <= 0 safely. If checking fails (secret), we assume it's positive/valid and continue.
-	local isPositive = true
-	local success, result = pcall(function() return incAmount <= 0 end)
-	if( success and result ) then
-		bar.total = nil
-		bar:Hide()
-		return
-	end
-
-	local health = UnitHealth(frame.unit)
-	local maxHealth = UnitHealthMax(frame.unit)
-
-	-- Check if health <= 0 safely
-	success, result = pcall(function() return health <= 0 end)
-	if( success and result ) then
-		bar.total = nil
-		bar:Hide()
-		return
-	end
-
-	-- Check if maxHealth <= 0 safely
-	success, result = pcall(function() return maxHealth <= 0 end)
-	if( success and result ) then
-		bar.total = nil
-		bar:Hide()
-		return
+	-- Hide check: if calculator has no secrets, we can safely test < 1
+	-- (health values are integers; a sub-1 residual is never a real heal)
+	if( calc and not calc:HasSecretValues() ) then
+		if( incAmount < 1 or maxHealth <= 0 ) then
+			bar.total = nil
+			bar:Hide()
+			local overflowKey = self.frameKey .. "Overflow"
+			if( frame[overflowKey] ) then frame[overflowKey]:Hide() end
+			self:CancelSafetyTicker(frame)
+			return
+		end
 	end
 
 	if( not bar.total ) then bar:Show() end
 	bar.total = incAmount
+	self:EnsureSafetyTicker(frame)
+	if( bar.background ) then bar.background:Hide() end
 
-	-- Get anchor mode setting
 	local anchorMode = ShadowUF.db.profile.units[frame.unitType][self.frameKey].anchorMode or "healthBar"
-	
-	-- Frame Anchor Mode: Bar anchored to frame edge with reverse fill
-	if( anchorMode == "frame" ) then
+
+	if( anchorMode == "overlay" ) then
+		self:PositionBarOverlayMode(frame, bar, incAmount, maxHealth)
+	elseif( anchorMode == "healthBarOverflow" ) then
+		self:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth)
+	elseif( anchorMode == "frame" ) then
 		self:PositionBarFrameMode(frame, bar, incAmount, maxHealth)
 	else
-		-- Health Bar Anchor Mode (default): Original behavior with cropper
 		self:PositionBarHealthMode(frame, bar, incAmount, maxHealth)
 	end
 end
 
--- New Frame Anchor Mode: Bar anchored to frame edge, growing inward with reverse fill
-function IncHeal:PositionBarFrameMode(frame, bar, incAmount, maxHealth)
-	local frameSize = ShadowUF.db.profile.units[frame.unitType][self.frameKey].frameSize or 0.80
-	-- frameSize is the "start position" from the left (0.90 = starts at 90%, so max coverage is 10%)
-	-- Coverage = (1 - frameSize), e.g. 0.90 -> 10% coverage, 0.50 -> 50% coverage
-	local coverage = 1 - frameSize
-	
-	-- Hide cropper if it exists (not used in this mode)
-	if( frame[self.frameKey].cropper ) then
-		frame[self.frameKey].cropper:Hide()
-	end
-	
-	if( bar.background ) then bar.background:Hide() end
-	
-	-- Reparent to healthBar
+-- Overlay mode: reverse fill overlay on the health texture
+function IncHeal:PositionBarOverlayMode(frame, bar, incAmount, maxHealth)
+	-- Hide cropper and overflow if they exist
+	if( bar.cropper ) then bar.cropper:Hide() end
+	if( frame[self.frameKey .. "Overflow"] ) then frame[self.frameKey .. "Overflow"]:Hide() end
+	if( frame[self.frameKey .. "OverflowClip"] ) then frame[self.frameKey .. "OverflowClip"]:Hide() end
+	local healthTexture = frame.healthBar:GetStatusBarTexture()
+	if( not healthTexture ) then bar:Hide(); return end
+
 	bar:SetParent(frame.healthBar)
 	bar:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
 	bar:ClearAllPoints()
-	
-	-- Force reverse fill for this mode
 	bar:SetReverseFill(true)
-	
-	local orientation = frame.healthBar:GetOrientation()
-	
-	if( orientation == "HORIZONTAL" ) then
-		local barWidth = frame.healthBar:GetWidth() * coverage
-		bar:SetWidth(barWidth)
-		bar:SetHeight(frame.healthBar:GetHeight())
-		
-		-- Anchor to right edge of frame
-		bar:SetPoint("RIGHT", frame.healthBar, "RIGHT", 0, 0)
-		bar:SetPoint("TOP", frame.healthBar, "TOP", 0, 0)
-		bar:SetPoint("BOTTOM", frame.healthBar, "BOTTOM", 0, 0)
-	else -- VERTICAL
-		local barHeight = frame.healthBar:GetHeight() * coverage
-		bar:SetWidth(frame.healthBar:GetWidth())
-		bar:SetHeight(barHeight)
-		
-		-- Anchor to top edge of frame
-		bar:SetPoint("TOP", frame.healthBar, "TOP", 0, 0)
-		bar:SetPoint("LEFT", frame.healthBar, "LEFT", 0, 0)
-		bar:SetPoint("RIGHT", frame.healthBar, "RIGHT", 0, 0)
-	end
-	
-	-- Calculate maxHealth for the bar proportional to coverage
-	-- If the bar covers 10% of frame, it should represent 10% of maxHealth when full
-	-- Use pcall for the calculation in case maxHealth is a "secret value" (hostile units)
-	local success, barMaxHealth = pcall(function() return maxHealth * coverage end)
-	if not success then
-		-- Can't calculate, hide the bar for this unit
-		bar.total = nil
-		bar:Hide()
-		return
-	end
-	
-	-- Set Values
-	bar:SetMinMaxValues(0, barMaxHealth)
+
+	bar:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", 0, 0)
+	bar:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", 0, 0)
+
+	bar:SetMinMaxValues(0, maxHealth)
 	bar:SetValue(incAmount)
 end
 
--- Original Health Bar Anchor Mode with cropper
-function IncHeal:PositionBarHealthMode(frame, bar, incAmount, maxHealth)
-	-- Visual Anchoring + Cropper
-	-- Implement Cap (Overlay/Overflow size) support
-	bar:ClearAllPoints()
-	
-	-- Restore original reverse fill setting
-	bar:SetReverseFill(frame.healthBar:GetReverseFill())
-	
-	local cap = ShadowUF.db.profile.units[frame.unitType][self.frameKey].cap or 1.30
+-- Health bar with overflow: forward fill for missing health, reverse overlay for overflow
+function IncHeal:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth)
 	local healthTexture = frame.healthBar:GetStatusBarTexture()
-	if( not healthTexture ) then 
-		bar:Hide()
-		return 
-	end
-	
-	if( bar.background ) then bar.background:Hide() end
-	
-	if( not frame[self.frameKey].cropper ) then
-		local cropper = CreateFrame("Frame", nil, frame.healthBar)
-		cropper:SetClipsChildren(true)
-		frame[self.frameKey].cropper = cropper
-	end
-	
-	local cropper = frame[self.frameKey].cropper
+	if( not healthTexture ) then bar:Hide(); return end
+
+	-- === FORWARD BAR (standard healthBar cap=1.0) ===
+	bar:SetParent(frame.healthBar)
+	bar:SetReverseFill(frame.healthBar:GetReverseFill())
+
+	-- Create cropper if needed (caps forward fill to frame bounds)
+	local cropper = ensureCropper(bar, frame.healthBar)
 	cropper:Show()
 	cropper:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
 	cropper:ClearAllPoints()
 
-	
-	local frameSize = 0
+	local reverseFill = frame.healthBar:GetReverseFill()
+
 	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
-		frameSize = frame.healthBar:GetWidth()
-		-- Start Anchor
-		if( bar.reverseFill ) then
+		if( reverseFill ) then
 			cropper:SetPoint("RIGHT", healthTexture, "LEFT", 0, 0)
+			cropper:SetPoint("LEFT", frame.healthBar, "LEFT", 0, 0)
 		else
 			cropper:SetPoint("LEFT", healthTexture, "RIGHT", 0, 0)
+			cropper:SetPoint("RIGHT", frame.healthBar, "RIGHT", 0, 0)
 		end
-		
-		-- End Anchor: Limit relative to Frame Edge
-		local maxOffset = frameSize * (cap - 1)
-		
-		if( bar.reverseFill ) then
-			cropper:SetPoint("LEFT", frame.healthBar, "LEFT", -maxOffset, 0)
-		else
-			cropper:SetPoint("RIGHT", frame.healthBar, "RIGHT", maxOffset, 0)
-		end
-		
-		-- Align Height
 		cropper:SetHeight(frame.healthBar:GetHeight())
 		cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, 0)
-		
-	else -- VERTICAL
-		frameSize = frame.healthBar:GetHeight()
-		-- Start Anchor
-		if( bar.reverseFill ) then
+	else
+		if( reverseFill ) then
 			cropper:SetPoint("BOTTOM", healthTexture, "TOP", 0, 0)
+			cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, 0)
 		else
 			cropper:SetPoint("TOP", healthTexture, "BOTTOM", 0, 0)
+			cropper:SetPoint("BOTTOM", frame.healthBar, "BOTTOM", 0, 0)
 		end
-		
-		-- End Anchor
-		local maxOffset = frameSize * (cap - 1)
-		
-		if( bar.reverseFill ) then
-			cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, maxOffset)
-		else
-			cropper:SetPoint("BOTTOM", frame.healthBar, "BOTTOM", 0, -maxOffset)
-		end
-		
-		-- Align Width
 		cropper:SetWidth(frame.healthBar:GetWidth())
 		cropper:SetPoint("LEFT", frame.healthBar, "LEFT", 0, 0)
 	end
-	
-	-- Setup Bar inside Cropper
+
+	-- Bar fills inside cropper (forward direction, capped at frame edge)
 	bar:SetParent(cropper)
 	bar:ClearAllPoints()
-	
-	-- Anchor Bar Start to Cropper Start
 	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
-		bar:SetWidth(frameSize) -- Render at 1:1 Scale
-		if( bar.reverseFill ) then
+		bar:SetWidth(frame.healthBar:GetWidth())
+		if( reverseFill ) then
 			bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
 		else
 			bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
 		end
-		-- Fix Thickness (Height)
 		bar:SetPoint("TOP", cropper, "TOP", 0, 0)
 		bar:SetPoint("BOTTOM", cropper, "BOTTOM", 0, 0)
 	else
-		bar:SetHeight(frameSize) -- Render at 1:1 Scale
-		if( bar.reverseFill ) then
+		bar:SetHeight(frame.healthBar:GetHeight())
+		if( reverseFill ) then
 			bar:SetPoint("BOTTOM", cropper, "BOTTOM", 0, 0)
 		else
 			bar:SetPoint("TOP", cropper, "TOP", 0, 0)
 		end
-		-- Fix Thickness (Width)
 		bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
 		bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
 	end
-	
-	-- Set Values
-	pcall(bar.SetMinMaxValues, bar, 0, maxHealth)
-	pcall(bar.SetValue, bar, incAmount)
+
+	bar:SetMinMaxValues(0, maxHealth)
+	bar:SetValue(incAmount)
+
+	-- === OVERFLOW BAR (reverse fill clipped to health texture zone) ===
+	local overflowKey = self.frameKey .. "Overflow"
+	local overflowBar = frame[overflowKey]
+	local clipKey = self.frameKey .. "OverflowClip"
+	local clipFrame = frame[clipKey]
+
+	if( not overflowBar or not clipFrame ) then return end
+
+	-- ClipFrame covers only the health texture zone
+	clipFrame:ClearAllPoints()
+	clipFrame:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", 0, 0)
+	clipFrame:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", 0, 0)
+	clipFrame:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
+	clipFrame:Show()
+
+	-- Overflow bar: clipped to health zone (static setup done in OnLayoutApplied)
+	overflowBar:SetParent(clipFrame)
+	overflowBar:ClearAllPoints()
+	overflowBar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 0, 0)
+	overflowBar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, 0)
+	overflowBar:SetMinMaxValues(0, maxHealth)
+	overflowBar:SetValue(incAmount)
+	overflowBar:Show()
+end
+
+-- Frame anchor mode: reverse fill from frame edge inward, real values
+function IncHeal:PositionBarFrameMode(frame, bar, incAmount, maxHealth)
+	-- Hide cropper and overflow if they exist
+	if( bar.cropper ) then bar.cropper:Hide() end
+	if( frame[self.frameKey .. "Overflow"] ) then frame[self.frameKey .. "Overflow"]:Hide() end
+	if( frame[self.frameKey .. "OverflowClip"] ) then frame[self.frameKey .. "OverflowClip"]:Hide() end
+
+	bar:SetParent(frame.healthBar)
+	bar:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
+	bar:ClearAllPoints()
+	bar:SetReverseFill(true)
+
+	-- Full health bar size, anchored to the frame edges
+	bar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 0, 0)
+	bar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, 0)
+
+	-- Real values — secrets accepted natively by SetMinMaxValues/SetValue
+	bar:SetMinMaxValues(0, maxHealth)
+	bar:SetValue(incAmount)
+end
+
+-- Health bar anchor mode: forward fill from health edge with cropper cap
+function IncHeal:PositionBarHealthMode(frame, bar, incAmount, maxHealth)
+	bar:ClearAllPoints()
+	bar:SetReverseFill(frame.healthBar:GetReverseFill())
+
+	-- Hide overflow elements if they exist
+	if( frame[self.frameKey .. "Overflow"] ) then frame[self.frameKey .. "Overflow"]:Hide() end
+	if( frame[self.frameKey .. "OverflowClip"] ) then frame[self.frameKey .. "OverflowClip"]:Hide() end
+
+	local cap = ShadowUF.db.profile.units[frame.unitType][self.frameKey].cap or 1.30
+	local healthTexture = frame.healthBar:GetStatusBarTexture()
+	if( not healthTexture ) then
+		bar:Hide()
+		return
+	end
+
+	local cropper = ensureCropper(bar, frame.healthBar)
+	cropper:Show()
+	cropper:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
+	cropper:ClearAllPoints()
+
+	local reverseFill = frame.healthBar:GetReverseFill()
+	local frameSize = 0
+
+	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+		frameSize = frame.healthBar:GetWidth()
+		if( reverseFill ) then
+			cropper:SetPoint("RIGHT", healthTexture, "LEFT", 0, 0)
+		else
+			cropper:SetPoint("LEFT", healthTexture, "RIGHT", 0, 0)
+		end
+
+		local maxOffset = frameSize * (cap - 1)
+		if( reverseFill ) then
+			cropper:SetPoint("LEFT", frame.healthBar, "LEFT", -maxOffset, 0)
+		else
+			cropper:SetPoint("RIGHT", frame.healthBar, "RIGHT", maxOffset, 0)
+		end
+
+		cropper:SetHeight(frame.healthBar:GetHeight())
+		cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, 0)
+	else
+		frameSize = frame.healthBar:GetHeight()
+		if( reverseFill ) then
+			cropper:SetPoint("BOTTOM", healthTexture, "TOP", 0, 0)
+		else
+			cropper:SetPoint("TOP", healthTexture, "BOTTOM", 0, 0)
+		end
+
+		local maxOffset = frameSize * (cap - 1)
+		if( reverseFill ) then
+			cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, maxOffset)
+		else
+			cropper:SetPoint("BOTTOM", frame.healthBar, "BOTTOM", 0, -maxOffset)
+		end
+
+		cropper:SetWidth(frame.healthBar:GetWidth())
+		cropper:SetPoint("LEFT", frame.healthBar, "LEFT", 0, 0)
+	end
+
+	bar:SetParent(cropper)
+	bar:ClearAllPoints()
+
+	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+		bar:SetWidth(frameSize)
+		if( reverseFill ) then
+			bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
+		else
+			bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
+		end
+		bar:SetPoint("TOP", cropper, "TOP", 0, 0)
+		bar:SetPoint("BOTTOM", cropper, "BOTTOM", 0, 0)
+	else
+		bar:SetHeight(frameSize)
+		if( reverseFill ) then
+			bar:SetPoint("BOTTOM", cropper, "BOTTOM", 0, 0)
+		else
+			bar:SetPoint("TOP", cropper, "TOP", 0, 0)
+		end
+		bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
+		bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
+	end
+
+	-- SetMinMaxValues/SetValue accept secrets natively (AllowedWhenTainted)
+	bar:SetMinMaxValues(0, maxHealth)
+	bar:SetValue(incAmount)
 end
 
 function IncHeal:UpdateFrame(frame)
 	if( not frame.visibility[self.frameKey] or not frame.visibility.healthBar ) then return end
 
-	local amount = UnitGetIncomingHeals(frame.unit) or 0
-	
-	-- Safe check for > 0
-	local isPositive = true
-	local success, result = pcall(function() return amount <= 0 end)
-	if( success and result ) then 
-		isPositive = false 
+	if( not self:PopulateCalculator(frame) ) then
+		frame[self.frameKey].total = nil
+		frame[self.frameKey]:Hide()
+		return
 	end
 
-	if( isPositive and frame.visibility.healAbsorb ) then
-		local absorbs = UnitGetTotalHealAbsorbs(frame.unit) or 0
-		-- Safe Add
-		pcall(function() amount = amount + absorbs end)
+	local calc = frame.healCalc
+	local amount = calc:GetTotalIncomingHeals()
+	local maxHealth = calc:GetMaximumHealth()
+
+	-- Stack heal absorbs into incoming heals for healthBar/healthBarOverflow modes
+	local anchorMode = ShadowUF.db.profile.units[frame.unitType][self.frameKey].anchorMode or "healthBar"
+	if( anchorMode ~= "overlay" and frame.visibility.healAbsorb and not calc:HasSecretValues() ) then
+		amount = amount + calc:GetTotalHealAbsorbs()
 	end
 
-	self:PositionBar(frame, amount)
+	self:PositionBar(frame, amount, maxHealth)
 end
