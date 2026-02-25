@@ -403,9 +403,9 @@ function ShadowUF:LoadUnitDefaults()
 			self.defaults.profile.units[unit].combatText = {enabled = true, anchorTo = "$parent", anchorPoint = "C", x = 0, y = 0}
 
 			if( unit ~= "battleground" and unit ~= "battlegroundpet" and unit ~= "arena" and unit ~= "arenapet" and unit ~= "boss" ) then
-				self.defaults.profile.units[unit].incHeal = {enabled = true, cap = 1.20, anchorMode = "healthBar"}
-				self.defaults.profile.units[unit].incAbsorb = {enabled = true, cap = 1.30, anchorMode = "healthBar"}
-				self.defaults.profile.units[unit].healAbsorb = {enabled = true, cap = 1.30, anchorMode = "healthBar"}
+				self.defaults.profile.units[unit].incHeal = {enabled = true, cap = 1.20, anchorMode = "healthBar", barSize = 1.0, barAlign = "CENTER"}
+				self.defaults.profile.units[unit].incAbsorb = {enabled = true, cap = 1.30, anchorMode = "healthBar", barSize = 1.0, barAlign = "CENTER"}
+				self.defaults.profile.units[unit].healAbsorb = {enabled = true, cap = 1.30, anchorMode = "healthBar", barSize = 1.0, barAlign = "CENTER"}
 			end
 		end
 

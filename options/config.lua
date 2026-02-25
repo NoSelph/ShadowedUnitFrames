@@ -4787,6 +4787,30 @@ local function loadUnitOptions()
 									arg = "healAbsorb.cap",
 									hidden = function(info) return getVariable(info[2], "healAbsorb", nil, "anchorMode") ~= "healthBar" end,
 								},
+								barSize = {
+									order = 4,
+									type = "range",
+									name = L["Bar thickness"],
+									desc = L["Relative size of the bar perpendicular to the fill direction. 100% matches the health bar exactly."],
+									min = 0.1, max = 1.0, step = 0.05, isPercent = true,
+									arg = "healAbsorb.barSize",
+									hidden = false,
+								},
+								barAlign = {
+									order = 5,
+									type = "select",
+									name = L["Bar alignment"],
+									desc = L["Position of the bar when thickness is less than 100%."],
+									values = function(info)
+										if( getVariable(info[2], "healthBar", nil, "vertical") ) then
+											return {["START"] = L["Left"], ["CENTER"] = L["Center"], ["END"] = L["Right"]}
+										else
+											return {["START"] = L["Top"], ["CENTER"] = L["Center"], ["END"] = L["Bottom"]}
+										end
+									end,
+									arg = "healAbsorb.barAlign",
+									hidden = function(info) return (getVariable(info[2], "healAbsorb", nil, "barSize") or 1.0) >= 1.0 end,
+								},
 						},
 					},
 					incHeal = {
@@ -4837,6 +4861,30 @@ local function loadUnitOptions()
 								arg = "incHeal.cap",
 								hidden = function(info) return getVariable(info[2], "incHeal", nil, "anchorMode") ~= "healthBar" end,
 							},
+							barSize = {
+								order = 4,
+								type = "range",
+								name = L["Bar thickness"],
+								desc = L["Relative size of the bar perpendicular to the fill direction. 100% matches the health bar exactly."],
+								min = 0.1, max = 1.0, step = 0.05, isPercent = true,
+								arg = "incHeal.barSize",
+								hidden = false,
+							},
+							barAlign = {
+								order = 5,
+								type = "select",
+								name = L["Bar alignment"],
+								desc = L["Position of the bar when thickness is less than 100%."],
+								values = function(info)
+									if( getVariable(info[2], "healthBar", nil, "vertical") ) then
+										return {["START"] = L["Left"], ["CENTER"] = L["Center"], ["END"] = L["Right"]}
+									else
+										return {["START"] = L["Top"], ["CENTER"] = L["Center"], ["END"] = L["Bottom"]}
+									end
+								end,
+								arg = "incHeal.barAlign",
+								hidden = function(info) return (getVariable(info[2], "incHeal", nil, "barSize") or 1.0) >= 1.0 end,
+							},
 						},
 					},
 					incAbsorb = {
@@ -4886,6 +4934,30 @@ local function loadUnitOptions()
 								min = 1, max = 1.50, step = 0.05, isPercent = true,
 								arg = "incAbsorb.cap",
 								hidden = function(info) return getVariable(info[2], "incAbsorb", nil, "anchorMode") ~= "healthBar" end,
+							},
+							barSize = {
+								order = 4,
+								type = "range",
+								name = L["Bar thickness"],
+								desc = L["Relative size of the bar perpendicular to the fill direction. 100% matches the health bar exactly."],
+								min = 0.1, max = 1.0, step = 0.05, isPercent = true,
+								arg = "incAbsorb.barSize",
+								hidden = false,
+							},
+							barAlign = {
+								order = 5,
+								type = "select",
+								name = L["Bar alignment"],
+								desc = L["Position of the bar when thickness is less than 100%."],
+								values = function(info)
+									if( getVariable(info[2], "healthBar", nil, "vertical") ) then
+										return {["START"] = L["Left"], ["CENTER"] = L["Center"], ["END"] = L["Right"]}
+									else
+										return {["START"] = L["Top"], ["CENTER"] = L["Center"], ["END"] = L["Bottom"]}
+									end
+								end,
+								arg = "incAbsorb.barAlign",
+								hidden = function(info) return (getVariable(info[2], "incAbsorb", nil, "barSize") or 1.0) >= 1.0 end,
 							},
 						},
 					},

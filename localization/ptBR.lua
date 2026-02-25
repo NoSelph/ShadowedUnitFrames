@@ -204,12 +204,14 @@ L["Background alpha"] = "Alpha de background"
 L["Background color"] = "Cor de background"
 L["Background/border"] = "Background/border"
 L["Bag indicator for master looters."] = "Indicador de saco para master looters"
+L["Bar alignment"] = "Alinhamento da barra"
 L["Bar alpha"] = "Barra alfa"
 L["Bar color to use to show how much healing someone is about to receive."] = [=[Cor da barra para usar para mostrar quanta cura alguém está prestes a receber.
 
 ]=]
 L["Bar spacing"] = "Espaçamento da barra"
 L["Bar texture"] = "Textura da barra"
+L["Bar thickness"] = "Espessura da barra"
 L["Bars"] = "Barras"
 L["Bars with an order higher or lower than the full size options will use the entire unit frame width.|n|nBar orders between those two numbers are shown next to the portrait."] = [=[As barras com um pedido maior ou menor do que as opções de tamanho completo usarão toda a largura do quadro da unidade.|n|nOrdens entre esses dois números são mostradas ao lado do retrato.
 
@@ -336,6 +338,8 @@ L["Class/misc bars"] = [=[Barras de classe/misc
 L["Classes"] = "Classes"
 L["Classification"] = "Classificação"
 L["Classifications"] = "Classficações"
+L["Click through"] = "Clicar através"
+L["Allow clicks to pass through auras to select the unit behind them. Tooltips still work on hover."] = "Permite clicar através das auras para selecionar a unidade por trás delas. As dicas ao passar o mouse continuam funcionando."
 L["Close color"] = [=[Fechar cor
 
 ]=]
@@ -1244,6 +1248,7 @@ L["Portrait type"] = [=[Tipo de retrato
 
 ]=]
 L["Position"] = "Posição"
+L["Position of the bar when thickness is less than 100%."] = "Posição da barra quando a espessura é inferior a 100%."
 L["Positioning"] = [=[Posicionamento
 
 ]=]
@@ -1340,6 +1345,7 @@ L["Ready status of group members."] = [=[Status pronto dos membros do grupo.
 ]=]
 L["Red (>70% HP)"] = "Vermelho (>70% Vida)"
 L["Relative point"] = "Ponto relativo"
+L["Relative size of the bar perpendicular to the fill direction. 100% matches the health bar exactly."] = "Tamanho relativo da barra perpendicular à direção de preenchimento. 100% corresponde exatamente à barra de vida."
 L["Resources"] = "Recursos"
 L["Resurrect Status"] = [=[Status de ressuscitar
 

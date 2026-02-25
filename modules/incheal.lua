@@ -10,6 +10,23 @@ local function ensureCropper(bar, parent)
 	return bar.cropper
 end
 
+local function getCrossAxisInsets(frame, barSize, barAlign)
+	if( not barSize or barSize >= 1 ) then return 0, 0 end
+	local total
+	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+		total = frame.healthBar:GetHeight() * (1 - barSize)
+	else
+		total = frame.healthBar:GetWidth() * (1 - barSize)
+	end
+	if( barAlign == "START" ) then
+		return 0, total
+	elseif( barAlign == "END" ) then
+		return total, 0
+	else -- CENTER
+		return total / 2, total / 2
+	end
+end
+
 function IncHeal:OnEnable(frame)
 	frame.incHeal = frame.incHeal or ShadowUF.Units:CreateBar(frame)
 
@@ -92,7 +109,12 @@ function IncHeal:OnLayoutApplied(frame)
 	-- Reset state
 	bar.total = nil
 
-	bar:SetSize(frame.healthBar:GetSize())
+	local barSize = ShadowUF.db.profile.units[frame.unitType][self.frameKey].barSize or 1.0
+	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+		bar:SetSize(frame.healthBar:GetWidth(), frame.healthBar:GetHeight() * barSize)
+	else
+		bar:SetSize(frame.healthBar:GetWidth() * barSize, frame.healthBar:GetHeight())
+	end
 	bar:SetStatusBarTexture(ShadowUF.Layout.mediaPath.statusbar)
 	bar:SetStatusBarColor(ShadowUF.db.profile.healthColors[self.colorKey].r, ShadowUF.db.profile.healthColors[self.colorKey].g, ShadowUF.db.profile.healthColors[self.colorKey].b, ShadowUF.db.profile.bars.alpha)
 	bar:GetStatusBarTexture():SetHorizTile(false)
@@ -189,8 +211,16 @@ function IncHeal:PositionBarOverlayMode(frame, bar, incAmount, maxHealth)
 	bar:ClearAllPoints()
 	bar:SetReverseFill(true)
 
-	bar:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", 0, 0)
-	bar:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", 0, 0)
+	local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
+	local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
+
+	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+		bar:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", 0, -startInset)
+		bar:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", 0, endInset)
+	else
+		bar:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", startInset, 0)
+		bar:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", -endInset, 0)
+	end
 
 	bar:SetMinMaxValues(0, maxHealth)
 	bar:SetValue(incAmount)
@@ -200,6 +230,9 @@ end
 function IncHeal:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth)
 	local healthTexture = frame.healthBar:GetStatusBarTexture()
 	if( not healthTexture ) then bar:Hide(); return end
+
+	local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
+	local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
 
 	-- === FORWARD BAR (standard healthBar cap=1.0) ===
 	bar:SetParent(frame.healthBar)
@@ -221,8 +254,8 @@ function IncHeal:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth)
 			cropper:SetPoint("LEFT", healthTexture, "RIGHT", 0, 0)
 			cropper:SetPoint("RIGHT", frame.healthBar, "RIGHT", 0, 0)
 		end
-		cropper:SetHeight(frame.healthBar:GetHeight())
-		cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, 0)
+		cropper:SetHeight(frame.healthBar:GetHeight() * (cfg.barSize or 1.0))
+		cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, -startInset)
 	else
 		if( reverseFill ) then
 			cropper:SetPoint("BOTTOM", healthTexture, "TOP", 0, 0)
@@ -231,8 +264,8 @@ function IncHeal:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth)
 			cropper:SetPoint("TOP", healthTexture, "BOTTOM", 0, 0)
 			cropper:SetPoint("BOTTOM", frame.healthBar, "BOTTOM", 0, 0)
 		end
-		cropper:SetWidth(frame.healthBar:GetWidth())
-		cropper:SetPoint("LEFT", frame.healthBar, "LEFT", 0, 0)
+		cropper:SetWidth(frame.healthBar:GetWidth() * (cfg.barSize or 1.0))
+		cropper:SetPoint("LEFT", frame.healthBar, "LEFT", startInset, 0)
 	end
 
 	-- Bar fills inside cropper (forward direction, capped at frame edge)
@@ -271,16 +304,26 @@ function IncHeal:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth)
 
 	-- ClipFrame covers only the health texture zone
 	clipFrame:ClearAllPoints()
-	clipFrame:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", 0, 0)
-	clipFrame:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", 0, 0)
+	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+		clipFrame:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", 0, -startInset)
+		clipFrame:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", 0, endInset)
+	else
+		clipFrame:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", startInset, 0)
+		clipFrame:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", -endInset, 0)
+	end
 	clipFrame:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
 	clipFrame:Show()
 
 	-- Overflow bar: clipped to health zone (static setup done in OnLayoutApplied)
 	overflowBar:SetParent(clipFrame)
 	overflowBar:ClearAllPoints()
-	overflowBar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 0, 0)
-	overflowBar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, 0)
+	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+		overflowBar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 0, -startInset)
+		overflowBar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, endInset)
+	else
+		overflowBar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", startInset, 0)
+		overflowBar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", -endInset, 0)
+	end
 	overflowBar:SetMinMaxValues(0, maxHealth)
 	overflowBar:SetValue(incAmount)
 	overflowBar:Show()
@@ -298,9 +341,16 @@ function IncHeal:PositionBarFrameMode(frame, bar, incAmount, maxHealth)
 	bar:ClearAllPoints()
 	bar:SetReverseFill(true)
 
-	-- Full health bar size, anchored to the frame edges
-	bar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 0, 0)
-	bar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, 0)
+	local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
+	local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
+
+	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+		bar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 0, -startInset)
+		bar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, endInset)
+	else
+		bar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", startInset, 0)
+		bar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", -endInset, 0)
+	end
 
 	-- Real values — secrets accepted natively by SetMinMaxValues/SetValue
 	bar:SetMinMaxValues(0, maxHealth)
@@ -316,7 +366,9 @@ function IncHeal:PositionBarHealthMode(frame, bar, incAmount, maxHealth)
 	if( frame[self.frameKey .. "Overflow"] ) then frame[self.frameKey .. "Overflow"]:Hide() end
 	if( frame[self.frameKey .. "OverflowClip"] ) then frame[self.frameKey .. "OverflowClip"]:Hide() end
 
-	local cap = ShadowUF.db.profile.units[frame.unitType][self.frameKey].cap or 1.30
+	local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
+	local cap = cfg.cap or 1.30
+	local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
 	local healthTexture = frame.healthBar:GetStatusBarTexture()
 	if( not healthTexture ) then
 		bar:Hide()
@@ -346,8 +398,8 @@ function IncHeal:PositionBarHealthMode(frame, bar, incAmount, maxHealth)
 			cropper:SetPoint("RIGHT", frame.healthBar, "RIGHT", maxOffset, 0)
 		end
 
-		cropper:SetHeight(frame.healthBar:GetHeight())
-		cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, 0)
+		cropper:SetHeight(frame.healthBar:GetHeight() * (cfg.barSize or 1.0))
+		cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, -startInset)
 	else
 		frameSize = frame.healthBar:GetHeight()
 		if( reverseFill ) then
@@ -363,8 +415,8 @@ function IncHeal:PositionBarHealthMode(frame, bar, incAmount, maxHealth)
 			cropper:SetPoint("BOTTOM", frame.healthBar, "BOTTOM", 0, -maxOffset)
 		end
 
-		cropper:SetWidth(frame.healthBar:GetWidth())
-		cropper:SetPoint("LEFT", frame.healthBar, "LEFT", 0, 0)
+		cropper:SetWidth(frame.healthBar:GetWidth() * (cfg.barSize or 1.0))
+		cropper:SetPoint("LEFT", frame.healthBar, "LEFT", startInset, 0)
 	end
 
 	bar:SetParent(cropper)
