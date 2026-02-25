@@ -159,6 +159,55 @@ local function positionButton(id,  group, config)
 end
 
 
+-- Reposition all buttons using flow layout when enlarged auras are present
+-- Overflowing auras wrap to the next row naturally
+local function positionAllButtons(group, config)
+	local position = positionData[group.forcedAnchorPoint or config.anchorPoint]
+	local normalSize = config.size
+	local maxRowWidth = config.perRow * normalSize
+
+	local currentRowWidth = 0
+	local rowFirst = nil
+	local prevButton = nil
+
+	for id = 1, group.totalAuras do
+		local button = group.buttons[id]
+		if( not button or not button:IsShown() ) then break end
+
+		local effectiveWidth = normalSize * button:GetScale()
+		local needsNewRow = (id > 1) and (currentRowWidth + effectiveWidth > maxRowWidth)
+
+		button.isAuraAnchor = nil
+
+		if( id == 1 ) then
+			button.isAuraAnchor = true
+			button.point = ShadowUF.Layout:GetPoint(config.anchorPoint)
+			button.relativePoint = ShadowUF.Layout:GetRelative(config.anchorPoint)
+			button.xOffset = config.x + (position.xMod * ShadowUF.db.profile.backdrop.inset)
+			button.yOffset = config.y + (position.yMod * ShadowUF.db.profile.backdrop.inset)
+			button.anchorTo = group.anchorTo
+			position.initialAnchor(button, 0)
+			rowFirst = button
+			currentRowWidth = effectiveWidth
+		elseif( needsNewRow ) then
+			position.column(button, rowFirst, 0)
+			if( not position.isSideGrowth ) then
+				button.isAuraAnchor = true
+			end
+			rowFirst = button
+			currentRowWidth = effectiveWidth
+		else
+			position.aura(button, prevButton)
+			if( position.isSideGrowth and not rowFirst ) then
+				button.isAuraAnchor = true
+			end
+			currentRowWidth = currentRowWidth + effectiveWidth
+		end
+
+		prevButton = button
+	end
+end
+
 -- Aura button functions
 -- Updates the X seconds left on aura tooltip while it's shown
 local function updateTooltip(self)
@@ -277,7 +326,16 @@ local function updateButton(id, group, config)
 	button.border:SetWidth(config.size + 1)
 	button.stack:SetFont("Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", math.floor((config.size * 0.60) + 0.5), "OUTLINE")
 
-	button:SetScript("OnClick", cancelAura)
+	-- Click-through: disable mouse clicks but keep mouse motion (tooltips)
+	if not InCombatLockdown() then
+		button:SetMouseClickEnabled(not config.clickThrough)
+	end
+
+	if not config.clickThrough then
+		button:SetScript("OnClick", cancelAura)
+	else
+		button:SetScript("OnClick", nil)
+	end
 	button.parent = group.parent
 	button:ClearAllPoints()
 	button:Hide()
@@ -336,17 +394,21 @@ local function updateGroup(self, groupKey, config, reverseConfig)
 	group.maxAuras = config.perRow * config.maxRows
 	group.totalAuras = 0
 	group.temporaryEnchants = 0
+	group.lastTemporary = 0
 	group.groupKey = groupKey
 	group.parent = self
 	group.anchorTo = self
 	group:SetFrameLevel(self.highFrame:GetFrameLevel() + 1)
 	group:Show()
 
-	-- Temp enchants only for player buffs frame 1
-	if( self.unit == "player" and groupKey == "buffs1" ) then
+	-- Temp enchants for any player buffs frame with temporary enabled
+	if( self.unit == "player" and config.temporary ) then
 		mainHand.time = 0
+		mainHand.has = false
 		offHand.time = 0
-		group:SetScript("OnUpdate", config.temporary and tempEnchantScan or nil)
+		offHand.has = false
+		timeElapsed = 0.50 -- Force immediate scan on next OnUpdate
+		group:SetScript("OnUpdate", tempEnchantScan)
 	else
 		group:SetScript("OnUpdate", nil)
 	end
@@ -733,7 +795,7 @@ local function updateTemporaryEnchant(frame, slot, tempData, hasEnchant, enchant
 	tempData.charges = charges
 	tempData.enchantId = enchantId
 
-	local config = ShadowUF.db.profile.units[frame.parent.unitType].auras[frame.type]
+	local config = ShadowUF.db.profile.units[frame.parent.unitType].auras[frame.type][frame.frameIndex]
 
 	-- Create any buttons we need
 	if( #(frame.buttons) < frame.temporaryEnchants ) then
@@ -742,6 +804,18 @@ local function updateTemporaryEnchant(frame, slot, tempData, hasEnchant, enchant
 
 	local button = frame.buttons[frame.temporaryEnchants]
 
+	-- Temp enchants are always player auras — respect enlarge setting
+	if( config.enlarge and config.enlarge.PLAYER ) then
+		button.isSelfScaled = true
+		button:SetScale(config.selfScale or 1.30)
+	else
+		button.isSelfScaled = nil
+		button:SetScale(1)
+	end
+
+	-- Ensure correct positioning for this slot
+	positionButton(frame.temporaryEnchants, frame, config)
+
 	-- Purple border
 	button.border:SetVertexColor(0.50, 0, 0.50)
 
@@ -749,6 +823,8 @@ local function updateTemporaryEnchant(frame, slot, tempData, hasEnchant, enchant
 	if( not ShadowUF.db.profile.auras.disableCooldown ) then
 		button.cooldown:SetCooldown(tempData.startTime, timeLeft / 1000)
 		button.cooldown:Show()
+	else
+		button.cooldown:Hide()
 	end
 
 	-- Size it
@@ -757,7 +833,7 @@ local function updateTemporaryEnchant(frame, slot, tempData, hasEnchant, enchant
 	button.border:SetHeight(config.size + 1)
 	button.border:SetWidth(config.size + 1)
 
-	-- Stack + icon + show! Never understood why, auras sometimes return 1 for stack even if they don't stack
+	-- Stack + icon + show!
 	button.auraID = slot
 	button.filter = "TEMP"
 	button.unit = nil
@@ -882,8 +958,10 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 
 	-- Scale player auras if enlarge.PLAYER is enabled
 	if isPlayerAura and config.enlarge and config.enlarge.PLAYER then
+		button.isSelfScaled = true
 		button:SetScale(config.selfScale or 1.30)
 	else
+		button.isSelfScaled = nil
 		button:SetScale(1)
 	end
 
@@ -966,7 +1044,16 @@ local function scanConfigMode(parent, frame, type, config, displayConfig, filter
 		button:SetWidth(config.size)
 		button.border:SetHeight(config.size + 1)
 		button.border:SetWidth(config.size + 1)
-		
+
+		-- Scale player auras in config mode
+		if isPlayerAura and config.enlarge and config.enlarge.PLAYER then
+			button.isSelfScaled = true
+			button:SetScale(config.selfScale or 1.30)
+		else
+			button.isSelfScaled = nil
+			button:SetScale(1)
+		end
+
 		-- Set button properties
 		button.auraID = i
 		button.auraInstanceID = auraInstanceID
@@ -1100,7 +1187,7 @@ function Auras:Update(frame)
 				local group = frame.auras[groupKey]
 
 				if( group and frameConfig and frameConfig.enabled ) then
-					group.totalAuras = (groupKey == "buffs1") and group.temporaryEnchants or 0
+					group.totalAuras = frameConfig.temporary and group.temporaryEnchants or 0
 
 					-- Build the filter string based on configuration
 					local baseFilter = auraType == "buffs" and "HELPFUL" or "HARMFUL"
@@ -1115,6 +1202,11 @@ function Auras:Update(frame)
 					if not ok and not group.hasErrored then
 						ShadowUF:Print("Error scanning " .. groupKey .. " (logged once): " .. tostring(err))
 						group.hasErrored = true
+					end
+
+					-- Flow layout: reposition when enlarged auras take extra horizontal space
+					if( frameConfig.enlarge and frameConfig.enlarge.PLAYER and group.totalAuras > 0 ) then
+						positionAllButtons(group, frameConfig)
 					end
 				end
 			end

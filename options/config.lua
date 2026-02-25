@@ -2351,6 +2351,38 @@ local function loadUnitOptions()
 						setAuraFrameValue(info[2], auraType, frameIndex, "enabled", value)
 					end,
 				},
+				temporary = {
+					order = 1.2,
+					type = "toggle",
+					name = L["Enable temporary enchants"],
+					desc = L["Adds temporary enchants to the buffs for the player."],
+					hidden = function(info)
+						local auraType = info[#(info) - 2]
+						return auraType ~= "buffs" or info[2] ~= "player"
+					end,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.temporary
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						-- Exclusivity: disable temporary on all other buffs frames
+						if value then
+							for i = 1, 6 do
+								if i ~= frameIndex then
+									setAuraFrameValue(info[2], auraType, i, "temporary", false)
+								end
+							end
+						end
+						setAuraFrameValue(info[2], auraType, frameIndex, "temporary", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
 				anchorOn = {
 					order = 1.5,
 					type = "toggle",
@@ -2391,6 +2423,26 @@ local function loadUnitOptions()
 						local otherCfg = getAuraFrameConfig(info[2], otherType, frameIndex)
 						-- Disabled if this frame is not enabled, or if the other frame is not enabled, or if the other frame has anchorOn
 						return not (cfg and cfg.enabled) or not (otherCfg and otherCfg.enabled) or (otherCfg and otherCfg.anchorOn)
+					end,
+				},
+				clickThrough = {
+					order = 1.7,
+					type = "toggle",
+					name = L["Click through"],
+					desc = L["Allow clicks to pass through auras to select the unit behind them. Tooltips still work on hover."],
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.clickThrough
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "clickThrough", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
 					end,
 				},
 				filter = {
