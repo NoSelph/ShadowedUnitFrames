@@ -213,11 +213,11 @@ end
 local function updateTooltip(self)
 	if( not GameTooltip:IsForbidden() and GameTooltip:IsOwned(self) ) then
 		if( self.filter == "HELPFUL" ) then
-			GameTooltip:SetUnitBuff(self.unit, self.auraID, self.filter)
+			GameTooltip:SetUnitBuffByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
 		elseif( self.filter == "HARMFUL" ) then
-			GameTooltip:SetUnitDebuff(self.unit, self.auraID, self.filter)
+			GameTooltip:SetUnitDebuffByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
 		else
-			GameTooltip:SetUnitAura(self.unit, self.auraID, self.filter)
+			GameTooltip:SetUnitAuraByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
 		end
 	end
 end
@@ -233,11 +233,11 @@ local function showTooltip(self)
 		self:SetScript("OnUpdate", nil)
 	else
 		if( self.filter == "HELPFUL" ) then
-			GameTooltip:SetUnitBuff(self.unit, self.auraID, self.filter)
+			GameTooltip:SetUnitBuffByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
 		elseif( self.filter == "HARMFUL" ) then
-			GameTooltip:SetUnitDebuff(self.unit, self.auraID, self.filter)
+			GameTooltip:SetUnitDebuffByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
 		else
-			GameTooltip:SetUnitAura(self.unit, self.auraID, self.filter)
+			GameTooltip:SetUnitAuraByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
 		end
 		
 		self:SetScript("OnUpdate", updateTooltip)
