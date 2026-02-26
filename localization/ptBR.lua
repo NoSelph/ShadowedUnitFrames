@@ -53,13 +53,6 @@ L["Add Tags"] = [=[Adicionar tags
 
 ]=]
 L["Adds %s to the list of units to be modified when you change values in this tab."] = "Adiciona %s à lista de unidades que vão ser modificadas quando muda valores neste separador."
-L["Adds a bar indicating how much time is left on your ghoul timer, only used if you do not have a permanent ghoul."] = "Adiciona uma barra a indicar quanto tempo resta no temporizador da ghoul, apenas é usado se não tiver uma ghoul permanente."
-L["Adds a bar indicating how much time is left on your mushrooms."] = [=[Adiciona uma barra indicando quanto tempo resta em seus cogumelos.
-
-]=]
-L["Adds a bar indicating how much time is left on your Rune of Power."] = [=[Adiciona uma barra indicando quanto tempo resta na Runa do Poder.
-
-]=]
 L["Adds a bar inside the health bar indicating how much damage will be absorbed."] = [=[Adiciona uma barra dentro da barra de integridade indicando quanto dano será absorvido.
 
 ]=]
@@ -83,6 +76,7 @@ L["Adds an empty bar that you can put text into as a way of uncluttering other b
 L["Adds another mana bar to the player frame when you are in Bear or Cat form showing you how much mana you have."] = "Adiciona uma outra barra de mana à moldura quando está em forma de Gato ou Urso indicando a mana que possui."
 L["Adds rune bars and timers before runes refresh to the player frame."] = "Adiciona à moldura do jogador temporizadores de tempo restante para as runes refrescarem e barras de runes."
 L["Adds temporary enchants to the buffs for the player."] = "Adiciona encantamentos temporários aos feitiços benéficos para o jogador."
+L["Adds a bar indicating how much time is left on your statue."] = "Adiciona uma barra indicando o tempo restante da sua estátua."
 L["Adds totem bars with timers before they expire to the player frame."] = "Adiciona à moldura do jogador barras de totems com temporizadores de tempo restante para expirarem."
 L["Advanced"] = "Avançadas"
 L["Advanced tag management, allows you to add your own custom tags."] = "Gestão avançada de tags, permite-lhe adicionar as suas próprias tags."
@@ -711,7 +705,6 @@ L["General threat situation"] = [=[Situação geral de ameaça
 
 ]=]
 L["Ghost"] = "Fantasma"
-L["Ghoul bar"] = "Barra de fantasmas"
 L["Global"] = "Global"
 L["Global configurating will let you mass enable or disable aura groups for multiple units at once."] = [=[A configuração global permitirá que você habilite ou desabilite grupos de aura em massa para várias unidades de uma só vez.
 
@@ -908,7 +901,6 @@ L["If the unit is a player then race is returned, if it's a NPC then the creatur
 L["If you don't, you will be unable to use any combo point features (Chi, Holy Power, Combo Points, Aura Points, etc) until you do so."] = [=[Se você não fizer isso, você não poderá usar nenhum recurso de ponto de combinação (Chi, Holy Power, Combo Points, Aura Points, etc) até que você faça isso.
 
 ]=]
-L["Imp & Dreadstalker bar"] = "Barra Diabrete e Espreitadores do Medo"
 L["Import"] = "Importar"
 L["Import unit frame positions"] = [=[Importar posições de quadro de unidade
 
@@ -1085,8 +1077,6 @@ L["Missing power (Short)"] = "Falta de energia (curto)"
 L["Monochrome Outline"] = [=[Contorno monocromático
 
 ]=]
-L["Mushroom bar"] = "Barra de cogumelos"
-L["Mushrooms"] = "Cogumelos"
 L["Name"] = "Nome"
 L["Name (Abbreviated)"] = "Nome"
 L["Name of a friendly spell to check range."] = "Nome de um feitiço amigável para verificar o alcance."
@@ -1401,12 +1391,6 @@ L["Row offset"] = [=[Deslocamento de linha
 
 ]=]
 L["Rune bar"] = [=[Barra de runas
-
-]=]
-L["Rune of Power"] = [=[Runa do Poder
-
-]=]
-L["Rune of Power bar"] = [=[Runa da barra de poder
 
 ]=]
 L["Rune Timer"] = [=[Temporizador Runa

@@ -165,8 +165,6 @@ function ShadowUF:LoadDefaultLayout(useMerge)
 		FURY = {r = 0.788, g = 0.259, b = 0.992},
 		PAIN = {r = 1, g = 0, b = 0},
 		STATUE = {r = 0.35, g = 0.45, b = 0.60},
-		RUNEOFPOWER = {r = 0.35, g = 0.45, b = 0.60},
-		MUSHROOMS = {r = 0.20, g = 0.90, b = 0.20},
 		AURAPOINTS = {r = 1.0, g = 0.80, b = 0.0},
 		STAGGER_GREEN = {r = 0.52, g = 1.0, b = 0.52},
 		STAGGER_YELLOW = {r = 1.0, g = 0.98, b = 0.72},

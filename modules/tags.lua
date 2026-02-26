@@ -446,8 +446,11 @@ Tags.defaultTags = {
 		return endTime and string.format("%.1f", endTime - GetTime()) or nil
 	end]],
 	["totem:timer"] = [[function(unit, unitOwner, fontString)
-		local endTime = fontString.block.endTime
-		return endTime and string.format("%.1f", endTime - GetTime()) or nil
+		local slot = fontString.block.totemSlot
+		if not slot then return nil end
+		local timeLeft = GetTotemTimeLeft(slot)
+		if type(timeLeft) ~= "number" then return nil end
+		return string.format("%.1f", timeLeft)
 	end]],
 	["hp:color"] = [[function(unit, unitOwner)
 		return ShadowUF:Hex(ShadowUF.modules.healthBar.getGradientColor(unit))

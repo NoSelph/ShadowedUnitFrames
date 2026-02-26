@@ -1412,26 +1412,12 @@ local function loadGeneralOptions()
 								arg = "powerColors.LUNAR_POWER",
 								hidden = function(info) return select(2, UnitClass("player")) ~= "DRUID" end,
 							},
-							MUSHROOMS = {
-								order = 17,
-								type = "color",
-								name = L["Mushrooms"],
-								arg = "powerColors.MUSHROOMS",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "DRUID" end,
-							},
 							STATUE = {
 								order = 17,
 								type = "color",
 								name = L["Statue"],
 								arg = "powerColors.STATUE",
 								hidden = function(info) return select(2, UnitClass("player")) ~= "MONK" end,
-							},
-							RUNEOFPOWER = {
-								order = 17.5,
-								type = "color",
-								name = L["Rune of Power"],
-								arg = "powerColors.RUNEOFPOWER",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "MAGE" end,
 							},
 							ALTERNATE = {
 								order = 19,
@@ -4965,8 +4951,9 @@ local function loadUnitOptions()
 						order = 3.6,
 						type = "group",
 						inline = false,
-						name = ShadowUF.modules.totemBar.moduleName,
+						name = ShadowUF.modules.totemBar and ShadowUF.modules.totemBar.moduleName or "",
 						hidden = function(info)
+							if( not ShadowUF.modules.totemBar ) then return true end
 							local unit = info[2]
 							if( unit == "global" ) then
 								return not globalConfig.totemBar
@@ -4978,9 +4965,9 @@ local function loadUnitOptions()
 							enabled = {
 								order = 1,
 								type = "toggle",
-								name = string.format(L["Enable %s"], ShadowUF.modules.totemBar.moduleName),
+								name = string.format(L["Enable %s"], ShadowUF.modules.totemBar and ShadowUF.modules.totemBar.moduleName or ""),
 								desc = function(info)
-									return select(2, UnitClass("player")) == "SHAMAN" and L["Adds totem bars with timers before they expire to the player frame."] or select(2, UnitClass("player")) == "DEATHKNIGHT" and L["Adds a bar indicating how much time is left on your ghoul timer, only used if you do not have a permanent ghoul."] or select(2, UnitClass("player")) == "MAGE" and L["Adds a bar indicating how much time is left on your Rune of Power."] or L["Adds a bar indicating how much time is left on your mushrooms."]
+									return select(2, UnitClass("player")) == "SHAMAN" and L["Adds totem bars with timers before they expire to the player frame."] or L["Adds a bar indicating how much time is left on your statue."]
 								end,
 								arg = "totemBar.enabled",
 							},
