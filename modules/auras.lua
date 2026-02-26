@@ -1187,7 +1187,7 @@ function Auras:Update(frame)
 				local group = frame.auras[groupKey]
 
 				if( group and frameConfig and frameConfig.enabled ) then
-					group.totalAuras = frameConfig.temporary and group.temporaryEnchants or 0
+					group.totalAuras = (frameConfig.temporary and frame.unit == "player") and group.temporaryEnchants or 0
 
 					-- Build the filter string based on configuration
 					local baseFilter = auraType == "buffs" and "HELPFUL" or "HARMFUL"

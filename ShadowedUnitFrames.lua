@@ -5,7 +5,7 @@
 ShadowUF = select(2, ...)
 
 local L = ShadowUF.L
-ShadowUF.dbRevision = 64
+ShadowUF.dbRevision = 66
 ShadowUF.playerUnit = "player"
 ShadowUF.enabledUnits = {}
 ShadowUF.modules = {}
@@ -278,7 +278,7 @@ function ShadowUF:CheckUpgrade()
 						-- Migrate to new structure: old config becomes frame 1
 						local newFrame = {
 							enabled = oldAura.enabled,
-							temporary = true,
+							temporary = (unit == "player"),
 							filter = "ALL", -- Default to showing all
 							perRow = oldAura.perRow or 10,
 							maxRows = oldAura.maxRows or 4,
@@ -304,6 +304,42 @@ function ShadowUF:CheckUpgrade()
 				-- Add bossDebuffs if not present
 				if( not config.auras.bossDebuffs ) then
 					config.auras.bossDebuffs = {enabled = false, size = 32, maxAuras = 3, anchorPoint = "C", x = 0, y = 0}
+				end
+			end
+		end
+	end
+
+	-- Clean up temporary = true on non-player unit types
+	if( revision <= 64 ) then
+		for unit, config in pairs(self.db.profile.units) do
+			if unit ~= "player" and config.auras then
+				for _, key in pairs({"buffs", "debuffs"}) do
+					local typeConfig = config.auras[key]
+					if typeConfig then
+						for i = 1, 6 do
+							if typeConfig[i] then
+								typeConfig[i].temporary = nil
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	-- Disable auras on compound unit tokens (boss1target, party1target, etc.)
+	if( revision <= 65 ) then
+		local nonCompound = { ["targettarget"] = true, ["focustarget"] = true }
+		for unit, config in pairs(self.db.profile.units) do
+			if( config.auras and ShadowUF.fakeUnits[unit] and not nonCompound[unit] ) then
+				for _, key in pairs({"buffs", "debuffs"}) do
+					if( config.auras[key] ) then
+						for i = 1, 6 do
+							if( config.auras[key][i] ) then
+								config.auras[key][i].enabled = false
+							end
+						end
+					end
 				end
 			end
 		end
@@ -379,7 +415,7 @@ function ShadowUF:LoadUnitDefaults()
 			auraIndicators = {enabled = false},
 			auras = {
 				buffs = {
-					[1] = {enabled = true, temporary = true, clickThrough = false, filter = "ALL", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[1] = {enabled = true, temporary = (unit == "player"), clickThrough = false, filter = "ALL", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 					[2] = {enabled = false, clickThrough = false, filter = "PLAYER", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 					[3] = {enabled = false, clickThrough = false, filter = "RAID", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 					[4] = {enabled = false, clickThrough = false, filter = "BIG_DEFENSIVE", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TL", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},

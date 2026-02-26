@@ -5278,10 +5278,10 @@ local function loadUnitOptions()
 				type = "group",
 				hidden = function(info)
 					if( isModifiersSet(info) ) then return true end
-					-- 12.0: Aura APIs block compound unit tokens (focustarget, targettargettarget, boss1target, etc) :(
-					-- "targettarget" is the only exempted compound token
+					-- 12.0: Aura APIs block compound unit tokens (boss1target, party1target, etc.)
+					-- targettarget and focustarget are not compound
 					local unit = info[2]
-					if( unit ~= "global" and ShadowUF.fakeUnits[unit] and unit ~= "targettarget" ) then return true end
+					if( unit ~= "global" and ShadowUF.fakeUnits[unit] and unit ~= "targettarget" and unit ~= "focustarget" ) then return true end
 					return false
 				end,
 				set = setUnit,
