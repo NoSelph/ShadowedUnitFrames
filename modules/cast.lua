@@ -277,6 +277,9 @@ end
 
 local function channelOnUpdate(self, elapsed)
 	if( self.usingDurationObject ) then
+		local percent = self.durationObject:GetRemainingPercent()
+		local overlay = self.parent.castBar.uninterruptibleOverlay
+		if overlay then overlay:SetValue(percent) end
 		if( self.time.enabled ) then
 			local remaining = self.durationObject:GetRemainingDuration()
 			self.time:SetFormattedText("%.1f", remaining)
@@ -288,6 +291,8 @@ local function channelOnUpdate(self, elapsed)
 	self.elapsed = self.elapsed - (time - self.lastUpdate)
 	self.lastUpdate = time
 	self:SetValue(self.elapsed)
+	local overlay = self.parent.castBar.uninterruptibleOverlay
+	if overlay then overlay:SetValue(self.elapsed) end
 
 	if( self.elapsed <= 0 ) then
 		self.elapsed = 0
