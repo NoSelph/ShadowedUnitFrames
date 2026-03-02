@@ -5,6 +5,121 @@ Indicators.auraFilters = {"boss", "curable"}
 
 local GetSpellTexture = C_Spell.GetSpellTexture
 
+-- Blizzard non-secret spell whitelist (Midnight launch hotfix)
+-- These spells return non-secret AuraData even in combat on party/raid units.
+-- Source: Meorawr (Blizzard) announcement — data hotfix, not yet in API docs.
+Indicators.whitelistedSpells = {
+	-- Preservation Evoker
+	[355941] = { name = "Dream Breath", group = "Evoker" },
+	[363502] = { name = "Dream Flight", group = "Evoker" },
+	[364343] = { name = "Echo", group = "Evoker" },
+	[366155] = { name = "Reversion", group = "Evoker" },
+	[367364] = { name = "Echo Reversion", group = "Evoker" },
+	[373267] = { name = "Lifebind", group = "Evoker" },
+	[376788] = { name = "Echo Dream Breath", group = "Evoker" },
+	-- Augmentation Evoker
+	[360827] = { name = "Blistering Scales", group = "Evoker" },
+	[395152] = { name = "Ebon Might", group = "Evoker" },
+	[410089] = { name = "Prescience", group = "Evoker" },
+	[410263] = { name = "Inferno's Blessing", group = "Evoker" },
+	[410686] = { name = "Symbiotic Bloom", group = "Evoker" },
+	[413984] = { name = "Shifting Sands", group = "Evoker" },
+	-- Resto Druid
+	[774]    = { name = "Rejuvenation", group = "Druid" },
+	[8936]   = { name = "Regrowth", group = "Druid" },
+	[33763]  = { name = "Lifebloom", group = "Druid" },
+	[48438]  = { name = "Wild Growth", group = "Druid" },
+	[155777] = { name = "Germination", group = "Druid" },
+	-- Disc Priest
+	[17]     = { name = "Power Word: Shield", group = "Priest" },
+	[194384] = { name = "Atonement", group = "Priest" },
+	[1253593]= { name = "Void Shield", group = "Priest" },
+	-- Holy Priest
+	[139]    = { name = "Renew", group = "Priest" },
+	[41635]  = { name = "Prayer of Mending", group = "Priest" },
+	[77489]  = { name = "Echo of Light", group = "Priest" },
+	-- Mistweaver Monk
+	[115175] = { name = "Soothing Mist", group = "Monk" },
+	[119611] = { name = "Renewing Mist", group = "Monk" },
+	[124682] = { name = "Enveloping Mist", group = "Monk" },
+	[450769] = { name = "Aspect of Harmony", group = "Monk" },
+	-- Restoration Shaman
+	[974]    = { name = "Earth Shield", group = "Shaman" },
+	[383648] = { name = "Earth Shield", group = "Shaman" },
+	[61295]  = { name = "Riptide", group = "Shaman" },
+	[207400] = { name = "Ancestral Vigor", group = "Shaman" },
+	[382024] = { name = "Earthliving Weapon", group = "Shaman" },
+	[444490] = { name = "Hydrobubble", group = "Shaman" },
+	-- Holy Paladin
+	[53563]  = { name = "Beacon of Light", group = "Paladin" },
+	[156322] = { name = "Eternal Flame", group = "Paladin" },
+	[156910] = { name = "Beacon of Faith", group = "Paladin" },
+	[1244893]= { name = "Beacon of the Savior", group = "Paladin" },
+	-- Long-term Raid Buffs
+	[1126]   = { name = "Mark of the Wild", group = "Raid Buffs" },
+	[1459]   = { name = "Arcane Intellect", group = "Raid Buffs" },
+	[6673]   = { name = "Battle Shout", group = "Raid Buffs" },
+	[21562]  = { name = "Power Word: Fortitude", group = "Raid Buffs" },
+	[369459] = { name = "Source of Magic", group = "Raid Buffs" },
+	[462854] = { name = "Skyfury", group = "Raid Buffs" },
+	[474754] = { name = "Symbiotic Relationship", group = "Raid Buffs" },
+	-- Blessing of the Bronze (class variants)
+	[381732] = { name = "Blessing of the Bronze (DK)", group = "Raid Buffs" },
+	[381741] = { name = "Blessing of the Bronze (DH)", group = "Raid Buffs" },
+	[381746] = { name = "Blessing of the Bronze (Druid)", group = "Raid Buffs" },
+	[381748] = { name = "Blessing of the Bronze (Evoker)", group = "Raid Buffs" },
+	[381749] = { name = "Blessing of the Bronze (Hunter)", group = "Raid Buffs" },
+	[381750] = { name = "Blessing of the Bronze (Mage)", group = "Raid Buffs" },
+	[381751] = { name = "Blessing of the Bronze (Monk)", group = "Raid Buffs" },
+	[381752] = { name = "Blessing of the Bronze (Paladin)", group = "Raid Buffs" },
+	[381753] = { name = "Blessing of the Bronze (Priest)", group = "Raid Buffs" },
+	[381754] = { name = "Blessing of the Bronze (Rogue)", group = "Raid Buffs" },
+	[381756] = { name = "Blessing of the Bronze (Shaman)", group = "Raid Buffs" },
+	[381757] = { name = "Blessing of the Bronze (Warlock)", group = "Raid Buffs" },
+	[381758] = { name = "Blessing of the Bronze (Warrior)", group = "Raid Buffs" },
+	-- Long-term Self Buffs
+	[433568] = { name = "Rite of Sanctification", group = "Self Buffs" },
+	[433583] = { name = "Rite of Adjuration", group = "Self Buffs" },
+	-- Rogue Poisons
+	[2823]   = { name = "Deadly Poison", group = "Rogue" },
+	[8679]   = { name = "Wound Poison", group = "Rogue" },
+	[3408]   = { name = "Crippling Poison", group = "Rogue" },
+	[5761]   = { name = "Numbing Poison", group = "Rogue" },
+	[315584] = { name = "Instant Poison", group = "Rogue" },
+	[381637] = { name = "Atrophic Poison", group = "Rogue" },
+	[381664] = { name = "Amplifying Poison", group = "Rogue" },
+	-- Shaman Imbuements
+	[319773] = { name = "Windfury Weapon", group = "Shaman" },
+	[319778] = { name = "Flametongue Weapon", group = "Shaman" },
+	[382021] = { name = "Earthliving Weapon", group = "Shaman" },
+	[382022] = { name = "Earthliving Weapon", group = "Shaman" },
+	[457496] = { name = "Tidecaller's Guard", group = "Shaman" },
+	[457481] = { name = "Tidecaller's Guard", group = "Shaman" },
+	[462757] = { name = "Thunderstrike Ward", group = "Shaman" },
+	[462742] = { name = "Thunderstrike Ward", group = "Shaman" },
+	-- Resource-like Auras
+	[205473] = { name = "Icicles", group = "Resources" },
+	[260286] = { name = "Tip of the Spear", group = "Resources" },
+	-- Cooldowns
+	[8690]   = { name = "Hearthstone", group = "Cooldowns" },
+	[20608]  = { name = "Reincarnation", group = "Cooldowns" },
+	-- Sated/Exhaustion
+	[57723]  = { name = "Exhaustion", group = "Debuffs" },
+	[57724]  = { name = "Sated", group = "Debuffs" },
+	[80354]  = { name = "Temporal Displacement", group = "Debuffs" },
+	[95809]  = { name = "Insanity", group = "Debuffs" },
+	[160455] = { name = "Fatigued", group = "Debuffs" },
+	[264689] = { name = "Fatigued", group = "Debuffs" },
+	[390435] = { name = "Exhaustion", group = "Debuffs" },
+	-- Deserter
+	[26013]  = { name = "Deserter", group = "Debuffs" },
+	[71041]  = { name = "Dungeon Deserter", group = "Debuffs" },
+	-- Skyriding
+	[427490] = { name = "Ride Along Available", group = "Skyriding" },
+	[447959] = { name = "Ride Along Active", group = "Skyriding" },
+	[447960] = { name = "Ride Along Inactive", group = "Skyriding" },
+}
+
 Indicators.auraConfig = setmetatable({}, {
 	__index = function(tbl, index)
 		local aura = ShadowUF.db.profile.auraIndicators.auras[tostring(index)]
@@ -190,32 +305,40 @@ local auraList = {}
 local function scanAuras(frame, filter, type)
 	local isFriendly = not UnitIsEnemy(frame.unit, "player")
 
-	-- 12.0 Safe Scan
-	local slots = {C_UnitAuras.GetAuraSlots(frame.unit, filter)}
+	-- 12.0: pcall for compound unit tokens (same pattern as auras.lua)
+	local ok, slots = pcall(function() return {C_UnitAuras.GetAuraSlots(frame.unit, filter)} end)
+	if( not ok ) then return end
+
 	for i = 2, #slots do
 		local index = slots[i]
 		local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, index)
-		if( auraData and auraData.name ) then
-			local name = auraData.name
-			local texture = auraData.icon
-			local count = auraData.applications
-			local auraType = auraData.dispelName
-			local duration = auraData.duration
-			local endTime = auraData.expirationTime
-			local caster = auraData.sourceUnit
-			local isRemovable = auraData.isStealable -- For buff stealing
-			local nameplateShowPersonal = auraData.nameplateShowPersonal
-			local spellID = auraData.spellId
-			local canApplyAura = auraData.canApplyAura
-			local isBossDebuff = auraData.isBossAura
-			
-			
-			local result = checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
-			if( not result ) then
-				checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
-			end
+		if( auraData ) then
+			-- 12.0: pcall to silently skip secret auras in combat.
+			-- Whitelisted spells (non-secret) pass through; secret auras error
+			-- on boolean tests (e.g. "if auraData.name then") and are caught here.
+			pcall(function()
+				if( auraData.name ) then
+					local name = auraData.name
+					local texture = auraData.icon
+					local count = auraData.applications
+					local auraType = auraData.dispelName
+					local duration = auraData.duration
+					local endTime = auraData.expirationTime
+					local caster = auraData.sourceUnit
+					local isRemovable = auraData.isStealable
+					local nameplateShowPersonal = auraData.nameplateShowPersonal
+					local spellID = auraData.spellId
+					local canApplyAura = auraData.canApplyAura
+					local isBossDebuff = auraData.isBossAura
 
-			auraList[name] = true
+					local result = checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
+					if( not result ) then
+						checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
+					end
+
+					auraList[name] = true
+				end
+			end)
 		end
 	end
 end

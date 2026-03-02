@@ -7770,39 +7770,33 @@ local function loadAuraIndicatorsOptions()
 						args = {
 							name = {
 								order = 0,
-								type = "input",
-								name = L["Spell Name/ID"],
-								desc = L["If name is entered, it must be exact as it is case sensitive. Alternatively, you can use spell id instead."]
-							},
-							group = {
-								order = 1,
 								type = "select",
-								name = L["Aura group"],
-								desc = L["What group this aura belongs to, this is where you will find it when configuring."],
-								values = getAuraGroup,
-							},
-							custom = {
-								order = 2,
-								type = "input",
-								name = L["New aura group"],
-								desc = L["Allows you to enter a new aura group."],
+								width = "full",
+								name = L["Spell"],
+								desc = L["Only Blizzard-whitelisted spells are available (guaranteed to work in combat)."],
+								values = function()
+									local vals = {}
+									for spellID, info in pairs(Indicators.whitelistedSpells) do
+										if( not ShadowUF.db.profile.auraIndicators.auras[tostring(spellID)] ) then
+											vals[tostring(spellID)] = string.format("[%s] %s (%d)", info.group, info.name, spellID)
+										end
+									end
+									return vals
+								end,
 							},
 							create = {
-								order = 3,
+								order = 1,
 								type = "execute",
 								name = L["Add Aura"],
-								disabled = function(info) return not addAura.name or (not addAura.group and not addAura.custom) end,
+								disabled = function(info) return not addAura.name end,
 								func = function(info)
-									local group = string.trim(addAura.custom or "")
-									if( group == "" ) then group = string.trim(addAura.group or "") end
-									if( group == "" ) then group = L["Miscellaneous"] end
+									local spellID = addAura.name
+									local whitelistInfo = Indicators.whitelistedSpells[tonumber(spellID)]
+									local group = whitelistInfo and whitelistInfo.group or L["Miscellaneous"]
 
-									-- Don't overwrite an existing group, but don't tell them either, mostly because I don't want to add error reporting code
-									if( not ShadowUF.db.profile.auraIndicators.auras[addAura.name] ) then
-										-- Odds are, if they are saying to show it only if a buff is missing it's cause they want to know when their own class buff is not there
-										-- so will cheat it, and jump start it by storing the texture if we find it from GetSpellTexture directly
-										Indicators.auraConfig[addAura.name] = {indicator = "", group = group, iconTexture = GetSpellTexture(addAura.name), priority = 0, r = 0, g = 0, b = 0}
-										writeAuraTable(addAura.name)
+									if( not ShadowUF.db.profile.auraIndicators.auras[spellID] ) then
+										Indicators.auraConfig[spellID] = {indicator = "", group = group, iconTexture = GetSpellTexture(tonumber(spellID)), priority = 0, r = 0, g = 0, b = 0}
+										writeAuraTable(spellID)
 
 										auraID = auraID + 1
 										auraMap[tostring(auraID)] = addAura.name
@@ -7810,8 +7804,6 @@ local function loadAuraIndicatorsOptions()
 									end
 
 									addAura.name = nil
-									addAura.custom = nil
-									addAura.group = nil
 
 									-- Check if the group exists
 									local gID
@@ -8160,7 +8152,7 @@ local function loadOptions()
 	loadTagOptions()
 	-- loadFilterOptions()  -- DISABLED: Not compatible with WoW 12.0
 	loadVisibilityOptions()
-	-- loadAuraIndicatorsOptions()  -- DISABLED: Not compatible with WoW 12.0 secret values in combat
+	loadAuraIndicatorsOptions()
 
 	-- Ordering
 	options.args.general.order = 1
@@ -8168,7 +8160,7 @@ local function loadOptions()
 	options.args.enableUnits.order = 2
 	options.args.units.order = 3
 	-- options.args.filter.order = 4  -- DISABLED: Not compatible with WoW 12.0
-	-- options.args.auraIndicators.order = 4.5  -- DISABLED: Module not compatible with WoW 12.0
+	options.args.auraIndicators.order = 4.5
 	options.args.hideBlizzard.order = 5
 	options.args.visibility.order = 6
 	options.args.tags.order = 7
