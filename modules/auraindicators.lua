@@ -9,111 +9,106 @@ local GetSpellTexture = C_Spell.GetSpellTexture
 -- These spells return non-secret AuraData even in combat on party/raid units.
 -- Source: Meorawr (Blizzard) announcement — data hotfix, not yet in API docs.
 Indicators.whitelistedSpells = {
-	-- Preservation Evoker
+	-- Evoker
 	[355941] = { name = "Dream Breath", group = "Evoker" },
 	[363502] = { name = "Dream Flight", group = "Evoker" },
 	[364343] = { name = "Echo", group = "Evoker" },
 	[366155] = { name = "Reversion", group = "Evoker" },
 	[367364] = { name = "Echo Reversion", group = "Evoker" },
+	[369459] = { name = "Source of Magic", group = "Evoker" },
 	[373267] = { name = "Lifebind", group = "Evoker" },
 	[376788] = { name = "Echo Dream Breath", group = "Evoker" },
-	-- Augmentation Evoker
 	[360827] = { name = "Blistering Scales", group = "Evoker" },
+	[381732] = { name = "Blessing of the Bronze (DK)", group = "Evoker" },
+	[381741] = { name = "Blessing of the Bronze (DH)", group = "Evoker" },
+	[381746] = { name = "Blessing of the Bronze (Druid)", group = "Evoker" },
+	[381748] = { name = "Blessing of the Bronze (Evoker)", group = "Evoker" },
+	[381749] = { name = "Blessing of the Bronze (Hunter)", group = "Evoker" },
+	[381750] = { name = "Blessing of the Bronze (Mage)", group = "Evoker" },
+	[381751] = { name = "Blessing of the Bronze (Monk)", group = "Evoker" },
+	[381752] = { name = "Blessing of the Bronze (Paladin)", group = "Evoker" },
+	[381753] = { name = "Blessing of the Bronze (Priest)", group = "Evoker" },
+	[381754] = { name = "Blessing of the Bronze (Rogue)", group = "Evoker" },
+	[381756] = { name = "Blessing of the Bronze (Shaman)", group = "Evoker" },
+	[381757] = { name = "Blessing of the Bronze (Warlock)", group = "Evoker" },
+	[381758] = { name = "Blessing of the Bronze (Warrior)", group = "Evoker" },
 	[395152] = { name = "Ebon Might", group = "Evoker" },
 	[410089] = { name = "Prescience", group = "Evoker" },
 	[410263] = { name = "Inferno's Blessing", group = "Evoker" },
 	[410686] = { name = "Symbiotic Bloom", group = "Evoker" },
 	[413984] = { name = "Shifting Sands", group = "Evoker" },
-	-- Resto Druid
+	-- Druid
 	[774]    = { name = "Rejuvenation", group = "Druid" },
+	[1126]   = { name = "Mark of the Wild", group = "Druid" },
 	[8936]   = { name = "Regrowth", group = "Druid" },
 	[33763]  = { name = "Lifebloom", group = "Druid" },
 	[48438]  = { name = "Wild Growth", group = "Druid" },
 	[155777] = { name = "Germination", group = "Druid" },
-	-- Disc Priest
+	[474754] = { name = "Symbiotic Relationship", group = "Druid" },
+	-- Priest
 	[17]     = { name = "Power Word: Shield", group = "Priest" },
-	[194384] = { name = "Atonement", group = "Priest" },
-	[1253593]= { name = "Void Shield", group = "Priest" },
-	-- Holy Priest
 	[139]    = { name = "Renew", group = "Priest" },
+	[21562]  = { name = "Power Word: Fortitude", group = "Priest" },
 	[41635]  = { name = "Prayer of Mending", group = "Priest" },
 	[77489]  = { name = "Echo of Light", group = "Priest" },
-	-- Mistweaver Monk
+	[194384] = { name = "Atonement", group = "Priest" },
+	[1253593]= { name = "Void Shield", group = "Priest" },
+	-- Monk
 	[115175] = { name = "Soothing Mist", group = "Monk" },
 	[119611] = { name = "Renewing Mist", group = "Monk" },
 	[124682] = { name = "Enveloping Mist", group = "Monk" },
 	[450769] = { name = "Aspect of Harmony", group = "Monk" },
-	-- Restoration Shaman
+	-- Shaman
 	[974]    = { name = "Earth Shield", group = "Shaman" },
-	[383648] = { name = "Earth Shield", group = "Shaman" },
+	[20608]  = { name = "Reincarnation", group = "Shaman" },
 	[61295]  = { name = "Riptide", group = "Shaman" },
 	[207400] = { name = "Ancestral Vigor", group = "Shaman" },
-	[382024] = { name = "Earthliving Weapon", group = "Shaman" },
-	[444490] = { name = "Hydrobubble", group = "Shaman" },
-	-- Holy Paladin
-	[53563]  = { name = "Beacon of Light", group = "Paladin" },
-	[156322] = { name = "Eternal Flame", group = "Paladin" },
-	[156910] = { name = "Beacon of Faith", group = "Paladin" },
-	[1244893]= { name = "Beacon of the Savior", group = "Paladin" },
-	-- Long-term Raid Buffs
-	[1126]   = { name = "Mark of the Wild", group = "Raid Buffs" },
-	[1459]   = { name = "Arcane Intellect", group = "Raid Buffs" },
-	[6673]   = { name = "Battle Shout", group = "Raid Buffs" },
-	[21562]  = { name = "Power Word: Fortitude", group = "Raid Buffs" },
-	[369459] = { name = "Source of Magic", group = "Raid Buffs" },
-	[462854] = { name = "Skyfury", group = "Raid Buffs" },
-	[474754] = { name = "Symbiotic Relationship", group = "Raid Buffs" },
-	-- Blessing of the Bronze (class variants)
-	[381732] = { name = "Blessing of the Bronze (DK)", group = "Raid Buffs" },
-	[381741] = { name = "Blessing of the Bronze (DH)", group = "Raid Buffs" },
-	[381746] = { name = "Blessing of the Bronze (Druid)", group = "Raid Buffs" },
-	[381748] = { name = "Blessing of the Bronze (Evoker)", group = "Raid Buffs" },
-	[381749] = { name = "Blessing of the Bronze (Hunter)", group = "Raid Buffs" },
-	[381750] = { name = "Blessing of the Bronze (Mage)", group = "Raid Buffs" },
-	[381751] = { name = "Blessing of the Bronze (Monk)", group = "Raid Buffs" },
-	[381752] = { name = "Blessing of the Bronze (Paladin)", group = "Raid Buffs" },
-	[381753] = { name = "Blessing of the Bronze (Priest)", group = "Raid Buffs" },
-	[381754] = { name = "Blessing of the Bronze (Rogue)", group = "Raid Buffs" },
-	[381756] = { name = "Blessing of the Bronze (Shaman)", group = "Raid Buffs" },
-	[381757] = { name = "Blessing of the Bronze (Warlock)", group = "Raid Buffs" },
-	[381758] = { name = "Blessing of the Bronze (Warrior)", group = "Raid Buffs" },
-	-- Long-term Self Buffs
-	[433568] = { name = "Rite of Sanctification", group = "Self Buffs" },
-	[433583] = { name = "Rite of Adjuration", group = "Self Buffs" },
-	-- Rogue Poisons
-	[2823]   = { name = "Deadly Poison", group = "Rogue" },
-	[8679]   = { name = "Wound Poison", group = "Rogue" },
-	[3408]   = { name = "Crippling Poison", group = "Rogue" },
-	[5761]   = { name = "Numbing Poison", group = "Rogue" },
-	[315584] = { name = "Instant Poison", group = "Rogue" },
-	[381637] = { name = "Atrophic Poison", group = "Rogue" },
-	[381664] = { name = "Amplifying Poison", group = "Rogue" },
-	-- Shaman Imbuements
 	[319773] = { name = "Windfury Weapon", group = "Shaman" },
 	[319778] = { name = "Flametongue Weapon", group = "Shaman" },
 	[382021] = { name = "Earthliving Weapon", group = "Shaman" },
 	[382022] = { name = "Earthliving Weapon", group = "Shaman" },
-	[457496] = { name = "Tidecaller's Guard", group = "Shaman" },
+	[382024] = { name = "Earthliving Weapon", group = "Shaman" },
+	[383648] = { name = "Earth Shield", group = "Shaman" },
+	[444490] = { name = "Hydrobubble", group = "Shaman" },
 	[457481] = { name = "Tidecaller's Guard", group = "Shaman" },
-	[462757] = { name = "Thunderstrike Ward", group = "Shaman" },
+	[457496] = { name = "Tidecaller's Guard", group = "Shaman" },
 	[462742] = { name = "Thunderstrike Ward", group = "Shaman" },
-	-- Resource-like Auras
-	[205473] = { name = "Icicles", group = "Resources" },
-	[260286] = { name = "Tip of the Spear", group = "Resources" },
-	-- Cooldowns
-	[8690]   = { name = "Hearthstone", group = "Cooldowns" },
-	[20608]  = { name = "Reincarnation", group = "Cooldowns" },
-	-- Sated/Exhaustion
+	[462757] = { name = "Thunderstrike Ward", group = "Shaman" },
+	[462854] = { name = "Skyfury", group = "Shaman" },
+	-- Paladin
+	[53563]  = { name = "Beacon of Light", group = "Paladin" },
+	[156322] = { name = "Eternal Flame", group = "Paladin" },
+	[156910] = { name = "Beacon of Faith", group = "Paladin" },
+	[433568] = { name = "Rite of Sanctification", group = "Paladin" },
+	[433583] = { name = "Rite of Adjuration", group = "Paladin" },
+	[1244893]= { name = "Beacon of the Savior", group = "Paladin" },
+	-- Mage
+	[1459]   = { name = "Arcane Intellect", group = "Mage" },
+	[205473] = { name = "Icicles", group = "Mage" },
+	-- Warrior
+	[6673]   = { name = "Battle Shout", group = "Warrior" },
+	-- Hunter
+	[260286] = { name = "Tip of the Spear", group = "Hunter" },
+	-- Rogue
+	[2823]   = { name = "Deadly Poison", group = "Rogue" },
+	[3408]   = { name = "Crippling Poison", group = "Rogue" },
+	[5761]   = { name = "Numbing Poison", group = "Rogue" },
+	[8679]   = { name = "Wound Poison", group = "Rogue" },
+	[315584] = { name = "Instant Poison", group = "Rogue" },
+	[381637] = { name = "Atrophic Poison", group = "Rogue" },
+	[381664] = { name = "Amplifying Poison", group = "Rogue" },
+	-- General
+	[8690]   = { name = "Hearthstone", group = "General" },
+	-- Debuffs
+	[26013]  = { name = "Deserter", group = "Debuffs" },
 	[57723]  = { name = "Exhaustion", group = "Debuffs" },
 	[57724]  = { name = "Sated", group = "Debuffs" },
+	[71041]  = { name = "Dungeon Deserter", group = "Debuffs" },
 	[80354]  = { name = "Temporal Displacement", group = "Debuffs" },
 	[95809]  = { name = "Insanity", group = "Debuffs" },
 	[160455] = { name = "Fatigued", group = "Debuffs" },
 	[264689] = { name = "Fatigued", group = "Debuffs" },
 	[390435] = { name = "Exhaustion", group = "Debuffs" },
-	-- Deserter
-	[26013]  = { name = "Deserter", group = "Debuffs" },
-	[71041]  = { name = "Dungeon Deserter", group = "Debuffs" },
 	-- Skyriding
 	[427490] = { name = "Ride Along Available", group = "Skyriding" },
 	[447959] = { name = "Ride Along Active", group = "Skyriding" },
@@ -270,7 +265,7 @@ local function checkSpecificAura(frame, type, name, texture, count, auraType, du
 	if( auraConfig.missing ) then return end
 
 	-- Disabled on a class level
-	if( ShadowUF.db.profile.auraIndicators.disabled[playerClass][name] ) then return end
+	if( ShadowUF.db.profile.auraIndicators.disabled[playerClass][name] or ShadowUF.db.profile.auraIndicators.disabled[playerClass][tostring(spellID)] ) then return end
 	-- Disabled aura group by unit
 	if( ShadowUF.db.profile.units[frame.unitType].auraIndicators[auraConfig.group] ) then return end
 

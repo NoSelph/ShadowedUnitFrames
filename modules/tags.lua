@@ -328,6 +328,8 @@ function ShadowUF:Hex(r, g, b)
 		end
 	end
 
+	if r == nil then return "|cffffffff" end
+
 	if( issecretvalue(r) or issecretvalue(g) or issecretvalue(b) ) then
 		local color = CreateColor(r, g, b, 1)
 		return color:GenerateHexColorMarkup()

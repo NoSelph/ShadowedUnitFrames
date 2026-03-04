@@ -1696,7 +1696,9 @@ local function loadGeneralOptions()
 	}
 
 	for classToken in pairs(RAID_CLASS_COLORS) do
-		options.args.general.args.color.args.classColors.args[classToken] = Config.classTable
+		if ShadowUF.db.profile.classColors[classToken] then
+			options.args.general.args.color.args.classColors.args[classToken] = Config.classTable
+		end
 	end
 
 	options.args.general.args.color.args.classColors.args.PET = Config.classTable
@@ -8011,7 +8013,9 @@ local function loadAuraIndicatorsOptions()
 		order = 1,
 		type = "group",
 		name = function(info)
-			return ShadowUF:Hex(ShadowUF.db.profile.classColors[info[#(info)]]) .. LOCALIZED_CLASS_NAMES_MALE[info[#(info)]] .. "|r"
+			local classToken = info[#(info)]
+			local color = ShadowUF.db.profile.classColors[classToken] or RAID_CLASS_COLORS[classToken]
+			return ShadowUF:Hex(color) .. (LOCALIZED_CLASS_NAMES_MALE[classToken] or classToken) .. "|r"
 		end,
 		args = {},
 	}
@@ -8116,7 +8120,9 @@ local function loadAuraIndicatorsOptions()
 
 	-- Build class status thing
 	for classToken in pairs(RAID_CLASS_COLORS) do
-		options.args.auraIndicators.args.classes.args[classToken] = classTable
+		if ShadowUF.db.profile.classColors[classToken] then
+			options.args.auraIndicators.args.classes.args[classToken] = classTable
+		end
 	end
 
 	-- Quickly build the indicator one
