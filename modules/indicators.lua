@@ -56,16 +56,16 @@ function Indicators:SummonPending(frame)
 
 	if( C_IncomingSummon.HasIncomingSummon(frame.unit) ) then
 		if( C_IncomingSummon.IncomingSummonStatus(frame.unit) == 1 ) then
-			frame.indicators.sumPending:SetTexture("Interface\\RaidFrame\\RaidFrameSummon")
-			frame.indicators.sumPending:SetTexCoord(0.539062, 0.789062, 0.015625, 0.515625)
+			frame.indicators.sumPending:SetTexture("Interface\\RaidFrame\\Raid-Icon-SummonPending")
+			frame.indicators.sumPending:SetTexCoord(0, 1, 0, 1)
 			frame.indicators.sumPending:Show()
 		elseif( C_IncomingSummon.IncomingSummonStatus(frame.unit) == 2 ) then
-			frame.indicators.sumPending:SetTexture("Interface\\RaidFrame\\RaidFrameSummon")
-			frame.indicators.sumPending:SetTexCoord(0.0078125, 0.257812, 0.015625, 0.515625)
+			frame.indicators.sumPending:SetTexture("Interface\\RaidFrame\\Raid-Icon-SummonAccepted")
+			frame.indicators.sumPending:SetTexCoord(0, 1, 0, 1)
 			frame.indicators.sumPending:Show()
 		elseif( C_IncomingSummon.IncomingSummonStatus(frame.unit) == 3 ) then
-			frame.indicators.sumPending:SetTexture("Interface\\RaidFrame\\RaidFrameSummon")
-			frame.indicators.sumPending:SetTexCoord(0.273438, 0.523438, 0.015625, 0.515625)
+			frame.indicators.sumPending:SetTexture("Interface\\RaidFrame\\Raid-Icon-SummonDeclined")
+			frame.indicators.sumPending:SetTexCoord(0, 1, 0, 1)
 			frame.indicators.sumPending:Show()
 		else
 			frame.indicators.sumPending:Hide()
