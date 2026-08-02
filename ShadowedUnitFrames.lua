@@ -1,11 +1,11 @@
---[[
+﻿--[[
 	Shadowed Unit Frames, Shadowed of Mal'Ganis (US) PvP
 ]]
 
 ShadowUF = select(2, ...)
 
 local L = ShadowUF.L
-ShadowUF.dbRevision = 70
+ShadowUF.dbRevision = 71
 ShadowUF.playerUnit = "player"
 ShadowUF.enabledUnits = {}
 ShadowUF.modules = {}
@@ -32,15 +32,16 @@ function ShadowUF:OnInitialize()
 			locked = false,
 			advanced = false,
 			tooltipCombat = false,
+			tooltipAuraSpellIDs = false,
 			bossmodSpellRename = true,
-			enlargeLayout = false,
 			omnicc = false,
 			blizzardcc = true,
 			tags = {},
 			units = {},
 			positions = {},
 			range = {},
-			filters = {zonewhite = {}, zoneblack = {}, whitelists = {}, blacklists = {}},
+			filters = {zonewhite = {}, zoneblack = {}},
+			customFilters = {},
 			visibility = {arena = {}, pvp = {}, party = {}, raid = {}, neighborhood = {}},
 			hidden = {cast = false, playerPower = true, buffs = false, party = true, raid = false, player = true, pet = true, target = true, focus = true, boss = true, arena = true, playerAltPower = false},
 			performance = {
@@ -50,7 +51,6 @@ function ShadowUF:OnInitialize()
 				tagMonitorSlow = 1.00,
 				fakeCastMonitor = 0.10,
 				combatIndicator = 1.00,
-				tempEnchantScan = 0.50,
 			},
 		},
 	}
@@ -96,6 +96,7 @@ function ShadowUF:OnInitialize()
 	end
 
 	self.db.profile.revision = self.dbRevision
+	self:ApplyAuraSpellIDsCVar()
 	self:FireModuleEvent("OnInitialize")
 	self:HideBlizzardFrames()
 	self.Layout:LoadSML()
@@ -106,27 +107,24 @@ function ShadowUF:OnInitialize()
 	if LibDualSpec then LibDualSpec:EnhanceDatabase(self.db, "ShadowedUnitFrames") end
 end
 
+-- The CVar doesn't survive a relog, reapply it from the profile
+function ShadowUF:ApplyAuraSpellIDsCVar()
+	if( C_CVar and C_CVar.SetCVar ) then
+		pcall(C_CVar.SetCVar, "tooltipShowAuraSpellIDs", self.db.profile.tooltipAuraSpellIDs and "1" or "0")
+	end
+end
+
 function ShadowUF.UnitAuraBySpell(unit, spell, filter)
 	local auraData
 	if type(spell) == "string" then
-		auraData = C_UnitAuras.GetAuraDataBySpellName(unit, spell, filter)
+		-- Only returns real data for whitelisted spells (RequiresNonSecretAura)
+		local ok, data = pcall(C_UnitAuras.GetAuraDataBySpellName, unit, spell, filter)
+		if( ok ) then auraData = data end
 	elseif type(spell) == "number" then
-		local index = 0
-		while true do
-			index = index + 1
-			local data = C_UnitAuras.GetAuraDataByIndex(unit, index, filter)
-			if not data then break end
-			local match = false
-			local success, result = pcall(function() return data.spellId == spell end)
-			if( success and result ) then
-				match = true
-			end
-			
-			if match then
-				auraData = data
-				break
-			end
-		end
+		-- Index-based iteration errors in combat, spellID lookup doesn't
+		-- No filter support on this API, no numeric caller uses one anyway
+		local ok, data = pcall(C_UnitAuras.GetUnitAuraBySpellID, unit, spell)
+		if( ok ) then auraData = data end
 	end
 	-- Manual safe unpack for 12.0
 	if( not auraData ) then return nil end
@@ -148,6 +146,13 @@ function ShadowUF.UnitAuraBySpell(unit, spell, filter)
 			auraData.timeMod
 end
 
+-- Identity-guarded Unit APIs (UnitClass, UnitInRaid, roles...) return secrets for these units, so test once upfront instead of guarding every return
+function ShadowUF.IsUnitIdentitySecret(unit)
+	if( not (C_Secrets and C_Secrets.ShouldUnitIdentityBeSecret) ) then return false end
+	local ok, secret = pcall(C_Secrets.ShouldUnitIdentityBeSecret, unit)
+	return ok and secret or false
+end
+
 function ShadowUF:CheckBuild()
 	local build = select(4, GetBuildInfo())
 	if( self.db.profile.wowBuild == build ) then return end
@@ -158,6 +163,122 @@ end
 
 function ShadowUF:CheckUpgrade()
 	local revision = self.db.profile.revision or self.dbRevision
+
+	-- Drop "only show if missing" from spells that aren't whitelisted (absence needs a point query)
+	if( C_Secrets and C_Secrets.GetSpellAuraSecrecy and Enum.SecrecyLevel and self.db.profile.auraIndicators ) then
+		local missing = self.db.profile.auraIndicators.missing
+		local auras = self.db.profile.auraIndicators.auras
+		if( missing ) then
+			for aura in pairs(missing) do
+				local ok, secrecy = pcall(C_Secrets.GetSpellAuraSecrecy, tonumber(aura) or aura)
+				if( ok and secrecy ~= Enum.SecrecyLevel.NeverSecret ) then
+					missing[aura] = nil
+					if( auras and auras[aura] ) then
+						auras[aura] = auras[aura]:gsub("missing%s*=%s*true;?", "")
+					end
+				end
+			end
+		end
+	end
+	if( revision <= 70 ) then
+		-- Blizzard filter disabled for buffs, haven't seen anything useful returned
+		for _, unitCfg in pairs(self.db.profile.units) do
+			if( unitCfg.auras and type(unitCfg.auras.buffs) == "table" ) then
+				for _, frameCfg in pairs(unitCfg.auras.buffs) do
+					if( type(frameCfg) == "table" ) then
+						if( frameCfg.filter == "BLIZZARD" ) then frameCfg.filter = "ALL" end
+						if( type(frameCfg.sections) == "table" ) then
+							for _, section in pairs(frameCfg.sections) do
+								if( type(section) == "table" and section.filter == "BLIZZARD" ) then
+									section.filter = "ALL"
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+
+		-- PLAYER|RAID switched to PLAYER|RAID_IN_COMBAT
+		for _, unitCfg in pairs(self.db.profile.units) do
+			if( unitCfg.auras and type(unitCfg.auras.debuffs) == "table" ) then
+				for _, frameCfg in pairs(unitCfg.auras.debuffs) do
+					if( type(frameCfg) == "table" ) then
+						if( frameCfg.filter == "PLAYER|RAID" ) then frameCfg.filter = "PLAYER|RAID_IN_COMBAT" end
+						if( type(frameCfg.sections) == "table" ) then
+							for _, section in pairs(frameCfg.sections) do
+								if( type(section) == "table" and section.filter == "PLAYER|RAID" ) then
+									section.filter = "PLAYER|RAID_IN_COMBAT"
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+
+		-- isBossAura isn't reliable
+		if( self.db.profile.auraIndicators and self.db.profile.auraIndicators.filters ) then
+			for _, indicatorFilters in pairs(self.db.profile.auraIndicators.filters) do
+				indicatorFilters.boss = nil
+			end
+		end
+		for _, unitCfg in pairs(self.db.profile.units) do
+			if( unitCfg.auraIndicators ) then
+				unitCfg.auraIndicators["filter-boss"] = nil
+			end
+		end
+
+		if( self.db.profile.auraColors and not self.db.profile.auraColors.dispel ) then
+			self.db.profile.auraColors.dispel = {
+				Magic = {r = 0.2, g = 0.6, b = 1},
+				Curse = {r = 0.6, g = 0, b = 1},
+				Disease = {r = 0.6, g = 0.4, b = 0},
+				Poison = {r = 0, g = 0.6, b = 0},
+				Bleed = {r = 0.8, g = 0, b = 0},
+				Enrage = {r = 1, g = 0.6, b = 0},
+			}
+		end
+
+		-- Merge the zone whitelists/blacklists into the custom filters — same data, one creation UI, zone assignments just point at the unified lists now
+		local filters = self.db.profile.filters
+		local customs = self.db.profile.customFilters
+		if( filters and customs ) then
+			local renames = {}
+			local function migrateLists(lists, mode)
+				if( not lists ) then return end
+				for name, list in pairs(lists) do
+					local target = name
+					while( customs[target] ) do target = target .. "*" end
+
+					local spells = {}
+					for key in pairs(list) do
+						local spellID = tonumber(key)
+						if( spellID ) then spells[spellID] = true end
+					end
+
+					customs[target] = { mode = mode, spells = spells }
+					renames[mode .. name] = target
+				end
+			end
+			migrateLists(filters.whitelists, "include")
+			migrateLists(filters.blacklists, "exclude")
+
+			if( filters.zonewhite ) then
+				for slot, name in pairs(filters.zonewhite) do
+					filters.zonewhite[slot] = renames["include" .. name]
+				end
+			end
+			if( filters.zoneblack ) then
+				for slot, name in pairs(filters.zoneblack) do
+					filters.zoneblack[slot] = renames["exclude" .. name]
+				end
+			end
+
+			filters.whitelists = nil
+			filters.blacklists = nil
+		end
+	end
 	if (revision <= 62 ) then
 		-- evoker setup
 		self.db.profile.classColors.EVOKER = {r = 0.20, g = 0.58, b = 0.50}
@@ -511,6 +632,9 @@ function ShadowUF:LoadUnitDefaults()
 	for _, unit in pairs(self.unitList) do
 		self.defaults.profile.positions[unit] = {point = "", relativePoint = "", anchorPoint = "", anchorTo = "UIParent", x = 0, y = 0}
 
+		-- Aura APIs reject compound unit tokens, their aura frames default to disabled (same boundary as the Auras tab)
+		local aurasBlocked = self.fakeUnits[unit] and unit ~= "targettarget" and unit ~= "focustarget"
+
 		-- The reason why the defaults are so sparse, is because the layout needs to specify most of this. The reason I set tables here is basically
 		-- as an indication that hey, the unit wants this, if it doesn't that it won't want it.
 		self.defaults.profile.units[unit] = {
@@ -534,20 +658,20 @@ function ShadowUF:LoadUnitDefaults()
 			auraIndicators = {enabled = false},
 			auras = {
 				buffs = {
-					[1] = {enabled = true, temporary = (unit == "player"), clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "ALL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[2] = {enabled = false, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "PLAYER", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[3] = {enabled = false, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "RAID", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[4] = {enabled = false, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "BIG_DEFENSIVE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[5] = {enabled = false, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "EXTERNAL_DEFENSIVE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[6] = {enabled = false, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "IMPORTANT", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[1] = {enabled = not aurasBlocked, temporary = (unit == "player"), clickThrough = false, disableRemovableColor = false, filter = "ALL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[2] = {enabled = false, clickThrough = false, disableRemovableColor = false, filter = "PLAYER", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[3] = {enabled = false, clickThrough = false, disableRemovableColor = false, filter = "RAID", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[4] = {enabled = false, clickThrough = false, disableRemovableColor = false, filter = "BIG_DEFENSIVE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[5] = {enabled = false, clickThrough = false, disableRemovableColor = false, filter = "EXTERNAL_DEFENSIVE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[6] = {enabled = false, clickThrough = false, disableRemovableColor = false, filter = "IMPORTANT", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 				},
 				debuffs = {
-					[1] = {enabled = true, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "ALL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[2] = {enabled = false, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "PLAYER", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[3] = {enabled = false, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "RAID_PLAYER_DISPELLABLE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[4] = {enabled = false, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "RAID", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[5] = {enabled = false, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "CROWD_CONTROL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[6] = {enabled = false, clickThrough = false, disableRemovableColor = false, useFilter = false, filter = "IMPORTANT", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[1] = {enabled = not aurasBlocked, clickThrough = false, disableRemovableColor = false, filter = "ALL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[2] = {enabled = false, clickThrough = false, disableRemovableColor = false, filter = "PLAYER", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[3] = {enabled = false, clickThrough = false, disableRemovableColor = false, filter = "RAID_PLAYER_DISPELLABLE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[4] = {enabled = false, clickThrough = false, disableRemovableColor = false, filter = "RAID", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[5] = {enabled = false, clickThrough = false, disableRemovableColor = false, filter = "CROWD_CONTROL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[6] = {enabled = false, clickThrough = false, disableRemovableColor = false, filter = "IMPORTANT", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
 				},
 				-- Boss debuffs (Private Auras) - player only
 				bossDebuffs = {enabled = false, size = 32, perRow = 3, maxRows = 1, anchorPoint = "CENTER", x = 0, y = 0, showCooldown = true, showCooldownNumbers = true},
@@ -820,7 +944,8 @@ end
 function ShadowUF:FireModuleEvent(event, frame, unit)
 	for _, module in pairs(self.moduleOrder) do
 		if( module[event] ) then
-			module[event](module, frame, unit)
+			-- Errors still hit the error handler, but a broken module doesn't starve the others of their layout/enable events anymore
+			xpcall(module[event], CallErrorHandler, module, frame, unit)
 		end
 	end
 end
@@ -844,9 +969,65 @@ function ShadowUF:ProfileReset()
 	resetTimer:Show()
 end
 
+-- Options paths that end in protected calls queue their apply step here, coalesced by key
+local regenWatcher
+function ShadowUF:DeferUntilRegen(key, callback, message)
+	if( not regenWatcher ) then
+		regenWatcher = CreateFrame("Frame")
+		regenWatcher.pending = {}
+		regenWatcher:SetScript("OnEvent", function(watcher)
+			watcher:UnregisterEvent("PLAYER_REGEN_ENABLED")
+			local pending = watcher.pending
+			watcher.pending = {}
+			for _, pendingCallback in pairs(pending) do
+				pendingCallback()
+			end
+		end)
+	end
+	if( not regenWatcher.pending[key] and message ) then
+		self:Print(message)
+	end
+	regenWatcher.pending[key] = callback
+	regenWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+end
+
+local profileChangeWatcher
 function ShadowUF:ProfilesChanged()
 	if( self.layoutImporting ) then return end
+	-- Rebuilding every frame goes through protected calls, replay the whole thing at regen
+	if( InCombatLockdown() ) then
+		if( not profileChangeWatcher ) then
+			profileChangeWatcher = CreateFrame("Frame")
+			profileChangeWatcher:SetScript("OnEvent", function(watcher)
+				watcher:UnregisterEvent("PLAYER_REGEN_ENABLED")
+				ShadowUF:ProfilesChanged()
+			end)
+		end
+		if( not profileChangeWatcher:IsEventRegistered("PLAYER_REGEN_ENABLED") ) then
+			profileChangeWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+			self:Print(L["Profile changes will be applied after combat."])
+		end
+		return
+	end
 	if( resetTimer ) then resetTimer:Hide() end
+
+	-- Unlock and test modes never survive a profile switch, the new profile always starts locked
+	local movers = self.modules.movers
+	if( movers ) then
+		if( movers.isEnabled ) then
+			movers:Disable(true)
+		elseif( movers.testModeUnits and next(movers.testModeUnits) ) then
+			local snapshot = {}
+			for unitType in pairs(movers.testModeUnits) do snapshot[unitType] = true end
+			for unitType in pairs(snapshot) do
+				movers:DisableTestMode(unitType, true)
+			end
+		end
+	end
+	self.db.profile.locked = true
+	for _, unitCfg in pairs(self.db.profile.units) do
+		if( unitCfg.auras ) then unitCfg.auras.testMode = nil end
+	end
 
 	self.db:RegisterDefaults(self.defaults)
 
@@ -859,6 +1040,7 @@ function ShadowUF:ProfilesChanged()
 	end
 
 	self.db.profile.revision = self.dbRevision
+	self:ApplyAuraSpellIDsCVar()
 
 	self:FireModuleEvent("OnProfileChange")
 	self:LoadUnits()
@@ -866,6 +1048,10 @@ function ShadowUF:ProfilesChanged()
 	self.Layout:CheckMedia()
 	self.Units:ProfileChanged()
 	self.modules.movers:Update()
+
+	-- The reset path runs deferred, an open config dialog has already refreshed against the pre-layout state
+	local ACR = LibStub("AceConfigRegistry-3.0", true)
+	if( ACR ) then ACR:NotifyChange("ShadowedUF") end
 end
 
 ShadowUF.noop = function() end
@@ -929,9 +1115,20 @@ end
 local function hideBlizzardFrames(...)
 	for i=1, select("#", ...) do
 		local frame = select(i, ...)
-		UnregisterUnitWatch(frame)
+		-- Unit watch state lives on a protected manager, always blocked in combat regardless of the frame
+		if( InCombatLockdown() ) then
+			ShadowUF:DeferUntilRegen(frame, function()
+				UnregisterUnitWatch(frame)
+				frame:Hide()
+				frame:SetParent(ShadowUF.hiddenFrame)
+			end)
+		else
+			UnregisterUnitWatch(frame)
+		end
 		frame:UnregisterAllEvents()
-		frame:Hide()
+		if( not InCombatLockdown() or not frame:IsProtected() ) then
+			frame:Hide()
+		end
 
 		if( frame.manabar ) then frame.manabar:UnregisterAllEvents() end
 		if( frame.healthbar ) then frame.healthbar:UnregisterAllEvents() end

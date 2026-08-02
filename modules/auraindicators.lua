@@ -1,7 +1,7 @@
-local Indicators = {}
+﻿local Indicators = {}
 ShadowUF:RegisterModule(Indicators, "auraIndicators", ShadowUF.L["Aura indicators"])
 
-Indicators.auraFilters = {"boss", "curable"}
+Indicators.auraFilters = {"curable"}
 
 local GetSpellTexture = C_Spell.GetSpellTexture
 
@@ -58,11 +58,14 @@ Indicators.whitelistedSpells = {
 	[194384] = { name = "Atonement", group = "Priest" },
 	[431381] = { name = "Dawnlight", group = "Priest" },
 	[1253593]= { name = "Void Shield", group = "Priest" },
+	[1300008]= { name = "Power Word: Shield (Unfolding Vision)", group = "Priest" },
+	[1300009]= { name = "Void Shield (Unfolding Vision)", group = "Priest" },
 	-- Monk
 	[115175] = { name = "Soothing Mist", group = "Monk" },
 	[119611] = { name = "Renewing Mist", group = "Monk" },
 	[124682] = { name = "Enveloping Mist", group = "Monk" },
 	[450769] = { name = "Aspect of Harmony", group = "Monk" },
+	[1292922]= { name = "Coalescence", group = "Monk" },
 	-- Shaman
 	[974]    = { name = "Earth Shield", group = "Shaman" },
 	[20608]  = { name = "Reincarnation", group = "Shaman" },
@@ -156,12 +159,15 @@ function Indicators:OnEnable(frame)
 
 	-- Of course, watch for auras
 	frame:RegisterUnitEvent("UNIT_AURA", self, "UpdateAuras")
+	-- UNIT_FACTION re-runs the slot mute gate when reaction flips without a unit change (mind control, duels)
+	frame:RegisterUnitEvent("UNIT_FACTION", self, "UpdateAuras")
 	frame:RegisterUpdateFunc(self, "UpdateAuras")
 end
 
 function Indicators:OnDisable(frame)
 	frame:UnregisterAll(self)
 	frame.auraIndicators:Hide()
+	self:DisableIndicatorSlots(frame)
 end
 
 function Indicators:OnLayoutApplied(frame)
@@ -207,6 +213,23 @@ function Indicators:OnLayoutApplied(frame)
 		indicator:SetWidth(indicatorConfig.width)
 		indicator.texture:SetHeight(indicatorConfig.height - 1)
 
+		if( not indicator.border ) then
+			indicator.border = indicator:CreateTexture(nil, "OVERLAY", nil, 1)
+			indicator.border:SetPoint("CENTER", indicator)
+		end
+		indicator.border:SetWidth(indicatorConfig.width + 1)
+		indicator.border:SetHeight(indicatorConfig.height + 1)
+		local borderType = ShadowUF.db.profile.auras.borderType
+		if( borderType == "blizzard" ) then
+			indicator.border:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
+			indicator.border:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
+		elseif( borderType ~= "" ) then
+			indicator.border:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. borderType)
+			indicator.border:SetTexCoord(0, 1, 0, 1)
+		end
+		indicator.border:SetVertexColor(0.6, 0.6, 0.6)
+		indicator.border:Hide()
+
 		ShadowUF.Layout:AnchorFrame(frame, indicator, indicatorConfig)
 
 		-- Let the auras module quickly access indicators without having to use index
@@ -214,6 +237,9 @@ function Indicators:OnLayoutApplied(frame)
 
 		id = id + 1
 	end
+
+	-- Combat slots anchor onto the indicator frames created above
+	self:BuildIndicatorSlots(frame)
 end
 
 local playerClass = select(2, UnitClass("player"))
@@ -221,15 +247,18 @@ local filterMap = {}
 local canCure = ShadowUF.Units.canCure
 for _, key in pairs(Indicators.auraFilters) do filterMap[key] = "filter-" .. key end
 
-local function checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
+local function checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, auraInstanceID)
 	local category
 	if( isFriendly and canCure[auraType] and type == "debuffs" ) then
 		category = "curable"
-	elseif( isBossDebuff ) then
-		category = "boss"
-	else
-		return
+	elseif( not isFriendly and type == "buffs" and auraInstanceID ) then
+		-- Purgeable/soothable buffs on the hostile side, same token as the combat slot
+		local ok, filteredOut = pcall(C_UnitAuras.IsAuraFilteredOutByInstanceID, frame.unit, auraInstanceID, "HELPFUL|RAID_PLAYER_DISPELLABLE")
+		if( ok and not issecretvalue(filteredOut) and not filteredOut ) then
+			category = "curable"
+		end
 	end
+	if( not category ) then return end
 
 	local applied = false
 
@@ -317,8 +346,9 @@ local function scanAuras(frame, filter, type)
 
 	for i = 2, #slots do
 		local index = slots[i]
-		local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, index)
-		if( auraData ) then
+		-- Slot-based access errors while auras are secret, skip silently
+		local okData, auraData = pcall(C_UnitAuras.GetAuraDataBySlot, frame.unit, index)
+		if( okData and auraData ) then
 			-- 12.0: pcall to silently skip secret auras in combat.
 			-- Whitelisted spells (non-secret) pass through; secret auras error
 			-- on boolean tests (e.g. "if auraData.name then") and are caught here.
@@ -337,7 +367,7 @@ local function scanAuras(frame, filter, type)
 					local canApplyAura = auraData.canApplyAura
 					local isBossDebuff = auraData.isBossAura
 
-					local result = checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
+					local result = checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, auraData.auraInstanceID)
 					if( not result ) then
 						checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
 					end
@@ -348,6 +378,340 @@ local function scanAuras(frame, filter, type)
 			end)
 		end
 	end
+end
+
+--No more slot iteration in combat, so each configured indicator aura is fetched directly by spell ID or name instead
+--These direct lookups only resolve whitelisted spells, but for those they keep working in combat
+--Safe to run after scanAuras (anything the scan already displayed is skipped by checkSpecificAura's priority guard)
+local function scanConfiguredAuras(frame)
+	if( not Indicators.auraConfig ) then return end
+
+	for key in pairs(Indicators.auraConfig) do
+		local spellID = tonumber(key)
+		local okData, auraData
+		if( spellID ) then
+			okData, auraData = pcall(C_UnitAuras.GetUnitAuraBySpellID, frame.unit, spellID)
+		else
+			okData, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, frame.unit, key, "HELPFUL")
+			if( not okData or not auraData ) then
+				okData, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, frame.unit, key, "HARMFUL")
+			end
+		end
+
+		if( okData and auraData ) then
+			-- Whitelisted spells return real data, pcall covers stray secrets
+			pcall(function()
+				if( auraData.name ) then
+					-- The type arg is unused by checkSpecificAura, best-effort only
+					local aType = auraData.isHarmful and "debuffs" or "buffs"
+					checkSpecificAura(frame, aType, auraData.name, auraData.icon, auraData.applications, auraData.dispelName, auraData.duration, auraData.expirationTime, auraData.sourceUnit, auraData.isStealable, auraData.nameplateShowPersonal, auraData.spellId, auraData.canApplyAura, auraData.isBossAura)
+					auraList[auraData.name] = true
+					if( auraData.spellId ) then auraList[tostring(auraData.spellId)] = true end
+				end
+			end)
+		end
+	end
+end
+
+-- Healer HoTs aren't whitelisted, so the point-query channel loses them in combat
+-- Fallback is one AuraSlot per spellID-keyed indicator aura, Blizzard matches the spell and we never read aura data
+-- HELPFUL only, the gate ignores spell filters on secret harmful auras (the slot would show any debuff)
+-- Slots show whenever auras are secret, even out of combat (M+/encounters/PvP)
+-- No dungeon enter/leave event, PLAYER_REGEN_DISABLED covers the pre-lockdown Show and regen + UpdateAuras handle the rest
+local slotContainerFrames = {}
+local pendingSlotBuilds = {}
+local slotCombatWatcher
+
+local function aurasAreSecret()
+	local auras = ShadowUF.modules.auras
+	return auras and auras.AurasAreSecret and auras.AurasAreSecret() or false
+end
+
+local function updateSlotVisibility(frame)
+	local container = frame.auraIndicators and frame.auraIndicators.slotContainer
+	if( not container ) then return end
+
+	if( aurasAreSecret() and frame:IsVisible() ) then
+		pcall(container.Show, container)
+	else
+		pcall(container.Hide, container)
+	end
+end
+
+local function ensureSlotCombatWatcher()
+	if( slotCombatWatcher ) then return end
+	slotCombatWatcher = CreateFrame("Frame")
+	slotCombatWatcher:RegisterEvent("PLAYER_REGEN_DISABLED")
+	slotCombatWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+	slotCombatWatcher:SetScript("OnEvent", function(_, event)
+		local show = event == "PLAYER_REGEN_DISABLED"
+		if( not show ) then
+			for frame in pairs(pendingSlotBuilds) do
+				pendingSlotBuilds[frame] = nil
+				if( frame.auraIndicators ) then
+					Indicators:BuildIndicatorSlots(frame)
+				end
+			end
+		end
+		for frame in pairs(slotContainerFrames) do
+			local container = frame.auraIndicators and frame.auraIndicators.slotContainer
+			if( container ) then
+				if( show and frame:IsVisible() ) then
+					pcall(container.Show, container)
+				elseif( not show ) then
+					updateSlotVisibility(frame)
+				end
+			end
+		end
+	end)
+end
+
+local function retireIndicatorSlots(frame)
+	local container = frame.auraIndicators and frame.auraIndicators.slotContainer
+	if( container ) then
+		container:SetEnabled(false)
+		if( not InCombatLockdown() ) then container:Hide() end
+		frame.auraIndicators.slotContainer = nil
+	end
+	if( frame.auraIndicators ) then
+		frame.auraIndicators.slotIdentity = nil
+		frame.auraIndicators.slotRecords = nil
+		frame.auraIndicators.slotsAssist = nil
+	end
+	slotContainerFrames[frame] = nil
+end
+
+function Indicators:DisableIndicatorSlots(frame)
+	pendingSlotBuilds[frame] = nil
+	retireIndicatorSlots(frame)
+end
+
+
+-- Swapped in place of a slot's candidate filters to mute it, an empty include set can never match an aura and dispel type candidates ignore the identity gate.
+-- A HARMFUL|HELPFUL filter string matches everything rather than nothing, so muting must go through candidate filters.
+local MUTE_CANDIDATES = { includeDispelTypes = {} }
+
+-- UnitCanAssist can return secret booleans on restricted maps like UnitIsUnit does, the reaction pair never does
+local function resolveAssist(unit)
+	local ok, assist = pcall(UnitCanAssist, "player", unit)
+	if( ok and not issecretvalue(assist) ) then
+		return assist and true or false
+	end
+	return (UnitIsFriend(unit, "player") and not UnitIsEnemy(unit, "player")) and true or false
+end
+
+-- Slot button styling; anchoring happens here too since the button is forbidden after creation whenever auras are secret (M+ reload included)
+local function makeIndicatorSlotStyler(display)
+	return function(button)
+		if( display.anchorTo ) then
+			button:ClearAllPoints()
+			button:SetAllPoints(display.anchorTo)
+		end
+		if( display.frameLevel ) then
+			button:SetFrameLevel(display.frameLevel)
+		end
+
+		local texture = button:CreateTexture(nil, "OVERLAY")
+		texture:SetAllPoints(button)
+		if( display.icon ) then
+			texture:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+			pcall(button.SetIcon, button, texture)
+
+			local borderType = ShadowUF.db.profile.auras.borderType
+			if( borderType == "blizzard" ) then
+				local dispel = button:CreateTexture(nil, "OVERLAY", nil, 1)
+				dispel:SetPoint("TOPLEFT", button, -1, 1)
+				dispel:SetPoint("BOTTOMRIGHT", button, 1, -1)
+				pcall(button.SetAuraBorder, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.BorderWithIcon or 1, showWhenHarmful = true, showWhenHelpful = true })
+			elseif( borderType ~= "" ) then
+				local border = button:CreateTexture(nil, "OVERLAY")
+				border:SetPoint("TOPLEFT", button, -1, 1)
+				border:SetPoint("BOTTOMRIGHT", button, 1, -1)
+				border:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. borderType)
+				border:SetVertexColor(0.6, 0.6, 0.6)
+
+				local dispel = button:CreateTexture(nil, "OVERLAY", nil, 1)
+				dispel:SetPoint("TOPLEFT", button, -1, 1)
+				dispel:SetPoint("BOTTOMRIGHT", button, 1, -1)
+				dispel:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. borderType)
+				pcall(button.SetAuraBorder, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, customDispelColorMap = ShadowUF.modules.auras.GetDispelColorMap and ShadowUF.modules.auras:GetDispelColorMap() or nil })
+			end
+		else
+			texture:SetColorTexture(display.r or 1, display.g or 1, display.b or 1)
+		end
+
+		if( display.duration ) then
+			local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+			cooldown:SetAllPoints(button)
+			cooldown:SetReverse(true)
+			cooldown:SetHideCountdownNumbers(true)
+			pcall(button.SetDurationCooldown, button, cooldown)
+		end
+
+		if( display.showStack ) then
+			local stack = button:CreateFontString(nil, "OVERLAY")
+			ShadowUF:SetFontAndShadow(stack, "Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", 10, "OUTLINE", 0, 0, 0, 1.0, 0.8, -0.8)
+			stack:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 1, 0)
+			stack:SetJustifyH("RIGHT")
+			pcall(button.SetApplicationCount, button, stack, {})
+		end
+
+		button:SetMouseMotionEnabled(false)
+	end
+end
+
+function Indicators:BuildIndicatorSlots(frame)
+	-- Container creation and slot styling are blocked under lockdown, the watcher replays queued builds at regen
+	if( InCombatLockdown() ) then
+		pendingSlotBuilds[frame] = true
+		ensureSlotCombatWatcher()
+		return
+	end
+	pendingSlotBuilds[frame] = nil
+
+	local auras = ShadowUF.modules.auras
+	if( not (auras and auras.hasContainers) ) then return end
+
+	local unitConfig = ShadowUF.db.profile.units[frame.unitType].auraIndicators
+	local tracked, categorySlots, signatureParts
+
+	if( unitConfig and unitConfig.enabled ) then
+		-- Collect spell ID-keyed indicator auras eligible for combat slots
+		for key in pairs(ShadowUF.db.profile.auraIndicators.auras) do
+			local spellID = tonumber(key)
+			local auraConfig = spellID and Indicators.auraConfig[key]
+			if( auraConfig and not auraConfig.missing
+				and not ShadowUF.db.profile.auraIndicators.disabled[playerClass][key]
+				and not unitConfig[auraConfig.group] ) then
+				local indicatorConfig = ShadowUF.db.profile.auraIndicators.indicators[auraConfig.indicator]
+				if( indicatorConfig and (indicatorConfig.friendly or indicatorConfig.hostile) and frame.auraIndicators[auraConfig.indicator] ) then
+					tracked = tracked or {}
+					signatureParts = signatureParts or {}
+					tracked[spellID] = auraConfig
+					table.insert(signatureParts, spellID .. "@" .. auraConfig.indicator .. "@" .. tostring(auraConfig.player) .. "@" .. tostring(auraConfig.icon) .. "@" .. tostring(auraConfig.duration) .. "@" .. tostring(indicatorConfig.showStack) .. "@" .. tostring(auraConfig.priority) .. "@" .. tostring(indicatorConfig.friendly) .. "@" .. tostring(indicatorConfig.hostile))
+				end
+			end
+		end
+
+		-- Category filters (boss/curable) can move to slots, the legacy scan feeding them is empty in combat and dispel-type/boolean candidate filters aren't identity-gated
+		for key, indicatorConfig in pairs(ShadowUF.db.profile.auraIndicators.indicators) do
+			local filters = ShadowUF.db.profile.auraIndicators.filters[key]
+			if( filters and (indicatorConfig.friendly or indicatorConfig.hostile) and frame.auraIndicators[key] ) then
+				for _, category in ipairs(Indicators.auraFilters) do
+					local filterCfg = filters[category]
+					local unitDisabled = unitConfig["filter-" .. category]
+					if( filterCfg and filterCfg.enabled and not unitDisabled ) then
+						categorySlots = categorySlots or {}
+						signatureParts = signatureParts or {}
+						table.insert(categorySlots, { key = key, category = category, duration = filterCfg.duration, showStack = indicatorConfig.showStack, priority = filterCfg.priority, friendly = indicatorConfig.friendly, hostile = indicatorConfig.hostile })
+						table.insert(signatureParts, "cat@" .. key .. "@" .. category .. "@" .. tostring(filterCfg.duration) .. "@" .. tostring(indicatorConfig.showStack) .. "@" .. tostring(filterCfg.priority) .. "@" .. tostring(indicatorConfig.friendly) .. "@" .. tostring(indicatorConfig.hostile))
+					end
+				end
+			end
+		end
+	end
+
+	-- Frames can't be deleted, only rebuild when the tracked set changed
+	local signature
+	if( signatureParts ) then
+		table.sort(signatureParts)
+		-- Border styling is frozen at slot creation
+		local auras = ShadowUF.modules.auras
+		local colorsKey = auras.GetDispelColorsKey and auras:GetDispelColorsKey() or ""
+		signature = ShadowUF.db.profile.auras.borderType .. "#" .. colorsKey .. "##" .. table.concat(signatureParts, ";")
+	end
+	if( frame.auraIndicators.slotContainer and frame.auraIndicators.slotSignature == signature ) then
+		pcall(frame.auraIndicators.slotContainer.SetUnit, frame.auraIndicators.slotContainer, frame.unit)
+		return
+	end
+
+	retireIndicatorSlots(frame)
+	frame.auraIndicators.slotSignature = signature
+	if( not tracked and not categorySlots ) then return end
+
+	local ok, container = pcall(CreateFrame, "AuraContainer", nil, frame.auraIndicators, "CustomAuraContainerTemplate")
+	if( not ok or not container ) then return end
+	container:SetPoint("TOPLEFT", frame.auraIndicators)
+	container:SetSize(1, 1)
+	container:Hide()
+
+	-- Overlapping slots of the same indicator stack and the configured priority drives the draw order
+	-- Each slot gets a 2-level band (button + its child cooldown) so a lower slot's swipe can never bleed through the icon drawn above it, even when priorities are equal (deterministic key tiebreak)
+	local descriptors = {}
+	if( tracked ) then
+		for spellID, auraConfig in pairs(tracked) do
+			local indicatorConfig = ShadowUF.db.profile.auraIndicators.indicators[auraConfig.indicator]
+			local candidateFilters = { includeSpellIDs = { [spellID] = true } }
+			if( auraConfig.player ) then
+				candidateFilters.isFromPlayerOrPlayerPet = true
+			end
+
+			-- Blizzard skips spell ID candidate filters for helpful auras on units we can't assist and for harmful ones on units we can (fail-open, every aura passes and lights the slot).
+			-- Each reaction side gets its own slot, only active where the filter is enforced, which also makes DoT tracking on enemies work (enforced there even for secret spells)
+			if( indicatorConfig.friendly ) then
+				table.insert(descriptors, {
+					indicator = auraConfig.indicator,
+					priority = auraConfig.priority or 0,
+					key = "spellh" .. spellID,
+					filter = "HELPFUL",
+					activeWhen = "assist",
+					display = { icon = auraConfig.icon, r = auraConfig.r, g = auraConfig.g, b = auraConfig.b, duration = auraConfig.duration, showStack = indicatorConfig.showStack },
+					options = { candidateFilters = candidateFilters },
+				})
+			end
+			if( indicatorConfig.hostile ) then
+				table.insert(descriptors, {
+					indicator = auraConfig.indicator,
+					priority = auraConfig.priority or 0,
+					key = "spelld" .. spellID,
+					filter = "HARMFUL",
+					activeWhen = "noassist",
+					display = { icon = auraConfig.icon, r = auraConfig.r, g = auraConfig.g, b = auraConfig.b, duration = auraConfig.duration, showStack = indicatorConfig.showStack },
+					options = { candidateFilters = candidateFilters },
+				})
+			end
+		end
+	end
+
+	if( categorySlots ) then
+		for _, slot in ipairs(categorySlots) do
+			if( slot.category == "curable" ) then
+				if( slot.friendly ) then
+					table.insert(descriptors, { indicator = slot.key, priority = slot.priority or 0, key = "curable-" .. slot.key, filter = "HARMFUL|RAID", activeWhen = "assist", display = { icon = true, duration = slot.duration, showStack = slot.showStack }, options = {} })
+				end
+				if( slot.hostile ) then
+					-- Purgeable/soothable buffs on the hostile side, the group-scoped token is the only one for helpful auras
+					table.insert(descriptors, { indicator = slot.key, priority = slot.priority or 0, key = "curableh-" .. slot.key, filter = "HELPFUL|RAID_PLAYER_DISPELLABLE", activeWhen = "noassist", display = { icon = true, duration = slot.duration, showStack = slot.showStack }, options = {} })
+				end
+			end
+		end
+	end
+
+	table.sort(descriptors, function(a, b)
+		if( a.indicator ~= b.indicator ) then return a.indicator < b.indicator end
+		if( a.priority ~= b.priority ) then return a.priority < b.priority end
+		return a.key < b.key
+	end)
+
+	local indicatorRank = {}
+	local slotRecords = {}
+	for _, descriptor in ipairs(descriptors) do
+		indicatorRank[descriptor.indicator] = (indicatorRank[descriptor.indicator] or 0) + 1
+		descriptor.display.anchorTo = frame.auraIndicators[descriptor.indicator]
+		descriptor.display.frameLevel = frame.topFrameLevel + 7 + indicatorRank[descriptor.indicator] * 2
+		descriptor.options.initializeFrame = makeIndicatorSlotStyler(descriptor.display)
+		if( pcall(container.AddAuraSlot, container, descriptor.key, descriptor.filter, descriptor.options) ) then
+			slotRecords[descriptor.key] = { candidates = descriptor.options.candidateFilters, activeWhen = descriptor.activeWhen }
+		end
+	end
+
+	pcall(container.SetUnit, container, frame.unit)
+	frame.auraIndicators.slotContainer = container
+	frame.auraIndicators.slotRecords = slotRecords
+	frame.auraIndicators.slotIdentity = nil
+	frame.auraIndicators.slotsAssist = nil
+	slotContainerFrames[frame] = true
+	ensureSlotCombatWatcher()
 end
 
 function Indicators:UpdateIndicators(frame)
@@ -364,10 +728,18 @@ function Indicators:UpdateIndicators(frame)
 			-- Show either the icon, or a solid color
 			if( indicator.showIcon and indicator.spellIcon ) then
 				indicator.texture:SetTexture(indicator.spellIcon)
+				indicator.texture:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 				indicator:SetBackdropColor(0, 0, 0, 0)
+				if( indicator.border and ShadowUF.db.profile.auras.borderType ~= "" ) then
+					indicator.border:Show()
+				end
 			else
 				indicator.texture:SetColorTexture(indicator.colorR, indicator.colorG, indicator.colorB)
+				indicator.texture:SetTexCoord(0, 1, 0, 1)
 				indicator:SetBackdropColor(0, 0, 0, 1)
+				if( indicator.border ) then
+					indicator.border:Hide()
+				end
 			end
 
 			-- Show aura stack
@@ -386,6 +758,46 @@ function Indicators:UpdateIndicators(frame)
 end
 
 function Indicators:UpdateAuras(frame)
+	-- Keep the slots on the current unit token and their visibility in sync with the restriction state
+	local slotContainer = frame.auraIndicators and frame.auraIndicators.slotContainer
+	if( slotContainer ) then
+		pcall(slotContainer.SetUnit, slotContainer, frame.unit)
+
+		-- Assist mirrors the exact boundary of Blizzard's candidate filter fail-open, so each slot only stays active on the side where its spell ID filter is enforced
+		if( frame.unit and not frame.configMode and frame.auraIndicators.slotRecords ) then
+			local assist = resolveAssist(frame.unit)
+			if( frame.auraIndicators.slotsAssist ~= assist ) then
+				frame.auraIndicators.slotsAssist = assist
+				for key, record in pairs(frame.auraIndicators.slotRecords) do
+					local active = not record.activeWhen or (record.activeWhen == "assist") == assist
+					pcall(slotContainer.SetAuraSlotCandidateFilters, slotContainer, key, active and record.candidates or MUTE_CANDIDATES)
+				end
+			end
+		end
+
+		-- SetUnit early-outs on an unchanged token, a same-token retarget would keep showing the old unit's auras forever.
+		-- Kick a refresh when the resolved identity changes, or on every event-driven update while it's secret (same pattern as Auras:UpdateContainers)
+		local identity
+		if( frame.unit and not ShadowUF.IsUnitIdentitySecret(frame.unit) ) then
+			local ok, guid = pcall(UnitGUID, frame.unit)
+			if( ok ) then identity = guid end
+		end
+		local kick
+		if( identity ~= nil ) then
+			kick = frame.auraIndicators.slotIdentity ~= identity
+		else
+			kick = not frame.pollingUpdate
+		end
+		frame.auraIndicators.slotIdentity = identity
+		if( kick ) then
+			pcall(slotContainer.UpdateAllAuras, slotContainer)
+		end
+
+		if( not InCombatLockdown() ) then
+			updateSlotVisibility(frame)
+		end
+	end
+
 	for k in pairs(auraList) do auraList[k] = nil end
 	for key, config in pairs(ShadowUF.db.profile.auraIndicators.indicators) do
 		local indicator = frame.auraIndicators[key]
@@ -406,11 +818,19 @@ function Indicators:UpdateAuras(frame)
 		return
 	end
 
-	-- Scan auras
+	-- Scan auras (category indicators, empty in combat)
 	scanAuras(frame, "HELPFUL", "buffs")
 	scanAuras(frame, "HARMFUL", "debuffs")
 
+	-- Point-query configured auras (works in combat for non-secret spells)
+	scanConfiguredAuras(frame)
+
 	-- Check for any indicators that are triggered due to something missing
+	-- No point flagging a missing buff on a unit we can't even buff (RP NPCs, hostiles)
+	if( not resolveAssist(frame.unit) ) then
+		self:UpdateIndicators(frame)
+		return
+	end
 	for name in pairs(ShadowUF.db.profile.auraIndicators.missing) do
 		if( not auraList[name] and self.auraConfig[name] ) then
 			local aura = self.auraConfig[name]

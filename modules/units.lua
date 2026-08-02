@@ -486,7 +486,8 @@ end
 
 -- More fun with sorting, due to sorting magic we have to check if we want to create stuff when the frame changes of partys too
 local function createChildUnits(self)
-	if( not self.unitID ) then return end
+	-- The party placeholder slot mirrors the player, its child tokens (partypet5, party5targettarget) never resolve
+	if( not self.unitID or self.placeholderUnit ) then return end
 
 	for child, parentUnit in pairs(childUnits) do
 		if( parentUnit == self.unitType and ShadowUF.db.profile.units[child].enabled ) then
@@ -509,7 +510,14 @@ end
 
 local function createFakeUnitUpdateTimer(frame)
 	if( not frame.updateTimer ) then
-		frame.updateTimer = C_Timer.NewTicker(0.5, function() if( UnitExists(frame.unit) ) then frame:FullUpdate() end end)
+		-- Flagged so consumers can tell a routine poll from an event-driven update (aura containers only rebuild on real identity changes)
+		frame.updateTimer = C_Timer.NewTicker(0.5, function()
+			if( UnitExists(frame.unit) ) then
+				frame.pollingUpdate = true
+				frame:FullUpdate()
+				frame.pollingUpdate = nil
+			end
+		end)
 	end
 end
 
@@ -591,26 +599,29 @@ OnAttributeChanged = function(self, name, unit)
 			self:SetAttribute("disableVehicleSwap", ShadowUF.db.profile.units.party.disableVehicle)
 		end
 
-		-- Logged out in a vehicle
-		if( UnitHasVehicleUI(self.unitRealOwner) and UnitHasVehiclePlayerFrameUI(self.unitRealOwner) ) then
-			self:SetAttribute("unitIsVehicle", true)
-		end
-
-		-- Hide any pet that became a vehicle, we detect this by the owner being untargetable but they have a pet out
-		stateMonitor:WrapScript(self, "OnAttributeChanged", [[
-			if( name == "state-vehicleupdated" ) then
-				self:SetAttribute("unitIsVehicle", UnitHasVehicleUI(self:GetAttribute("unitRealOwner")) and value == "vehicle" and true or false)
-			elseif( name == "disablevehicleswap" or name == "state-unitexists" or name == "unitisvehicle" ) then
-				-- Unit does not exist, OR unit is a vehicle and vehicle swap is not disabled, hide frame
-				if( not self:GetAttribute("state-unitexists") or ( self:GetAttribute("unitIsVehicle") and not self:GetAttribute("disableVehicleSwap") ) ) then
-					self:Hide()
-				-- Unit exists, show it
-				else
-					self:Show()
-				end
+		-- Vehicle handling needs a resolvable owner, leftover ghost pets from the party placeholder slot have none
+		if( self.unitRealOwner ) then
+			-- Logged out in a vehicle
+			if( UnitHasVehicleUI(self.unitRealOwner) and UnitHasVehiclePlayerFrameUI(self.unitRealOwner) ) then
+				self:SetAttribute("unitIsVehicle", true)
 			end
-		]])
-		RegisterStateDriver(self, "vehicleupdated", string.format("[target=%s, nohelp, noharm] vehicle; pet", self.unitRealOwner, self.unit))
+
+			-- Hide any pet that became a vehicle, we detect this by the owner being untargetable but they have a pet out
+			stateMonitor:WrapScript(self, "OnAttributeChanged", [[
+				if( name == "state-vehicleupdated" ) then
+					self:SetAttribute("unitIsVehicle", UnitHasVehicleUI(self:GetAttribute("unitRealOwner")) and value == "vehicle" and true or false)
+				elseif( name == "disablevehicleswap" or name == "state-unitexists" or name == "unitisvehicle" ) then
+					-- Unit does not exist, OR unit is a vehicle and vehicle swap is not disabled, hide frame
+					if( not self:GetAttribute("state-unitexists") or ( self:GetAttribute("unitIsVehicle") and not self:GetAttribute("disableVehicleSwap") ) ) then
+						self:Hide()
+					-- Unit exists, show it
+					else
+						self:Show()
+					end
+				end
+			]])
+			RegisterStateDriver(self, "vehicleupdated", string.format("[target=%s, nohelp, noharm] vehicle; pet", self.unitRealOwner, self.unit))
+		end
 
 	-- Automatically do a full update on target change
 	elseif( self.unit == "target" ) then
@@ -675,13 +686,15 @@ OnAttributeChanged = function(self, name, unit)
 		if( self.unitRealType == "partytarget" ) then
 			self.unitRealOwner = ShadowUF.partyUnits[self.unitID]
 		elseif( self.unitRealType == "partytargettarget" ) then
-			self.unitRealOwner = ShadowUF.partyUnits[self.unitID] .. "target"
+			local owner = ShadowUF.partyUnits[self.unitID]
+			self.unitRealOwner = owner and (owner .. "target")
 		elseif( self.unitRealType == "raid" ) then
 			self.unitRealOwner = ShadowUF.raidUnits[self.unitID]
 		elseif( self.unitRealType == "arenatarget" ) then
 			self.unitRealOwner = ShadowUF.arenaUnits[self.unitID]
 		elseif( self.unitRealType == "arenatargettarget" ) then
-			self.unitRealOwner = ShadowUF.arenaUnits[self.unitID] .. "target"
+			local owner = ShadowUF.arenaUnits[self.unitID]
+			self.unitRealOwner = owner and (owner .. "target")
 		elseif( self.unit == "focustarget" ) then
 			self.unitRealOwner = "focus"
 			self:RegisterNormalEvent("PLAYER_FOCUS_CHANGED", Units, "CheckUnitStatus")
@@ -767,7 +780,11 @@ end
 -- Create the generic things that we want in every secure frame regardless if it's a button or a header
 local function ClassToken(self)
 	if( not self.unit or not UnitExists(self.unit) ) then return nil end
-	return (select(2, UnitClass(self.unit)))
+	local class = select(2, UnitClass(self.unit))
+	-- Secret when the unit's identity is secret (target/focus/boss in combat), callers index color tables with it so treat as unknown
+	-- issecretvalue first, even a boolean test on a secret is an error
+	if( issecretvalue and issecretvalue(class) ) then return nil end
+	return class
 end
 
 local function ArenaClassToken(self)

@@ -1,4 +1,4 @@
-local Health = {}
+﻿local Health = {}
 ShadowUF:RegisterModule(Health, "healthBar", ShadowUF.L["Health bar"], true)
 
 local function getGradientColor(unit)
@@ -46,82 +46,156 @@ end
 
 Health.getGradientColor = getGradientColor
 
--- Shared dispel aura scan cache
-local _dispelCache = setmetatable({}, {__mode = "k"})
+-- A hidden AuraSlot drives a colored overlay stretched over the health bar when a player-dispellable debuff is up
+-- Blizzard handle the rest, we never read aura data
+local function containersAvailable()
+	local auras = ShadowUF.modules.auras
+	return auras and auras.hasContainers
+end
 
-function Health.ScanDispellableAura(frame)
-	local now = GetTime()
-	local cached = _dispelCache[frame]
-	if cached and cached.time == now then
-		return cached.unit, cached.auraInstanceID
+local pendingDispelSlots = {}
+local dispelRegenWatcher
+local function queueDispelSlot(frame)
+	pendingDispelSlots[frame] = true
+	if( not dispelRegenWatcher ) then
+		dispelRegenWatcher = CreateFrame("Frame")
+		dispelRegenWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+		dispelRegenWatcher:SetScript("OnEvent", function()
+			for pendingFrame in pairs(pendingDispelSlots) do
+				pendingDispelSlots[pendingFrame] = nil
+				Health:UpdateDispelSlot(pendingFrame)
+			end
+		end)
+	end
+end
+
+-- Each mode flips between debuffs on units we can assist and purgeable/soothable buffs on the rest.
+-- There is no player-scoped token for buffs, harmful+raid for debuffs
+local DISPEL_FILTERS = {
+	PLAYER_DISPELLABLE = { assist = "HARMFUL|RAID", noassist = "HELPFUL|RAID_PLAYER_DISPELLABLE" },
+	RAID_PLAYER_DISPELLABLE = { assist = "HARMFUL|RAID_PLAYER_DISPELLABLE", noassist = "HELPFUL|RAID_PLAYER_DISPELLABLE" },
+	DISPELLABLE = { assist = "HARMFUL|DISPELLABLE", noassist = "HELPFUL|DISPELLABLE" },
+}
+
+-- Old configs stored a boolean, true was the player-scoped behavior
+local function getDispelFilters(value)
+	if( value == true ) then value = "PLAYER_DISPELLABLE" end
+	return value and DISPEL_FILTERS[value]
+end
+Health.GetDispelFilters = getDispelFilters
+
+-- UnitCanAssist can return secret booleans on restricted maps, nil means unreadable
+local function isUnitAssist(unit)
+	local ok, assist = pcall(UnitCanAssist, "player", unit)
+	if( not ok or issecretvalue(assist) ) then return nil end
+	return assist and true or false
+end
+Health.IsUnitAssist = isUnitAssist
+
+local function createDispelSlot(frame, dispelFilter)
+	if( frame.healthBar.dispelSlot ) then return true end
+	-- AuraContainer creation is a Lua error in combat, retry after regen
+	if( InCombatLockdown() ) then
+		queueDispelSlot(frame)
+		return false
 	end
 
-	if not _dispelCache[frame] then _dispelCache[frame] = {} end
-	_dispelCache[frame].time = now
-	_dispelCache[frame].unit = nil
-	_dispelCache[frame].auraInstanceID = nil
+	pcall(function()
+		local container = CreateFrame("AuraContainer", nil, frame.healthBar, "CustomAuraContainerTemplate")
+		container:SetPoint("TOPLEFT", frame.healthBar)
+		container:SetSize(1, 1)
 
-	if not UnitIsFriend(frame.unit, "player") then return nil, nil end
-	if not UnitIsVisible(frame.unit) then return nil, nil end
-	if not C_UnitAuras or not C_UnitAuras.GetAuraDispelTypeColor then return nil, nil end
+		local slotButton = container:AddAuraSlot("dispel", dispelFilter, {
+			initializeFrame = function(button)
+				-- Anchoring must happen here, after creation the button is forbidden whenever auras are secret (M+ reload included)
+				button:ClearAllPoints()
+				button:SetAllPoints(frame.healthBar)
+				button:SetFrameLevel(frame.healthBar:GetFrameLevel() + 2)
 
-	local results = {pcall(C_UnitAuras.GetAuraSlots, frame.unit, "HARMFUL|RAID_PLAYER_DISPELLABLE")}
-	if not results[1] then return nil, nil end
+				local overlay = button:CreateTexture(nil, "OVERLAY")
+				-- Tint only the filled portion, anchoring to the status bar texture keeps the actual health amount readable
+				local fill = frame.healthBar.GetStatusBarTexture and frame.healthBar:GetStatusBarTexture()
+				overlay:SetAllPoints(fill or button)
+				overlay:SetTexture("Interface\\Buttons\\WHITE8X8")
+				-- Keep the health fill readable under the dispel tint
+				overlay:SetAlpha(0.5)
+				-- PreserveAsset tints our overlay texture by dispel type
+				pcall(button.SetAuraBorder, button, overlay, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, customDispelColorMap = ShadowUF.modules.auras.GetDispelColorMap and ShadowUF.modules.auras:GetDispelColorMap() or nil })
+				button:SetMouseMotionEnabled(false)
+			end,
+		})
 
-	for i = 3, #results do
-		local auraData = C_UnitAuras.GetAuraDataBySlot(frame.unit, results[i])
-		if auraData and auraData.auraInstanceID then
-			_dispelCache[frame].unit = frame.unit
-			_dispelCache[frame].auraInstanceID = auraData.auraInstanceID
-			return frame.unit, auraData.auraInstanceID
+		frame.healthBar.dispelSlot = container
+		frame.healthBar.dispelSlotFilter = dispelFilter
+		frame.healthBar.dispelColorsKey = ShadowUF.modules.auras.GetDispelColorsKey and ShadowUF.modules.auras:GetDispelColorsKey() or ""
+
+	end)
+	return frame.healthBar.dispelSlot ~= nil
+end
+
+function Health:UpdateDispelSlot(frame)
+	local filters = getDispelFilters(ShadowUF.db.profile.units[frame.unitType].healthBar.colorDispel)
+	if( not filters ) then
+		local container = frame.healthBar.dispelSlot
+		if( container ) then
+			container:SetEnabled(false)
+			if( not InCombatLockdown() ) then container:Hide() end
+		end
+		return
+	end
+
+	-- Border colors are frozen at creation, a palette change retires the slot so it gets rebuilt with the new colors (out of restrictions only)
+	local auras = ShadowUF.modules.auras
+	local colorsKey = auras.GetDispelColorsKey and auras:GetDispelColorsKey() or ""
+	if( frame.healthBar.dispelSlot and frame.healthBar.dispelColorsKey ~= colorsKey
+		and not InCombatLockdown() and not (auras.AurasAreSecret and auras.AurasAreSecret()) ) then
+		frame.healthBar.dispelSlot:SetEnabled(false)
+		frame.healthBar.dispelSlot:Hide()
+		frame.healthBar.dispelSlot = nil
+	end
+
+	if( not frame.healthBar.dispelSlot and not createDispelSlot(frame, filters.assist) ) then return end
+
+	local container = frame.healthBar.dispelSlot
+	local inCombat = InCombatLockdown()
+
+	-- Pick the side matching the unit's reaction, keep the current filter while it's unreadable
+	local dispelFilter = frame.healthBar.dispelSlotFilter or filters.assist
+	if( frame.unit and not frame.configMode ) then
+		local assist = isUnitAssist(frame.unit)
+		if( assist == true ) then
+			dispelFilter = filters.assist
+		elseif( assist == false ) then
+			dispelFilter = filters.noassist
 		end
 	end
 
-	return nil, nil
-end
-
--- ColorCurve for dispellable debuff health bar coloring
-local dispelColorCurve = nil
-
-local function getDispelColorCurve()
-	if dispelColorCurve then
-		return dispelColorCurve
+	-- Slot filter strings are runtime-mutable, mode and reaction switches apply live
+	if( frame.healthBar.dispelSlotFilter ~= dispelFilter ) then
+		if( pcall(container.SetAuraSlotFilterString, container, "dispel", dispelFilter) ) then
+			frame.healthBar.dispelSlotFilter = dispelFilter
+		end
 	end
-
-	if not C_CurveUtil or not C_CurveUtil.CreateColorCurve then
-		return nil
+	if( frame.unit and not frame.configMode ) then
+		local ok = pcall(container.SetUnit, container, frame.unit)
+		container:SetEnabled(ok and true or false)
+		if( ok ) then
+			if( not inCombat ) then container:Show() end
+			pcall(container.UpdateAllAuras, container)
+		elseif( not inCombat ) then
+			container:Hide()
+		end
+	else
+		container:SetEnabled(false)
+		if( not inCombat ) then container:Hide() end
 	end
-
-	local curve = C_CurveUtil.CreateColorCurve()
-	local E = Enum and Enum.AuraDispelType
-	local noneID = (E and E.None) or 0
-	local magicID = (E and E.Magic) or 1
-	local curseID = (E and E.Curse) or 2
-	local diseaseID = (E and E.Disease) or 3
-	local poisonID = (E and E.Poison) or 4
-	local bleedID = (E and E.Bleed) or 11
-
-	if curve.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step then
-		curve:SetType(Enum.LuaCurveType.Step)
-	end
-
-	-- Match DebuffTypeColor values
-	curve:AddPoint(noneID, CreateColor(0.8, 0, 0, 1))
-	curve:AddPoint(magicID, CreateColor(0.2, 0.6, 1, 1))
-	curve:AddPoint(curseID, CreateColor(0.6, 0, 1, 1))
-	curve:AddPoint(diseaseID, CreateColor(0.6, 0.4, 0, 1))
-	curve:AddPoint(poisonID, CreateColor(0, 0.6, 0, 1))
-	curve:AddPoint(bleedID, CreateColor(0.8, 0, 0, 1))  -- Bleed (Red)
-
-	dispelColorCurve = curve
-	return curve
 end
 
 function Health:OnEnable(frame)
 	if( not frame.healthBar ) then
 		frame.healthBar = ShadowUF.Units:CreateBar(frame)
 	end
-    
+
     -- ... (Listeners kept same)
 	frame:RegisterUnitEvent("UNIT_HEALTH", self, "Update")
 	frame:RegisterUnitEvent("UNIT_MAXHEALTH", self, "Update")
@@ -134,34 +208,45 @@ function Health:OnEnable(frame)
 		frame:RegisterUnitEvent("UNIT_POWER_UPDATE", self, "UpdateColor")
 	end
 
-	if ( ShadowUF.db.profile.units[frame.unitType].healthBar.colorDispel ) then
-		frame:RegisterUnitEvent("UNIT_AURA", self, "UpdateAura")
-		frame:RegisterUpdateFunc(self, "UpdateAura")
+	local colorDispel = ShadowUF.db.profile.units[frame.unitType].healthBar.colorDispel
+	if( containersAvailable() ) then
+		if( getDispelFilters(colorDispel) ) then
+			-- The slot self-updates, we only track unit identity
+			-- UNIT_FACTION re-runs the friendliness gate (MC, duels)
+			frame:RegisterUpdateFunc(self, "UpdateDispelSlot")
+			frame:RegisterUnitEvent("UNIT_FACTION", self, "UpdateDispelSlot")
+		elseif( frame.healthBar.dispelSlot ) then
+			-- Option turned off, silence the existing slot container
+			frame.healthBar.dispelSlot:SetEnabled(false)
+			if( not InCombatLockdown() ) then frame.healthBar.dispelSlot:Hide() end
+		end
 	end
-	
+
 	frame:RegisterUpdateFunc(self, "UpdateColor")
 	frame:RegisterUpdateFunc(self, "Update")
 end
 
 function Health:OnDisable(frame)
 	frame:UnregisterAll(self)
+	if( frame.healthBar and frame.healthBar.dispelSlot ) then
+		frame.healthBar.dispelSlot:SetEnabled(false)
+		frame.healthBar.dispelSlot:Hide()
+	end
 end
 
-function Health:UpdateAura(frame)
-	local hadDebuff = frame.healthBar.hasDebuffColor
-	frame.healthBar.hasDebuffColor = nil
+-- A secret class token can't index our color tables, but C_ClassColor.GetClassColor takes secrets and SetBlockColor does no arithmetic on r/g/b
+-- So the Blizzard palette color applies directly, custom profile class colors stay out-of-combat only
+local function applySecretClassColor(frame, unit)
+	if( not (C_ClassColor and C_ClassColor.GetClassColor and issecretvalue) ) then return false end
 
-	local unit, auraInstanceID = Health.ScanDispellableAura(frame)
-	if unit and auraInstanceID then
-		local curve = getDispelColorCurve()
-		if curve then
-			frame.healthBar.hasDebuffColor = C_UnitAuras.GetAuraDispelTypeColor(unit, auraInstanceID, curve)
-		end
-	end
+	local class = select(2, UnitClass(unit))
+	if( not issecretvalue(class) ) then return false end
 
-	if( hadDebuff ~= frame.healthBar.hasDebuffColor ) then
-		self:UpdateColor(frame)
-	end
+	local ok, classColor = pcall(C_ClassColor.GetClassColor, class)
+	if( not ok or not classColor ) then return false end
+
+	frame:SetBarColor("healthBar", classColor:GetRGB())
+	return true
 end
 
 function Health:UpdateColor(frame)
@@ -175,11 +260,6 @@ function Health:UpdateColor(frame)
 	if( not UnitIsConnected(unit) ) then
 		frame.healthBar.wasOffline = true
 		frame:SetBarColor("healthBar", ShadowUF.db.profile.healthColors.offline.r, ShadowUF.db.profile.healthColors.offline.g, ShadowUF.db.profile.healthColors.offline.b)
-		return
-	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorDispel and frame.healthBar.hasDebuffColor ) then
-		-- 12.0: Color from GetAuraDispelTypeColor (may contain secret RGB, accepted by SetVertexColor)
-		local r, g, b = frame.healthBar.hasDebuffColor:GetRGB()
-		frame:SetBarColor("healthBar", r, g, b)
 		return
 	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorAggro and UnitThreatSituation(frame.unit) == 3 ) then
 		frame:SetBarColor("healthBar", ShadowUF.db.profile.healthColors.aggro.r, ShadowUF.db.profile.healthColors.aggro.g, ShadowUF.db.profile.healthColors.aggro.b)
@@ -210,6 +290,9 @@ function Health:UpdateColor(frame)
 	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorType == "class" and (UnitIsPlayer(unit) or unit == "pet" or UnitPlayerOrPetInRaid(unit) or UnitPlayerOrPetInParty(unit)) ) then
 		local class = (unit == "pet") and "PET" or frame:UnitClassToken()
 		color = class and ShadowUF.db.profile.classColors[class]
+		if( not color and unit ~= "pet" and applySecretClassColor(frame, unit) ) then
+			return
+		end
 	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorType == "playerclass" and unit == "pet") then
 		local class = select(2, UnitClass("player"))
 		color = class and ShadowUF.db.profile.classColors[class]
@@ -225,6 +308,11 @@ function Health:UpdateColor(frame)
 		end
 		if unit2 then
 			local class = select(2, UnitClass(unit2))
+			-- Arena tokens have secret identities in combat
+			if( issecretvalue and issecretvalue(class) ) then
+				if( applySecretClassColor(frame, unit2) ) then return end
+				class = nil
+			end
 			color = class and ShadowUF.db.profile.classColors[class]
 		end
 	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorType == "static" ) then

@@ -1,5 +1,6 @@
-local Layout = {mediaPath = {}}
-local SML, mediaRequired, anchoringQueued
+﻿local Layout = {mediaPath = {}}
+local L = ShadowUF.L
+local SML, mediaRequired, anchoringQueued, layoutCombatWatcher
 local mediaPath = Layout.mediaPath
 local backdropTbl = {insets = {}}
 local _G = getfenv(0)
@@ -188,6 +189,8 @@ end
 
 local preDefPoint = {C = "CENTER", CLI = "LEFT", RT = "TOPLEFT", BC = "TOP", CRI = "RIGHT", LT = "TOPRIGHT", TR = "BOTTOMRIGHT", BL = "TOPLEFT", LB = "BOTTOMRIGHT", LC = "RIGHT", RB = "BOTTOMLEFT", RC = "LEFT", TC = "BOTTOM", BR = "TOPRIGHT", TL = "BOTTOMLEFT", BRI = "BOTTOMRIGHT", BLI = "BOTTOMLEFT", TRI = "TOPRIGHT", TLI = "TOPLEFT"}
 local preDefRelative = {C = "CENTER", CLI = "LEFT", RT = "TOPRIGHT", BC = "BOTTOM", CRI = "RIGHT", LT = "TOPLEFT", TR = "TOPRIGHT", BL = "BOTTOMLEFT", LB = "BOTTOMLEFT", LC = "LEFT", RB = "BOTTOMRIGHT", RC = "RIGHT", TC = "TOP", BR = "BOTTOMRIGHT", TL = "TOPLEFT", BRI = "BOTTOMRIGHT", BLI = "BOTTOMLEFT", TRI = "TOPRIGHT", TLI = "TOPLEFT"}
+-- Smart codes are sibling-relative (LC = my right edge on its left edge), which lands off-screen when the anchor is the screen itself
+local uiParentPoint = {C = "CENTER", LC = "LEFT", RC = "RIGHT", TC = "TOP", BC = "BOTTOM", TL = "TOPLEFT", TR = "TOPRIGHT", BL = "BOTTOMLEFT", BR = "BOTTOMRIGHT", LT = "TOPLEFT", LB = "BOTTOMLEFT", RT = "TOPRIGHT", RB = "BOTTOMRIGHT"}
 local columnDirection = {RT = "RIGHT", C = "BOTTOM", BC = "BOTTOM", LT = "LEFT", TR = "TOP", BL = "BOTTOM", LB = "LEFT", LC = "LEFT", TRI = "TOP", RB = "RIGHT", RC = "RIGHT", TC = "TOP", CLI = "BOTTOM", TL = "TOP", BR = "BOTTOM", IBL = "RIGHT", IBR = "RIGHT", CRI = "BOTTOM", TLI = "TOP"}
 local auraDirection = {RT = "BOTTOM", C = "LEFT", BC = "LEFT", LT = "BOTTOM", TR = "LEFT", BL = "RIGHT", LB = "TOP", LC = "LEFT", TRI = "LEFT", RB = "TOP", RC = "LEFT", TC = "LEFT", CLI = "RIGHT", TL = "RIGHT", BR = "LEFT", IBL = "TOP", IBR = "TOP", CRI = "LEFT", TLI = "RIGHT"}
 
@@ -312,9 +315,15 @@ function Layout:AnchorFrame(parent, frame, config)
 		anchorTo = anchorTo.blocks[frame.blockID]
 	end
 
-	-- Figure out where it's anchored
-	local point = config.point and config.point ~= "" and config.point or preDefPoint[config.anchorPoint] or "CENTER"
-	local relativePoint = config.relativePoint and config.relativePoint ~= "" and config.relativePoint or preDefRelative[config.anchorPoint] or "CENTER"
+	-- Figure out where it's anchored, screen anchors resolve smart codes to the matching inside edge
+	local point = config.point and config.point ~= "" and config.point
+	local relativePoint = config.relativePoint and config.relativePoint ~= "" and config.relativePoint
+	if( config.anchorTo == "UIParent" and uiParentPoint[config.anchorPoint] ) then
+		point = point or uiParentPoint[config.anchorPoint]
+		relativePoint = relativePoint or uiParentPoint[config.anchorPoint]
+	end
+	point = point or preDefPoint[config.anchorPoint] or "CENTER"
+	relativePoint = relativePoint or preDefRelative[config.anchorPoint] or "CENTER"
 
 	-- Effective scaling is only used for unit based frames and if they are anchored to UIParent
 	local scale = 1
@@ -334,7 +343,33 @@ function Layout:SetupFrame(frame, config)
 	frame:SetBackdropColor(backdrop.backgroundColor.r, backdrop.backgroundColor.g, backdrop.backgroundColor.b, backdrop.backgroundColor.a)
 	frame:SetBackdropBorderColor(backdrop.borderColor.r, backdrop.borderColor.g, backdrop.borderColor.b, backdrop.borderColor.a)
 
-	-- Prevent these from updating while in combat to prevent tainting
+	-- Geometry on protected frames is blocked in combat, queue a replay at regen and tell the user once per combat
+	if( InCombatLockdown() ) then
+		if( not layoutCombatWatcher ) then
+			layoutCombatWatcher = CreateFrame("Frame")
+			layoutCombatWatcher.pending = {}
+			layoutCombatWatcher:SetScript("OnEvent", function(watcher)
+				watcher:UnregisterEvent("PLAYER_REGEN_ENABLED")
+				watcher.announced = nil
+				local pending = watcher.pending
+				watcher.pending = {}
+				for pendingFrame in pairs(pending) do
+					local unitConfig = pendingFrame.unitType and ShadowUF.db.profile.units[pendingFrame.unitType]
+					if( unitConfig ) then
+						Layout:SetupFrame(pendingFrame, unitConfig)
+					end
+				end
+			end)
+		end
+		layoutCombatWatcher.pending[frame] = true
+		if( not layoutCombatWatcher:IsEventRegistered("PLAYER_REGEN_ENABLED") ) then
+			layoutCombatWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+		end
+		if( not layoutCombatWatcher.announced ) then
+			layoutCombatWatcher.announced = true
+			ShadowUF:Print(L["Frame changes are deferred while in combat and will apply afterwards."])
+		end
+	end
 	if( not InCombatLockdown() ) then
 		frame:SetHeight(config.height)
 		frame:SetWidth(config.width)

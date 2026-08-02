@@ -9,6 +9,32 @@ ShadowUF.Config = Config
 local GetSpellName = C_Spell.GetSpellName
 local GetSpellTexture = C_Spell.GetSpellTexture
 
+-- Sliders fire on every drag tick, coalesce layout reloads (~0.1s) and keep them scoped to the touched units so dragging stays smooth
+local pendingReloadUnits, pendingReloadAll, pendingReloadTimer = {}, false, nil
+local function queueLayoutReload(unit)
+	if( not unit or unit == "global" ) then
+		pendingReloadAll = true
+	else
+		pendingReloadUnits[unit] = true
+	end
+
+	if( pendingReloadTimer ) then return end
+	pendingReloadTimer = C_Timer.NewTimer(0.1, function()
+		pendingReloadTimer = nil
+		if( pendingReloadAll ) then
+			pendingReloadAll = false
+			table.wipe(pendingReloadUnits)
+			ShadowUF.Layout:Reload()
+		else
+			for pendingUnit in pairs(pendingReloadUnits) do
+				pendingReloadUnits[pendingUnit] = nil
+				ShadowUF.Layout:Reload(pendingUnit)
+			end
+		end
+	end)
+end
+Config.queueLayoutReload = queueLayoutReload
+
 --[[
 	The part that makes configuration a pain when you actually try is it gets unwieldly when you're adding special code to deal with
 	showing help for certain cases, swapping tabs etc that makes it work smoothly.
@@ -79,7 +105,7 @@ local function getPageDescription(info)
 end
 
 local function getFrameName(unit)
-	if( unit == "raidpet" or unit == "raid" or unit == "party" or unit == "maintank" or unit == "mainassist" or unit == "boss" or unit == "arena" ) then
+	if( unit == "raidpet" or unit == "raid" or unit == "party" or unit == "maintank" or unit == "mainassist" or unit == "boss" or unit == "arena" or unit == "battleground" ) then
 		return string.format("#SUFHeader%s", unit)
 	end
 
@@ -219,15 +245,15 @@ local function setVariable(unit, moduleKey, moduleSubKey, key, value)
 	-- For setting options like units.player.auras.buffs.enabled = true
 	if( moduleKey and moduleSubKey and configTable[moduleKey][moduleSubKey] ) then
 		configTable[moduleKey][moduleSubKey][key] = value
-		ShadowUF.Layout:Reload(unit)
+		queueLayoutReload(unit)
 	-- For setting options like units.player.portrait.enabled = true
 	elseif( moduleKey and not moduleSubKey and configTable[moduleKey] ) then
 		configTable[moduleKey][key] = value
-		ShadowUF.Layout:Reload(unit)
+		queueLayoutReload(unit)
 	-- For setting options like units.player.height = 50
 	elseif( not moduleKey and not moduleSubKey ) then
 		configTable[key] = value
-		ShadowUF.Layout:Reload(unit)
+		queueLayoutReload(unit)
 	end
 end
 
@@ -851,10 +877,34 @@ local function loadGeneralOptions()
 							},
 							hideCombat = {
 								order = 3,
-								type = "toggle",
+								type = "select",
 								name = L["Hide tooltips in combat"],
-								desc = L["Prevents unit tooltips from showing while in combat."],
-								arg = "tooltipCombat",
+								desc = L["Which tooltips to hide while in combat. Aura tooltips are shown natively by the game and can be kept visible."],
+								values = {[""] = L["Disabled"], ["all"] = L["All tooltips"], ["exceptAuras"] = L["All tooltips except auras"]},
+								get = function(info)
+									local value = ShadowUF.db.profile.tooltipCombat
+									if( value == true ) then return "all" end
+									if( type(value) ~= "string" ) then return "" end
+									return value
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.tooltipCombat = value ~= "" and value or false
+									ShadowUF.Layout:Reload()
+								end,
+								width = "double",
+							},
+							auraSpellIDs = {
+								order = 3.05,
+								type = "toggle",
+								name = L["Show spell IDs in aura tooltips"],
+								desc = L["Adds the spell ID to aura tooltips, handy for filling the spell fields of custom filters and aura indicators."],
+								get = function(info)
+									return ShadowUF.db.profile.tooltipAuraSpellIDs
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.tooltipAuraSpellIDs = value
+									ShadowUF:ApplyAuraSpellIDsCVar()
+								end,
 								width = "double",
 							},
 							bossmodCastNames = {
@@ -863,14 +913,6 @@ local function loadGeneralOptions()
 								name = L["Use Boss Mod Cast Name overrides"],
 								desc = L["Use spell name overrides provided by boss mods (BigWigs) on the cast bars."],
 								arg = "bossmodSpellRename",
-								width = "double",
-							},
-							enlargeLayout = {
-								order = 3.2,
-								type = "toggle",
-								name = L["Fixed enlarged aura layout"],
-								desc = L["Fixed enlarged aura layout desc"],
-								arg = "enlargeLayout",
 								width = "double",
 							},
 							sep2 = {
@@ -886,6 +928,20 @@ local function loadGeneralOptions()
 								desc = L["Style of borders to show for all auras."],
 								values = {["dark"] = L["Dark"], ["light"] = L["Light"], ["blizzard"] = L["Blizzard"], [""] = L["None"]},
 								arg = "auras.borderType",
+							},
+							swipeAlpha = {
+								order = 5.5,
+								type = "range",
+								name = L["Cooldown swipe opacity"],
+								desc = L["Opacity of the dark overlay showing the remaining time on auras."],
+								min = 0, max = 1, step = 0.05, isPercent = true,
+								get = function(info)
+									return ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.auras.cooldownSwipeAlpha = value
+									queueLayoutReload()
+								end,
 							},
 							statusbar = {
 								order = 6,
@@ -1541,6 +1597,37 @@ local function loadGeneralOptions()
 							}
 						}
 					},
+					dispelColors = {
+						order = 3.6,
+						type = "group",
+						inline = true,
+						name = L["Dispel colors"],
+						set = function(info, r, g, b)
+							local color = ShadowUF.db.profile.auraColors.dispel and ShadowUF.db.profile.auraColors.dispel[info[#(info)]]
+							if( not color ) then return end
+							color.r, color.g, color.b = r, g, b
+							ShadowUF.modules.auras:InvalidateDispelColorMap()
+							queueLayoutReload()
+						end,
+						get = function(info)
+							local color = ShadowUF.db.profile.auraColors.dispel and ShadowUF.db.profile.auraColors.dispel[info[#(info)]]
+							if( not color ) then return 1, 1, 1 end
+							return color.r or 1, color.g or 1, color.b or 1
+						end,
+						args = {
+							help = {
+								order = 0,
+								type = "description",
+								name = L["Colors used for dispel type coloring: aura borders, health bar tinting and dispel highlighting."],
+							},
+							Magic = {order = 1, type = "color", name = L["Magic"]},
+							Curse = {order = 2, type = "color", name = L["Curse"]},
+							Disease = {order = 3, type = "color", name = L["Disease"]},
+							Poison = {order = 4, type = "color", name = L["Poison"]},
+							Bleed = {order = 5, type = "color", name = L["Bleed"]},
+							Enrage = {order = 6, type = "color", name = L["Enrage"]},
+						}
+					},
 					classColors = {
 						order = 4,
 						type = "group",
@@ -1871,7 +1958,7 @@ local function loadUnitOptions()
 		ShadowUF.db.profile.positions[info[2]][info[#(info)]] = value
 		fixPositions(info)
 
-		if( info[2] == "raid" or info[2] == "raidpet" or info[2] == "maintank" or info[2] == "mainassist" or info[2] == "party" or info[2] == "boss" or info[2] == "arena" ) then
+		if( info[2] == "raid" or info[2] == "raidpet" or info[2] == "maintank" or info[2] == "mainassist" or info[2] == "party" or info[2] == "boss" or info[2] == "arena" or info[2] == "battleground" ) then
 			ShadowUF.Units:ReloadHeader(info[2])
 		else
 			ShadowUF.Layout:Reload(info[2])
@@ -2284,8 +2371,13 @@ local function loadUnitOptions()
 		return info[#(info) - 2] ~= "debuffs"
 	end
 
-	local function reloadUnitAuras()
-		ShadowUF.Layout:Reload()
+	local function reloadUnitAuras(unit)
+		queueLayoutReload(unit)
+		-- Containers can't be fully rebuilt under combat restrictions (also M+/encounters out of lockdown), make sure the deferral is replayed and announced
+		local auras = ShadowUF.modules.auras
+		if( auras.QueueAllContainerRebuilds and (InCombatLockdown() or (auras.AurasAreSecret and auras.AurasAreSecret())) ) then
+			auras:QueueAllContainerRebuilds()
+		end
 	end
 
 	local aurasDisabled = function(info) return not getVariable(info[2], "auras", info[#(info) - 2], "enabled") end
@@ -2302,20 +2394,21 @@ local function loadUnitOptions()
 			["PLAYER|BIG_DEFENSIVE"] = L["Only shows major defensive cooldowns that you activated yourself."],
 			["EXTERNAL_DEFENSIVE"] = L["Only shows defensive buffs received from another player (Pain Suppression, Ironbark, Life Cocoon, etc.)."],
 			["PLAYER|EXTERNAL_DEFENSIVE"] = L["Only shows external defensives that you cast on someone."],
-			["RAID_PLAYER_DISPELLABLE"] = L["Only shows buffs that can be purged, stolen or dispelled by your class."],
-			["RAID_IN_COMBAT"] = L["Only shows buffs deemed useful in combat (e.g. HoTs)."],
-			["PLAYER|RAID_IN_COMBAT"] = L["Only shows your buffs deemed useful in combat by Blizzard."],
+			["RAID_PLAYER_DISPELLABLE"] = L["Only shows buffs that someone in your group can purge, steal or dispel."],
+			["DISPELLABLE"] = L["Only shows auras that have a dispel type, whether or not anyone in your group can dispel them."],
+			["RAID_IN_COMBAT"] = L["Buffs flagged by Blizzard to show on raid frames in combat, HoTs mostly."],
+			["PLAYER|RAID_IN_COMBAT"] = L["Your buffs flagged to show on raid frames in combat."],
 			["IMPORTANT"] = L["Only shows buffs marked as important by Blizzard. Server-maintained list."],
-			["BLIZZARD"] = L["Shows the same auras that Blizzard's default unit frames display. Reads filtered data directly from Blizzard frames."],
 		},
 		debuffs = {
 			["ALL"] = L["Shows all debuffs on the unit without any filtering."],
 			["PLAYER"] = L["Only shows debuffs you applied yourself."],
-			["RAID"] = L["Shows debuffs relevant in a group or raid context (boss mechanics, important debuffs)."],
-			["PLAYER|RAID"] = L["Only shows debuffs you applied that are relevant in a group or raid context."],
-			["RAID_PLAYER_DISPELLABLE"] = L["Only shows debuffs whose dispel type matches your class (Holy Priest = Magic + Disease, Resto Druid = Magic + Curse + Poison, etc.)."],
+			["RAID"] = L["Only shows debuffs that you can dispel."],
+			["PLAYER|RAID_IN_COMBAT"] = L["Your debuffs flagged to show on raid frames in combat."],
+			["RAID_PLAYER_DISPELLABLE"] = L["Only shows debuffs that someone in your group can dispel (you, when solo)."],
+			["DISPELLABLE"] = L["Only shows auras that have a dispel type, whether or not anyone in your group can dispel them."],
 			["CROWD_CONTROL"] = L["Only shows crowd control effects (Stun, Root, Silence, Fear, Polymorph, Cyclone, etc.)."],
-			["RAID_IN_COMBAT"] = L["Only shows debuffs deemed useful in combat by Blizzard."],
+			["RAID_IN_COMBAT"] = L["Debuffs flagged by Blizzard to show on raid frames in combat."],
 			["IMPORTANT"] = L["Only shows debuffs marked as important by Blizzard. Server-maintained list."],
 			["BLIZZARD"] = L["Shows the same auras that Blizzard's default unit frames display. Reads filtered data directly from Blizzard frames."],
 		}
@@ -2332,19 +2425,20 @@ local function loadUnitOptions()
 			["EXTERNAL_DEFENSIVE"] = L["External defensives"],
 			["PLAYER|EXTERNAL_DEFENSIVE"] = L["My external defensives"],
 			["RAID_PLAYER_DISPELLABLE"] = L["Purgeable/Stealable"],
-			["RAID_IN_COMBAT"] = L["Combat auras"],
-			["PLAYER|RAID_IN_COMBAT"] = L["My combat auras"],
+			["DISPELLABLE"] = L["Any dispellable"],
+			["RAID_IN_COMBAT"] = L["HoTs & raid frames buffs"],
+			["PLAYER|RAID_IN_COMBAT"] = L["My HoTs & raid frames buffs"],
 			["IMPORTANT"] = L["Important auras"],
-			["BLIZZARD"] = L["Blizzard frames"],
 		},
 		debuffs = {
 			["ALL"] = L["All Auras"],
 			["PLAYER"] = L["My Auras"],
-			["RAID"] = L["Group/Raid debuffs"],
-			["PLAYER|RAID"] = L["My group/raid debuffs"],
-			["RAID_PLAYER_DISPELLABLE"] = L["Dispellable by me"],
+			["RAID"] = L["Dispellable by me"],
+			["PLAYER|RAID_IN_COMBAT"] = L["My raid frames debuffs"],
+			["RAID_PLAYER_DISPELLABLE"] = L["Dispellable by group"],
+			["DISPELLABLE"] = L["Any dispellable"],
 			["CROWD_CONTROL"] = L["Crowd control effects"],
-			["RAID_IN_COMBAT"] = L["Combat debuffs"],
+			["RAID_IN_COMBAT"] = L["Raid frames debuffs"],
 			["IMPORTANT"] = L["Important auras"],
 			["BLIZZARD"] = L["Blizzard frames"],
 		}
@@ -2354,8 +2448,24 @@ local function loadUnitOptions()
 	local blizzardFilterUnits = {target = true, focus = true}
 
 	-- Helper to get frame config (auras.buffs[1], auras.debuffs[2], etc.)
+	-- Global page reads use the globalConfig mirror, writes fan out to every unit ticked in modifyUnits plus the mirror (setDirectUnit model)
+	local function getAuraUnitConfig(unit)
+		return unit == "global" and globalConfig or ShadowUF.db.profile.units[unit]
+	end
+
+	local function forEachAuraUnit(unit, callback)
+		if( unit == "global" ) then
+			for modUnit in pairs(modifyUnits) do
+				callback(ShadowUF.db.profile.units[modUnit], modUnit)
+			end
+			callback(globalConfig, "global")
+		else
+			callback(ShadowUF.db.profile.units[unit], unit)
+		end
+	end
+
 	local function getAuraFrameConfig(unit, auraType, frameIndex)
-		local config = ShadowUF.db.profile.units[unit]
+		local config = getAuraUnitConfig(unit)
 		if config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex] then
 			return config.auras[auraType][frameIndex]
 		end
@@ -2363,16 +2473,83 @@ local function loadUnitOptions()
 	end
 
 	local function setAuraFrameValue(unit, auraType, frameIndex, key, value)
-		local config = ShadowUF.db.profile.units[unit]
-		if config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex] then
-			config.auras[auraType][frameIndex][key] = value
-			reloadUnitAuras()
+		forEachAuraUnit(unit, function(config)
+			if config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex] then
+				config.auras[auraType][frameIndex][key] = value
+			end
+		end)
+		reloadUnitAuras(unit)
+	end
+
+	-- Container-only options (sections, sorting)
+	local function hideWithoutContainers()
+		return not (ShadowUF.modules.auras and ShadowUF.modules.auras.hasContainers)
+	end
+
+	local sortMethodValues = {
+		[""] = L["Default"],
+		["BigDefensive"] = L["Big defensives first"],
+		["UnitFrameDebuff"] = L["Unit frame debuff order"],
+		["ImportantOnly"] = L["Important only"],
+		["Expiration"] = L["Expiration (yours first)"],
+		["ExpirationOnly"] = L["Expiration"],
+		["Name"] = L["Name (yours first)"],
+		["NameOnly"] = L["Name"],
+		["AuraInstanceIDOnly"] = L["Application order"],
+	}
+
+	-- Custom filters only make sense where Blizzard applies spell ID filters, buffs on assistable units and debuffs on hostile-capable ones (identity gate)
+	local friendlyOnlyUnits = {player = true, pet = true, party = true, partypet = true, raid = true, raidpet = true, maintank = true, mainassist = true}
+	-- "Hide" customs only make sense as a whole-list modifier, sections (includeOnly) don't offer them
+	local function appendCustomFilterValues(values, unit, auraType, includeOnly)
+		if( hideWithoutContainers() ) then return values end
+		if( friendlyOnlyUnits[unit] and auraType ~= "buffs" ) then return values end
+		for name, custom in pairs(ShadowUF.db.profile.customFilters or {}) do
+			if( not includeOnly or custom.mode ~= "exclude" ) then
+				values["CUSTOM:" .. name] = L["Custom"] .. ": " .. name
+			end
 		end
+		return values
+	end
+
+	local function getFilterValues(auraType, unit, includeOnly)
+		local values = {}
+		for key, label in pairs(filterValues[auraType] or filterValues.buffs) do
+			if( key ~= "BLIZZARD" or blizzardFilterUnits[unit] ) then
+				values[key] = label
+			end
+		end
+		return appendCustomFilterValues(values, unit, auraType, includeOnly)
+	end
+
+	local function getSectionConfig(unit, auraType, frameIndex, sectionIndex)
+		local cfg = getAuraFrameConfig(unit, auraType, frameIndex)
+		return cfg and cfg.sections and cfg.sections[sectionIndex]
+	end
+
+	local function setSectionValue(unit, auraType, frameIndex, sectionIndex, key, value)
+		forEachAuraUnit(unit, function(config)
+			local cfg = config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex]
+			if( cfg ) then
+				cfg.sections = cfg.sections or {}
+				cfg.sections[sectionIndex] = cfg.sections[sectionIndex] or {}
+				cfg.sections[sectionIndex][key] = value
+			end
+		end)
+		reloadUnitAuras(unit)
 	end
 
 	-- Create options for a single aura frame slot
 	local function createAuraFrameOptions(frameIndex)
-		local frameName = L["Frame"] .. " " .. frameIndex
+		-- Disabled frames show greyed out in the tree
+		local function frameName(info)
+			local cfg = getAuraFrameConfig(info[2], info[#(info) - 1], frameIndex)
+			local name = L["Frame"] .. " " .. frameIndex
+			if( cfg and not cfg.enabled ) then
+				return "|cff888888" .. name .. "|r"
+			end
+			return name
+		end
 		local frameArgs
 		frameArgs = {
 				enabled = {
@@ -2509,7 +2686,7 @@ local function loadUnitOptions()
 					order = 1.8,
 					type = "toggle",
 					name = L["Disable dispel coloring"],
-					desc = L["Disables the special border color for dispellable/purgeable auras. They will use school colors instead (Magic, Curse, Disease, Poison)."],
+					desc = L["Disables the dispel type tinting of aura borders; they keep their neutral color. Has no effect with the Blizzard border style."],
 					get = function(info)
 						local auraType = info[#(info) - 2]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
@@ -2518,26 +2695,6 @@ local function loadUnitOptions()
 					set = function(info, value)
 						local auraType = info[#(info) - 2]
 						setAuraFrameValue(info[2], auraType, frameIndex, "disableRemovableColor", value)
-					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
-					end,
-				},
-				useFilter = {
-					order = 1.9,
-					type = "toggle",
-					name = L["Blacklist / Whitelist"],
-					desc = L["Apply the blacklist/whitelist from the Aura Filters tab to this frame. This is separate from the Blizzard API filter below."],
-					get = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return cfg and cfg.useFilter
-					end,
-					set = function(info, value)
-						local auraType = info[#(info) - 2]
-						setAuraFrameValue(info[2], auraType, frameIndex, "useFilter", value)
 					end,
 					disabled = function(info)
 						local auraType = info[#(info) - 2]
@@ -2554,20 +2711,31 @@ local function loadUnitOptions()
 						local auraType = info[#(info) - 2]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						local currentFilter = cfg and cfg.filter or "ALL"
+						if( currentFilter:find("^CUSTOM:") ) then
+							return L["Blizzard only applies spell filters to buffs on friendly units and to debuffs on hostile units, plus any spell it flags as never secret."]
+						end
 						local descs = filterDescriptions[auraType] or filterDescriptions.buffs
 						return descs[currentFilter] or L["Which auras to show in this frame"]
 					end,
 					values = function(info)
 						local auraType = info[#(info) - 2]
 						local base = filterValues[auraType] or filterValues.buffs
-						if not blizzardFilterUnits[info[2]] then
-							local filtered = {}
-							for k, v in pairs(base) do
-								if k ~= "BLIZZARD" then filtered[k] = v end
-							end
-							return filtered
+						local filtered = {}
+						for k, v in pairs(base) do
+							if( k ~= "BLIZZARD" or blizzardFilterUnits[info[2]] ) then filtered[k] = v end
 						end
-						return base
+						filtered = appendCustomFilterValues(filtered, info[2], auraType)
+						-- No duplicate choices, drop filters already used by the sections and keep the current value
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						if( cfg and cfg.sections ) then
+							local own = cfg.filter or "ALL"
+							for _, section in pairs(cfg.sections) do
+								if( type(section) == "table" and section.filter and section.filter ~= own ) then
+									filtered[section.filter] = nil
+								end
+							end
+						end
+						return filtered
 					end,
 					get = function(info)
 						local auraType = info[#(info) - 2]
@@ -2584,6 +2752,28 @@ local function loadUnitOptions()
 							end
 						end
 						setAuraFrameValue(info[2], auraType, frameIndex, "filter", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				sortMethod = {
+					order = 2.1,
+					type = "select",
+					name = L["Sort method"],
+					desc = L["How auras in this frame are ordered. Sorting is per section."],
+					hidden = hideWithoutContainers,
+					values = sortMethodValues,
+					get = function(info)
+						local auraType = info[#(info) - 2]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.sortMethod or ""
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 2]
+						setAuraFrameValue(info[2], auraType, frameIndex, "sortMethod", value ~= "" and value or nil)
 					end,
 					disabled = function(info)
 						local auraType = info[#(info) - 2]
@@ -2945,7 +3135,248 @@ local function loadUnitOptions()
 					end,
 				},
 			}
-		return {type = "group", inline = true, name = frameName, order = frameIndex, args = frameArgs}
+
+		frameArgs.sectionsHeader = {
+			order = 20.4,
+			type = "header",
+			name = "",
+			hidden = function(info)
+				if( hideWithoutContainers() ) then return true end
+				local auraType = info[#(info) - 2]
+				local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+				return not (cfg and cfg.enabled)
+			end,
+		}
+
+		frameArgs.sectionsHelp = {
+			order = 20.5,
+			type = "description",
+			width = "full",
+			name = L["Sections add extra filters to this frame, shown after the main filter. Auras already shown by a previous section are removed automatically. Each section has its own icon size, sorting and icon cap."],
+			hidden = function(info)
+				if( hideWithoutContainers() ) then return true end
+				local auraType = info[#(info) - 2]
+				local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+				return not (cfg and cfg.enabled)
+			end,
+		}
+
+		frameArgs.addSection = {
+			order = 24,
+			type = "execute",
+			name = L["Add section"],
+			desc = L["Adds another filter to this frame, shown after the previous sections. Overlaps are removed automatically."],
+			hidden = function(info)
+				if( hideWithoutContainers() ) then return true end
+				local auraType = info[#(info) - 2]
+				local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+				return cfg and cfg.sections and #cfg.sections >= 5
+			end,
+			disabled = function(info)
+				local auraType = info[#(info) - 2]
+				local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+				return not (cfg and cfg.enabled)
+			end,
+			func = function(info)
+				local auraType = info[#(info) - 2]
+				forEachAuraUnit(info[2], function(config, unit)
+					local cfg = config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex]
+					if( not cfg ) then return end
+					cfg.sections = cfg.sections or {}
+
+					-- Default to a filter the frame and its sections don't use yet
+					local used = { [cfg.filter or "ALL"] = true }
+					for _, section in pairs(cfg.sections) do
+						if( type(section) == "table" and section.filter ) then
+							used[section.filter] = true
+						end
+					end
+					local values = getFilterValues(auraType, unit, true)
+					local pick
+					if( values.ALL and not used.ALL ) then
+						pick = "ALL"
+					else
+						local keys = {}
+						for key in pairs(values) do
+							if( not used[key] ) then table.insert(keys, key) end
+						end
+						table.sort(keys)
+						pick = keys[1]
+					end
+
+					table.insert(cfg.sections, { filter = pick or "ALL" })
+				end)
+				reloadUnitAuras(info[2])
+			end,
+		}
+
+		for sectionIndex = 1, 5 do
+			local function sectionDisabled(info)
+				local auraType = info[#(info) - 3]
+				local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+				return not (cfg and cfg.enabled)
+			end
+
+			frameArgs["section" .. sectionIndex] = {
+				order = 20 + sectionIndex,
+				type = "group",
+				inline = true,
+				name = L["Section"] .. " " .. (sectionIndex + 1),
+				hidden = function(info)
+					if( hideWithoutContainers() ) then return true end
+					local auraType = info[#(info) - 2]
+					return not getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
+				end,
+				args = {
+					filter = {
+						order = 1,
+						type = "select",
+						hidden = false,
+						name = L["Filter"],
+						values = function(info)
+							local auraType = info[#(info) - 3]
+							local values = getFilterValues(auraType, info[2], true)
+							-- No duplicate choices, drop the main filter and other sections' filters, keep this section's current value
+							local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+							if( cfg ) then
+								local own = cfg.sections and cfg.sections[sectionIndex] and cfg.sections[sectionIndex].filter
+								if( cfg.filter and cfg.filter ~= own ) then
+									values[cfg.filter] = nil
+								end
+								if( cfg.sections ) then
+									for otherIndex, other in pairs(cfg.sections) do
+										if( otherIndex ~= sectionIndex and type(other) == "table" and other.filter and other.filter ~= own ) then
+											values[other.filter] = nil
+										end
+									end
+								end
+							end
+							return values
+						end,
+						get = function(info)
+							local auraType = info[#(info) - 3]
+							local section = getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
+							return section and section.filter or "ALL"
+						end,
+						set = function(info, value)
+							local auraType = info[#(info) - 3]
+							setSectionValue(info[2], auraType, frameIndex, sectionIndex, "filter", value)
+						end,
+						disabled = sectionDisabled,
+					},
+					size = {
+						order = 2,
+						type = "range",
+						hidden = false,
+						name = L["Icon Size"],
+						min = 8, max = 64, step = 1,
+						get = function(info)
+							local auraType = info[#(info) - 3]
+							local section = getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
+							if( section and section.size ) then return section.size end
+							local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+							return cfg and cfg.size or 16
+						end,
+						set = function(info, value)
+							local auraType = info[#(info) - 3]
+							setSectionValue(info[2], auraType, frameIndex, sectionIndex, "size", value)
+						end,
+						disabled = sectionDisabled,
+					},
+					sortMethod = {
+						order = 3,
+						type = "select",
+						hidden = false,
+						name = L["Sort method"],
+						values = sortMethodValues,
+						get = function(info)
+							local auraType = info[#(info) - 3]
+							local section = getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
+							return section and section.sortMethod or ""
+						end,
+						set = function(info, value)
+							local auraType = info[#(info) - 3]
+							setSectionValue(info[2], auraType, frameIndex, sectionIndex, "sortMethod", value ~= "" and value or nil)
+						end,
+						disabled = sectionDisabled,
+					},
+					maxCount = {
+						order = 4,
+						type = "range",
+						hidden = false,
+						name = L["Max icons"],
+						desc = L["0 removes the cap (uses the frame's rows and icons per row)."],
+						min = 0, max = 40, step = 1,
+						get = function(info)
+							local auraType = info[#(info) - 3]
+							local section = getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
+							return section and section.maxCount or 0
+						end,
+						set = function(info, value)
+							local auraType = info[#(info) - 3]
+							setSectionValue(info[2], auraType, frameIndex, sectionIndex, "maxCount", value > 0 and value or nil)
+						end,
+						disabled = sectionDisabled,
+					},
+					moveUp = {
+						order = 6,
+						type = "execute",
+						name = L["Move up"],
+						width = "half",
+						hidden = function() return sectionIndex == 1 end,
+						func = function(info)
+							local auraType = info[#(info) - 3]
+							forEachAuraUnit(info[2], function(config)
+								local cfg = config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex]
+								if( cfg and cfg.sections and cfg.sections[sectionIndex] ) then
+									cfg.sections[sectionIndex - 1], cfg.sections[sectionIndex] = cfg.sections[sectionIndex], cfg.sections[sectionIndex - 1]
+								end
+							end)
+							reloadUnitAuras(info[2])
+						end,
+					},
+					moveDown = {
+						order = 7,
+						type = "execute",
+						name = L["Move down"],
+						width = "half",
+						hidden = function(info)
+							local auraType = info[#(info) - 3]
+							return not getSectionConfig(info[2], auraType, frameIndex, sectionIndex + 1)
+						end,
+						func = function(info)
+							local auraType = info[#(info) - 3]
+							forEachAuraUnit(info[2], function(config)
+								local cfg = config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex]
+								if( cfg and cfg.sections and cfg.sections[sectionIndex + 1] ) then
+									cfg.sections[sectionIndex], cfg.sections[sectionIndex + 1] = cfg.sections[sectionIndex + 1], cfg.sections[sectionIndex]
+								end
+							end)
+							reloadUnitAuras(info[2])
+						end,
+					},
+					delete = {
+						order = 8,
+						type = "execute",
+						hidden = false,
+						name = L["Delete"],
+						width = "half",
+						func = function(info)
+							local auraType = info[#(info) - 3]
+							forEachAuraUnit(info[2], function(config)
+								local cfg = config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex]
+								if( cfg and cfg.sections ) then
+									table.remove(cfg.sections, sectionIndex)
+								end
+							end)
+							reloadUnitAuras(info[2])
+						end,
+					},
+				},
+			}
+		end
+
+		return {type = "group", name = frameName, order = frameIndex, args = frameArgs}
 	end
 
 	Config.auraTable = {
@@ -3367,20 +3798,27 @@ local function loadUnitOptions()
 				width = "half",
 				hidden = isModifiersSet,
 				get = function(info)
-					local cfg = ShadowUF.db.profile.units[info[2]]
+					local cfg = getAuraUnitConfig(info[2])
 					return cfg and cfg.auras and cfg.auras.testMode
 				end,
 				set = function(info, value)
-					local unitType = info[2]
-					local cfg = ShadowUF.db.profile.units[unitType]
-					if cfg and cfg.auras then
-						cfg.auras.testMode = value
+					-- Test mode swaps unit attributes on the frames, protected in combat
+					if( InCombatLockdown() ) then
+						ShadowUF:Print(L["Test mode cannot be toggled while in combat."])
+						return
 					end
-					if value then
-						ShadowUF.modules.movers:EnableTestMode(unitType)
-					else
-						ShadowUF.modules.movers:DisableTestMode(unitType)
-					end
+					forEachAuraUnit(info[2], function(cfg, unitType)
+						if( cfg and cfg.auras ) then
+							cfg.auras.testMode = value
+						end
+						if( unitType ~= "global" ) then
+							if( value ) then
+								ShadowUF.modules.movers:EnableTestMode(unitType)
+							else
+								ShadowUF.modules.movers:DisableTestMode(unitType)
+							end
+						end
+					end)
 				end,
 			},
 			general = {
@@ -3563,10 +4001,19 @@ local function loadUnitOptions()
 							},
 							debuff = {
 								order = 6,
-								type = "toggle",
+								type = "select",
 								name = L["On curable debuff"],
 								desc = L["Highlight units that are debuffed with something you can cure."],
+								values = {[""] = L["Disabled"], ["PLAYER_DISPELLABLE"] = L["Dispellable by me"], ["RAID_PLAYER_DISPELLABLE"] = L["Dispellable by my group"], ["DISPELLABLE"] = L["Any dispellable"]},
 								arg = "highlight.debuff",
+								get = function(info)
+									local value = getUnit(info)
+									if( value == true ) then return "RAID_PLAYER_DISPELLABLE" end
+									return type(value) == "string" and value or ""
+								end,
+								set = function(info, value)
+									setUnit(info, value ~= "" and value or false)
+								end,
 								hidden = function(info) return info[2] ~= "boss" and ( ShadowUF.Units.zoneUnits[info[2]] or info[2] == "battlegroundpet" or info[2] == "arenapet" or (ShadowUF.fakeUnits[info[2]] and info[2] ~= "targettarget") ) end,
 							},
 							raremob = {
@@ -4954,7 +5401,7 @@ local function loadUnitOptions()
 						hidden = function(info)
 							local unit = info[2]
 							if( unit == "global" ) then
-								return not globalConfig.runeBar and not globalConfig.totemBar and not globalConfig.druidBar and not globalConfig.priestBar and not globalConfig.shamanBar and not globalConfig.xpBar and not globalConfig.staggerBar
+								return not globalConfig.runeBar and not globalConfig.totemBar and not globalConfig.druidBar and not globalConfig.priestBar and not globalConfig.shamanBar and not globalConfig.xpBar and not globalConfig.staggerBar and not globalConfig.essence
 							else
 								return unit ~= "player" and unit ~= "pet"
 							end
@@ -4967,6 +5414,14 @@ local function loadUnitOptions()
 								desc = L["Adds rune bars and timers before runes refresh to the player frame."],
 								hidden = hideRestrictedOption,
 								arg = "runeBar.enabled",
+							},
+							essence = {
+								order = 1.1,
+								type = "toggle",
+								name = string.format(L["Enable %s"], L["Essence"]),
+								desc = L["Adds an Essence bar for Evokers."],
+								hidden = hideRestrictedOption,
+								arg = "essence.enabled",
 							},
 							staggerBar = {
 								order = 1.25,
@@ -5039,10 +5494,19 @@ local function loadUnitOptions()
 							},
 							colorDispel = {
 								order = 5,
-								type = "toggle",
+								type = "select",
 								name = L["Color on curable debuff"],
 								desc = L["Changes the health bar to the color of any curable debuff."],
+								values = {[""] = L["Disabled"], ["PLAYER_DISPELLABLE"] = L["Dispellable by me"], ["RAID_PLAYER_DISPELLABLE"] = L["Dispellable by my group"], ["DISPELLABLE"] = L["Any dispellable"]},
 								arg = "healthBar.colorDispel",
+								get = function(info)
+									local value = getUnit(info)
+									if( value == true ) then return "RAID_PLAYER_DISPELLABLE" end
+									return type(value) == "string" and value or ""
+								end,
+								set = function(info, value)
+									setUnit(info, value ~= "" and value or false)
+								end,
 								hidden = hideRestrictedOption,
 								width = "full",
 							},
@@ -5957,6 +6421,7 @@ local function loadUnitOptions()
 
 	-- Enabled units list
 	local unitCatOrder = {}
+	local unitApplyQueued
 	local enabledUnits = {
 		order = function(info) return unitCatOrder[info[#(info)]] + getUnitOrder(info) end,
 		type = "toggle",
@@ -5968,17 +6433,29 @@ local function loadUnitOptions()
 					ShadowUF.db.profile.units[child].enabled = false
 				end
 			end
-
-			ShadowUF.modules.movers:Update()
 			ShadowUF.db.profile.units[unit].enabled = value
-			ShadowUF:LoadUnits()
 
-			-- Update party frame visibility
-			if( unit == "raid" and ShadowUF.Units.headerFrames.party ) then
-				ShadowUF.Units:SetHeaderAttributes(ShadowUF.Units.headerFrames.party, "party")
+			-- Loading units goes through protected calls (RegisterUnitWatch, header attributes)
+			local function apply()
+				ShadowUF:LoadUnits()
+
+				-- Raid enablement drives party frame visibility
+				if( ShadowUF.Units.headerFrames.party ) then
+					ShadowUF.Units:SetHeaderAttributes(ShadowUF.Units.headerFrames.party, "party")
+				end
+
+				ShadowUF.modules.movers:Update()
 			end
-
-			ShadowUF.modules.movers:Update()
+			if( InCombatLockdown() ) then
+				ShadowUF:DeferUntilRegen("loadUnits", apply, L["Unit changes will be applied after combat."])
+			elseif( not unitApplyQueued ) then
+				-- The click handler and the options tree rebuild share one CPU budget, give the heavy part its own
+				unitApplyQueued = true
+				C_Timer.After(0, function()
+					unitApplyQueued = nil
+					apply()
+				end)
+			end
 		end,
 		get = function(info)
 			return ShadowUF.db.profile.units[info[#(info)]].enabled
@@ -6044,32 +6521,49 @@ end
 ---------------------
 -- FILTER CONFIGURATION
 ---------------------
+-- Accepts a numeric ID, a pasted spell link or an exact spell name
+local function resolveSpellInput(value)
+	local spellID = tonumber(value)
+	if( spellID ) then return spellID end
+	spellID = value and value:match("|Hspell:(%d+)")
+	if( spellID ) then return tonumber(spellID) end
+	if( value and value ~= "" and C_Spell and C_Spell.GetSpellInfo ) then
+		local info = C_Spell.GetSpellInfo(value)
+		if( info and info.spellID ) then return info.spellID end
+	end
+	return nil
+end
+
+-- EditBox that also accepts a spell dragged from the spellbook
+local spellEditBoxRegistered
+local function registerSpellEditBox()
+	if( spellEditBoxRegistered ) then return end
+	spellEditBoxRegistered = true
+
+	AceGUI = AceGUI or LibStub("AceGUI-3.0")
+	local function Constructor()
+		local widget = AceGUI:Create("EditBox")
+		widget.type = "ShadowUF_SpellEditBox"
+
+		local function receiveSpell()
+			local kind, _, _, spellID = GetCursorInfo()
+			if( kind == "spell" and spellID ) then
+				ClearCursor()
+				widget:SetText(tostring(spellID))
+				widget:Fire("OnEnterPressed", tostring(spellID))
+			end
+		end
+		widget.editbox:HookScript("OnReceiveDrag", receiveSpell)
+		widget.editbox:HookScript("OnMouseDown", receiveSpell)
+		return widget
+	end
+	AceGUI:RegisterWidgetType("ShadowUF_SpellEditBox", Constructor, 1)
+end
+Config.RegisterSpellEditBox = registerSpellEditBox
+
 local function loadFilterOptions()
 	local hasWhitelist, hasBlacklist, rebuildFilters
-	local filterMap, spellMap = {}, {}
-
-	-- Build dropdown values from Blizzard whitelisted spells, grouped by class
-	local whitelistedSpellValues = {}
-	local whitelistedSpellOrder = {}
-	local function buildWhitelistedSpellDropdown()
-		table.wipe(whitelistedSpellValues)
-		table.wipe(whitelistedSpellOrder)
-		local whitelistedSpells = ShadowUF.modules.auraIndicators and ShadowUF.modules.auraIndicators.whitelistedSpells or {}
-		local sorted = {}
-		for id, data in pairs(whitelistedSpells) do
-			sorted[#sorted + 1] = {id = id, name = GetSpellName(id) or data.name, group = data.group}
-		end
-		table.sort(sorted, function(a, b)
-			if a.group == b.group then return a.name < b.name end
-			return a.group < b.group
-		end)
-		for i, entry in ipairs(sorted) do
-			local icon = GetSpellTexture(entry.id)
-			local iconStr = icon and string.format("|T%s:14:14:0:0|t ", icon) or ""
-			whitelistedSpellValues[entry.id] = string.format("%s%s (#%d) [%s]", iconStr, GetSpellName(entry.id) or entry.name, entry.id, entry.group)
-			whitelistedSpellOrder[#whitelistedSpellOrder + 1] = entry.id
-		end
-	end
+	local filterMap = {}
 
 	local function reloadUnitAuras()
 		for _, frame in pairs(ShadowUF.Units.unitFrames) do
@@ -6080,232 +6574,11 @@ local function loadFilterOptions()
 		end
 	end
 
-	local function setFilterType(info, value)
-		local filter = filterMap[info[#(info) - 2]]
-		local filterType = info[#(info) - 3]
-
-		ShadowUF.db.profile.filters[filterType][filter][info[#(info)]] = value
-		reloadUnitAuras()
+	-- Lists live in the unified custom filters, this tab only assigns them to unit frames per zone type
+	local function isExcludeFilter(name)
+		local filter = name and ShadowUF.db.profile.customFilters[name]
+		return filter and filter.mode == "exclude"
 	end
-
-	local function getFilterType(info)
-		local filter = filterMap[info[#(info) - 2]]
-		local filterType = info[#(info) - 3]
-
-		return ShadowUF.db.profile.filters[filterType][filter][info[#(info)]]
-	end
-
-	-- State for spell add dropdown per filter
-	local selectedSpell = {}
-
-	--- Container widget for the filter listing
-	local filterEditTable = {
-		order = 0,
-		type = "group",
-		name = function(info) return filterMap[info[#(info)]] end,
-		hidden = function(info) return not ShadowUF.db.profile.filters[info[#(info) - 1]][filterMap[info[#(info)]]] end,
-		args = {
-			general = {
-				order = 0,
-				type = "group",
-				name = function(info) return filterMap[info[#(info) - 1]] end,
-				hidden = false,
-				inline = true,
-				args = {
-					addSpell = {
-						order = 0,
-						type = "select",
-						name = L["Add spell"],
-						width = "double",
-						values = function(info)
-							local filter = filterMap[info[#(info) - 2]]
-							local filterType = info[#(info) - 3]
-							local existing = ShadowUF.db.profile.filters[filterType] and ShadowUF.db.profile.filters[filterType][filter]
-							local filtered = {}
-							for id, label in pairs(whitelistedSpellValues) do
-								if not existing or not existing[id] then
-									filtered[id] = label
-								end
-							end
-							return filtered
-						end,
-						sorting = function(info)
-							local filter = filterMap[info[#(info) - 2]]
-							local filterType = info[#(info) - 3]
-							local existing = ShadowUF.db.profile.filters[filterType] and ShadowUF.db.profile.filters[filterType][filter]
-							if not existing then return whitelistedSpellOrder end
-							local filtered = {}
-							for _, id in ipairs(whitelistedSpellOrder) do
-								if not existing[id] then
-									filtered[#filtered + 1] = id
-								end
-							end
-							return filtered
-						end,
-						hidden = false,
-						get = function(info)
-							local filter = filterMap[info[#(info) - 2]]
-							return selectedSpell[filter]
-						end,
-						set = function(info, value)
-							local filter = filterMap[info[#(info) - 2]]
-							selectedSpell[filter] = value
-						end,
-					},
-					addButton = {
-						order = 0.5,
-						type = "execute",
-						name = L["Add"],
-						width = "half",
-						hidden = false,
-						disabled = function(info)
-							local filter = filterMap[info[#(info) - 2]]
-							return not selectedSpell[filter]
-						end,
-						func = function(info)
-							local filterType = info[#(info) - 3]
-							local filter = filterMap[info[#(info) - 2]]
-							local spell = selectedSpell[filter]
-							if spell then
-								ShadowUF.db.profile.filters[filterType][filter][tonumber(spell)] = true
-								selectedSpell[filter] = nil
-								reloadUnitAuras()
-								rebuildFilters()
-							end
-						end,
-					},
-					delete = {
-						order = 1,
-						type = "execute",
-						name = L["Delete filter"],
-						hidden = false,
-						confirmText = L["Are you sure you want to delete this filter?"],
-						confirm = true,
-						func = function(info, value)
-							local filterType = info[#(info) - 3]
-							local filter = filterMap[info[#(info) - 2]]
-
-							ShadowUF.db.profile.filters[filterType][filter] = nil
-
-							local filterList = filterType == "whitelists" and ShadowUF.db.profile.filters.zonewhite or ShadowUF.db.profile.filters.zoneblack
-							if filterList then
-								for id, filterUsed in pairs(filterList) do
-									if( filterUsed == filter ) then
-										filterList[id] = nil
-									end
-								end
-							end
-
-							reloadUnitAuras()
-							rebuildFilters()
-						end,
-					},
-				},
-			},
-			filters = {
-				order = 2,
-				type = "group",
-				inline = true,
-				hidden = false,
-				name = L["Aura types to filter"],
-				args = {
-					buffs = {
-						order = 4,
-						type = "toggle",
-						name = L["Buffs"],
-						desc = L["When this filter is active, apply the filter to buffs."],
-						set = setFilterType,
-						get = getFilterType,
-					},
-					debuffs = {
-						order = 5,
-						type = "toggle",
-						name = L["Debuffs"],
-						desc = L["When this filter is active, apply the filter to debuffs."],
-						set = setFilterType,
-						get = getFilterType,
-					},
-				},
-			},
-			spells = {
-				order = 3,
-				type = "group",
-				inline = true,
-				name = L["Auras"],
-				hidden = false,
-				args = {
-
-				},
-			},
-		},
-	}
-
-	-- Spell list for manage aura filters
-	local spellLabel = {
-		order = function(info) return tonumber(string.match(info[#(info)], "(%d+)")) end,
-		type = "description",
-		width = "double",
-		fontSize = "medium",
-		name = function(info)
-				local id = spellMap[info[#(info)]]
-				if id then
-					local spellName = GetSpellName(id)
-					local icon = GetSpellTexture(id)
-					return string.format("|T%s:14:14:0:0|t %s (#%s)", icon or "Interface\\Icons\\Inv_misc_questionmark", spellName or L["Unknown"], tostring(id))
-				end
-				return L["Unknown"]
-			end,
-	}
-
-	local spellRow = {
-		order = function(info) return tonumber(string.match(info[#(info)], "(%d+)")) + 0.5 end,
-		type = "execute",
-		name = L["Delete"],
-		width = "half",
-		func = function(info)
-			local spell = spellMap[info[#(info)]]
-			local filter = filterMap[info[#(info) - 2]]
-			local filterType = info[#(info) - 3]
-
-			ShadowUF.db.profile.filters[filterType][filter][spell] = nil
-
-			reloadUnitAuras()
-			rebuildFilters()
-		end
-	}
-
-	local noSpells = {
-		order = 0,
-		type = "description",
-		name = L["This filter has no auras in it, you will have to add some using the dialog above."],
-	}
-
-	local filterLabel = {
-		order = function(info) return tonumber(string.match(info[#(info)], "(%d+)")) end,
-		type = "description",
-		width = "",
-		fontSize = "medium",
-		name = function(info) return filterMap[info[#(info)]] end,
-	}
-
-	local filterRow = {
-		order = function(info) return tonumber(string.match(info[#(info)], "(%d+)")) + 0.5 end,
-		type = "execute",
-		name = L["View"],
-		width = "half",
-		func = function(info)
-			local filterType = info[#(info) - 2]
-
-			AceDialog.Status.ShadowedUF.children.filter.children.filters.status.groups.groups[filterType] = true
-			selectTabGroup("filter", "filters", filterType .. "\001" .. string.match(info[#(info)], "(%d+)"))
-		end
-	}
-
-	local noFilters = {
-		order = 0,
-		type = "description",
-		name = L["You do not have any filters of this type added yet, you will have to create one in the management panel before this page is useful."],
-	}
 
 	local globalSettings = {}
 	local zoneList = {"none", "pvp", "arena", "party", "raid"}
@@ -6319,7 +6592,7 @@ local function loadFilterOptions()
 			local filter = filterMap[info[#(info)]]
 			local zone = info[#(info) - 1]
 			local unit = info[#(info) - 2]
-			local filterKey = ShadowUF.db.profile.filters.whitelists[filter] and "zonewhite" or "zoneblack"
+			local filterKey = isExcludeFilter(filter) and "zoneblack" or "zonewhite"
 
 			for _, zoneConfig in pairs(zoneList) do
 				if( zone == "global" or zoneConfig == zone ) then
@@ -6347,7 +6620,7 @@ local function loadFilterOptions()
 
 			if( unit == "global" or zone == "global" ) then
 				local id = zone == "global" and zone .. unit or zone
-				local filterKey = ShadowUF.db.profile.filters.whitelists[filter] and "zonewhite" or "zoneblack"
+				local filterKey = isExcludeFilter(filter) and "zoneblack" or "zonewhite"
 
 				if( info[#(info)] == "nofilter" ) then
 					return globalSettings[id .. "zonewhite"] == false and globalSettings[id .. "zoneblack"] == false
@@ -6413,96 +6686,13 @@ local function loadFilterOptions()
 	}
 
 	local filterToggle = {
-		order = function(info) return ShadowUF.db.profile.filters.whitelists[filterMap[info[#(info)]]] and 2 or 4 end,
+		order = function(info) return isExcludeFilter(filterMap[info[#(info)]]) and 4 or 2 end,
 		type = "toggle",
 		name = function(info) return filterMap[info[#(info)]] end,
 		desc = function(info)
-			local filter = filterMap[info[#(info)]]
-			filter = ShadowUF.db.profile.filters.whitelists[filter] or ShadowUF.db.profile.filters.blacklists[filter]
-			if not filter then return "" end
-			if( filter.buffs and filter.debuffs ) then
-				return L["Filtering both buffs and debuffs"]
-			elseif( filter.buffs ) then
-				return L["Filtering buffs only"]
-			elseif( filter.debuffs ) then
-				return L["Filtering debuffs only"]
-			end
-
-			return L["This filter has no aura types set to filter out."]
+			return isExcludeFilter(filterMap[info[#(info)]]) and L["Hide matching spells"] or L["Show only matching spells"]
 		end,
 	}
-
-	local filterID, spellID = 0, 0
-	local function buildList(type)
-		local manageFiltersTableEntry = {
-			order = type == "whitelists" and 1 or 2,
-			type = "group",
-			name = type == "whitelists" and L["Whitelists"] or L["Blacklists"],
-			args = {
-				groups = {
-					order = 0,
-					type = "group",
-					inline = true,
-					name = function(info) return info[#(info) - 1] == "whitelists" and L["Whitelist filters"] or L["Blacklist filters"] end,
-					args = {
-					},
-				},
-			},
-		}
-
-		local hasFilters
-		for name, spells in pairs(ShadowUF.db.profile.filters[type]) do
-			hasFilters = true
-			filterID = filterID + 1
-			filterMap[tostring(filterID)] = name
-			filterMap[filterID .. "label"] = name
-			filterMap[filterID .. "row"] = name
-
-			manageFiltersTableEntry.args[tostring(filterID)] = CopyTable(filterEditTable)
-			manageFiltersTableEntry.args.groups.args[filterID .. "label"] = filterLabel
-			manageFiltersTableEntry.args.groups.args[filterID .. "row"] = filterRow
-			filterTable.args[tostring(filterID)] = filterToggle
-
-			local hasSpells
-			for spellKey in pairs(spells) do
-				if( spellKey ~= "buffs" and spellKey ~= "debuffs" ) then
-					hasSpells = true
-					spellID = spellID + 1
-					spellMap[tostring(spellID)] = spellKey
-					spellMap[spellID .. "label"] = spellKey
-
-					manageFiltersTableEntry.args[tostring(filterID)].args.spells.args[spellID .. "label"] = spellLabel
-					manageFiltersTableEntry.args[tostring(filterID)].args.spells.args[tostring(spellID)] = spellRow
-				end
-			end
-
-			if( not hasSpells ) then
-				manageFiltersTableEntry.args[tostring(filterID)].args.spells.args.noSpells = noSpells
-			end
-		end
-
-		if( not hasFilters ) then
-			if( type == "whitelists" ) then hasWhitelist = nil else hasBlacklist = nil end
-			manageFiltersTableEntry.args.groups.args.noFilters = noFilters
-		end
-
-		return manageFiltersTableEntry
-	end
-
-	rebuildFilters = function()
-		for id in pairs(filterMap) do filterTable.args[id] = nil end
-
-		spellID = 0
-		filterID = 0
-		hasBlacklist = true
-		hasWhitelist = true
-
-		table.wipe(filterMap)
-		table.wipe(spellMap)
-
-		options.args.filter.args.filters.args.whitelists = buildList("whitelists")
-		options.args.filter.args.filters.args.blacklists = buildList("blacklists")
-	end
 
 	local unitFilterSelection = {
 		order = function(info) return info[#(info)] == "global" and 1 or (getUnitOrder(info) + 1) end,
@@ -6525,7 +6715,7 @@ local function loadFilterOptions()
 				args = {
 					help = {
 						type = "description",
-						name = L["You will need to create an aura filter before you can set which unit to enable aura filtering on."],
+						name = L["You will need to create a filter in the Custom filters tab before you can assign it here."],
 						width = "full",
 					}
 				},
@@ -6545,11 +6735,34 @@ local function loadFilterOptions()
 		}
 	}
 
-	local addFilter = {type = "whitelists"}
+	rebuildFilters = function()
+		for id in pairs(filterMap) do filterTable.args[id] = nil end
+		table.wipe(filterMap)
+		hasWhitelist, hasBlacklist = nil, nil
+
+		local filterID = 0
+		for name, filter in pairs(ShadowUF.db.profile.customFilters) do
+			filterID = filterID + 1
+			filterMap[tostring(filterID)] = name
+			filterTable.args[tostring(filterID)] = filterToggle
+
+			if( filter.mode == "exclude" ) then
+				hasBlacklist = true
+			else
+				hasWhitelist = true
+			end
+		end
+	end
+
+	-- The custom filters tab owns list creation/deletion, it refreshes this tab through here
+	Config.RebuildZoneFilters = function()
+		rebuildFilters()
+		reloadUnitAuras()
+	end
 
 	options.args.filter = {
 		type = "group",
-		name = L["Aura Filters"],
+		name = L["Zone Filters"],
 		childGroups = "tab",
 		desc = getPageDescription,
 		args = {
@@ -6566,129 +6779,12 @@ local function loadFilterOptions()
 						args = {
 							help = {
 								type = "description",
-								name = L["You can set what unit frame should use what filter group and in what zone type here, if you want to change what auras goes into what group then see the \"Manage aura groups\" option."],
+								name = L["Assign a filter to each unit frame per zone type. Filters are created and edited in the Custom filters tab."],
 								width = "full",
 							}
 						},
 					},
 				}
-			},
-			filters = {
-				order = 2,
-				type = "group",
-				name = L["Manage Aura Filters"],
-				childGroups = "tree",
-				args = {
-					manage = {
-						order = 1,
-						type = "group",
-						name = L["Management"],
-						args = {
-							help = {
-								order = 0,
-								type = "group",
-								inline = true,
-								name = L["Help"],
-								args = {
-									help = {
-										type = "description",
-										name = L["Whitelists will hide any aura not in the filter group.|nBlacklists will hide auras that are in the filter group.|nOnly Blizzard whitelisted spells (non-secret in combat) can be added to filters."],
-										width = "full",
-									}
-								},
-							},
-							error = {
-								order = 1,
-								type = "group",
-								inline = true,
-								hidden = function() return not addFilter.error end,
-								name = L["Error"],
-								args = {
-									error = {
-										order = 0,
-										type = "description",
-										name = function() return addFilter.error end,
-										width = "full",
-									},
-								},
-							},
-							add = {
-								order = 2,
-								type = "group",
-								inline = true,
-								name = L["New filter"],
-								get = function(info) return addFilter[info[#(info)]] end,
-								args = {
-									name = {
-										order = 0,
-										type = "input",
-										name = L["Name"],
-										set = function(info, value)
-											addFilter[info[#(info)]] = string.trim(value) ~= "" and value or nil
-											addFilter.error = nil
-										end,
-										get = function(info) return addFilter.errorName or addFilter.name end,
-										validate = function(info, value)
-											local name = string.lower(string.trim(value))
-											for filter in pairs(ShadowUF.db.profile.filters.whitelists) do
-												if( string.lower(filter) == name ) then
-													addFilter.error = string.format(L["The whitelist \"%s\" already exists."], value)
-													addFilter.errorName = value
-													AceRegistry:NotifyChange("ShadowedUF")
-													return ""
-												end
-											end
-
-											for filter in pairs(ShadowUF.db.profile.filters.blacklists) do
-												if( string.lower(filter) == name ) then
-													addFilter.error = string.format(L["The blacklist \"%s\" already exists."], value)
-													addFilter.errorName = value
-													AceRegistry:NotifyChange("ShadowedUF")
-													return ""
-												end
-											end
-
-											addFilter.error = nil
-											addFilter.errorName = nil
-											return true
-										end,
-									},
-									type = {
-										order = 1,
-										type = "select",
-										name = L["Filter type"],
-										set = function(info, value) addFilter[info[#(info)]] = value end,
-										values = {["whitelists"] = L["Whitelist"], ["blacklists"] = L["Blacklist"]},
-									},
-									add = {
-										order = 2,
-										type = "execute",
-										name = L["Create"],
-										disabled = function(info) return not addFilter.name end,
-										func = function(info)
-											ShadowUF.db.profile.filters[addFilter.type][addFilter.name] = {buffs = true, debuffs = true}
-											rebuildFilters()
-
-											local id
-											for key, value in pairs(filterMap) do
-												if( value == addFilter.name ) then
-													id = key
-													break
-												end
-											end
-
-											AceDialog.Status.ShadowedUF.children.filter.children.filters.status.groups.groups[addFilter.type] = true
-											selectTabGroup("filter", "filters", addFilter.type .. "\001" .. id)
-
-											table.wipe(addFilter)
-											addFilter.type = "whitelists"
-										end,
-									},
-								},
-							},
-						},
-					},
-				},
 			},
 		},
 	}
@@ -6698,8 +6794,222 @@ local function loadFilterOptions()
 		options.args.filter.args.groups.args[unit] = unitFilterSelection
 	end
 
-	buildWhitelistedSpellDropdown()
 	rebuildFilters()
+end
+
+---------------------
+-- CUSTOM FILTER CONFIGURATION
+---------------------
+local function loadCustomFilterOptions()
+	local rebuildCustomFilters
+
+	local function reloadUnitAuras()
+		for _, frame in pairs(ShadowUF.Units.unitFrames) do
+			if( UnitExists(frame.unit) ) then
+				ShadowUF.modules.auras:UpdateFilter(frame)
+				frame:FullUpdate()
+			end
+		end
+	end
+
+	local function createFilterGroup(name)
+		local function getFilter()
+			return ShadowUF.db.profile.customFilters[name]
+		end
+
+		local group = {
+			order = 10,
+			type = "group",
+			name = name,
+			args = {
+				general = {
+					order = 0,
+					type = "group",
+					inline = true,
+					name = name,
+					args = {
+						mode = {
+							order = 0,
+							type = "select",
+							name = L["Mode"],
+							values = {
+								["include"] = L["Show only matching spells"],
+								["exclude"] = L["Hide matching spells"],
+							},
+							get = function()
+								local filter = getFilter()
+								return filter and filter.mode or "include"
+							end,
+							set = function(info, value)
+								local filter = getFilter()
+								if( filter ) then
+									filter.mode = value
+									-- Zone assignments are mode-typed, follow the change
+									local fromKey = value == "exclude" and "zonewhite" or "zoneblack"
+									local toKey = value == "exclude" and "zoneblack" or "zonewhite"
+									for slot, assigned in pairs(ShadowUF.db.profile.filters[fromKey]) do
+										if( assigned == name ) then
+											ShadowUF.db.profile.filters[fromKey][slot] = nil
+											ShadowUF.db.profile.filters[toKey][slot] = name
+										end
+									end
+									if( Config.RebuildZoneFilters ) then
+										Config.RebuildZoneFilters()
+									end
+									-- The token cascade depends on the mode, full rebuild
+									ShadowUF.Layout:Reload()
+								end
+							end,
+						},
+						addSpell = {
+							order = 1,
+							type = "input",
+							dialogControl = "ShadowUF_SpellEditBox",
+							name = L["Add spell"],
+							desc = L["Accepts a spell ID, a spell link (shift-click a spell) or an exact spell name. You can also drag a spell from the spellbook onto this field. Spell names only resolve for spells your character currently knows; use the spell ID for anything else."] .. "|n" .. L["Blizzard only applies spell filters to buffs on friendly units and to debuffs on hostile units, plus any spell it flags as never secret."],
+							validate = function(info, value)
+								if( not resolveSpellInput(value) ) then return L["Unknown spell. Enter a spell ID, a spell link or an exact spell name."] end
+								return true
+							end,
+							get = function() return "" end,
+							set = function(info, value)
+								local filter = getFilter()
+								if( filter ) then
+									local spellID = resolveSpellInput(value)
+									filter.spells[spellID] = true
+									ShadowUF:Print(string.format(L["Added %s (#%d)."], GetSpellName(spellID) or L["Unknown"], spellID))
+									rebuildCustomFilters()
+									reloadUnitAuras()
+								end
+							end,
+						},
+						delete = {
+							order = 2,
+							type = "execute",
+							name = L["Delete filter"],
+							confirm = true,
+							confirmText = L["Are you sure you want to delete this filter?"],
+							func = function()
+								ShadowUF.db.profile.customFilters[name] = nil
+								for slot, assigned in pairs(ShadowUF.db.profile.filters.zonewhite) do
+									if( assigned == name ) then ShadowUF.db.profile.filters.zonewhite[slot] = nil end
+								end
+								for slot, assigned in pairs(ShadowUF.db.profile.filters.zoneblack) do
+									if( assigned == name ) then ShadowUF.db.profile.filters.zoneblack[slot] = nil end
+								end
+								rebuildCustomFilters()
+								ShadowUF.Layout:Reload()
+							end,
+						},
+					},
+				},
+				spells = {
+					order = 1,
+					type = "group",
+					inline = true,
+					name = L["Auras"],
+					args = {},
+				},
+			},
+		}
+
+		local sorted = {}
+		for spellID in pairs(getFilter().spells) do
+			sorted[#sorted + 1] = spellID
+		end
+		table.sort(sorted)
+
+		if( #sorted == 0 ) then
+			group.args.spells.args.none = {
+				order = 0,
+				type = "description",
+				name = L["This filter has no auras in it, you will have to add some using the dialog above."],
+			}
+		else
+			for i, spellID in ipairs(sorted) do
+				group.args.spells.args["spell" .. i] = {
+					order = i,
+					type = "description",
+					width = "double",
+					fontSize = "medium",
+					name = function()
+						local spellName = GetSpellName(spellID)
+						local icon = GetSpellTexture(spellID)
+						return string.format("|T%s:14:14:0:0|t %s (#%d)", icon or "Interface\\Icons\\Inv_misc_questionmark", spellName or L["Unknown"], spellID)
+					end,
+				}
+				group.args.spells.args["remove" .. i] = {
+					order = i + 0.5,
+					type = "execute",
+					width = "half",
+					name = L["Delete"],
+					func = function()
+						local filter = getFilter()
+						if( filter ) then
+							filter.spells[spellID] = nil
+							rebuildCustomFilters()
+							reloadUnitAuras()
+						end
+					end,
+				}
+			end
+		end
+
+		return group
+	end
+
+	rebuildCustomFilters = function()
+		local args = options.args.customFilters.args
+		for key in pairs(args) do
+			if( key:find("^f_") ) then args[key] = nil end
+		end
+		for name in pairs(ShadowUF.db.profile.customFilters) do
+			args["f_" .. name] = createFilterGroup(name)
+		end
+
+		-- Lists are also assignable per zone, keep that tab in sync
+		if( Config.RebuildZoneFilters ) then
+			Config.RebuildZoneFilters()
+		end
+	end
+
+	options.args.customFilters = {
+		type = "group",
+		name = L["Custom filters"],
+		args = {
+			help = {
+				order = 0,
+				type = "group",
+				inline = true,
+				name = L["Help"],
+				args = {
+					help = {
+						order = 0,
+						type = "description",
+						name = L["Custom filters let you build aura filters from a spell's name or spell ID. Pick a mode when creating one: \"Show only matching spells\" or \"Hide matching spells\"."] .. "|n|n" .. L["You can then use these filters in the Auras tab of the player, target, raid, etc. modules, or assign them per zone type in the Zone Filters tab."] .. "|n|n" .. L["In combat, Blizzard only applies spell filters to buffs on friendly units and debuffs on hostile units, plus spells it flags as never secret."],
+						width = "full",
+					},
+				},
+			},
+			create = {
+				order = 1,
+				type = "input",
+				name = L["Create filter"],
+				validate = function(info, value)
+					if( value == "" ) then return L["You must enter a name."] end
+					if( ShadowUF.db.profile.customFilters[value] ) then return L["A filter with this name already exists."] end
+					return true
+				end,
+				get = function() return "" end,
+				set = function(info, value)
+					ShadowUF.db.profile.customFilters[value] = { mode = "include", spells = {} }
+					rebuildCustomFilters()
+				end,
+			},
+		},
+	}
+
+	rebuildCustomFilters()
 end
 
 ---------------------
@@ -7665,7 +7975,15 @@ local function loadAuraIndicatorsOptions()
 				type = "toggle",
 				name = L["Only show if missing"],
 				desc = L["Only active this aura inside an indicator if the group member does not have the aura."],
-				hidden = false,
+				-- Detecting an ABSENT aura needs a point query, which only returns data for whitelisted (never secret) spells
+				-- Stays visible when already enabled so it can be turned off
+				hidden = function(info)
+					local aura = auraMap[info[#(info) - 1]]
+					if( not aura or ShadowUF.db.profile.auraIndicators.missing[aura] ) then return false end
+					if( not (C_Secrets and C_Secrets.GetSpellAuraSecrecy and Enum.SecrecyLevel) ) then return false end
+					local ok, secrecy = pcall(C_Secrets.GetSpellAuraSecrecy, tonumber(aura) or aura)
+					return ok and secrecy ~= Enum.SecrecyLevel.NeverSecret
+				end,
 			},
 			delete = {
 				order = 10,
@@ -7736,33 +8054,6 @@ local function loadAuraIndicatorsOptions()
 					help = {
 						type = "description",
 						name = L["Auras matching a criteria will automatically show up in the indicator when enabled."]
-					}
-				}
-			},
-			boss = {
-				order = 1,
-				type = "group",
-				name = L["Boss Auras"],
-				inline = true,
-				args = {
-					enabled = {
-						order = 1,
-						type = "toggle",
-						name = L["Show boss debuffs"],
-						desc = L["Shows debuffs cast by a boss."]
-					},
-					duration = {
-						order = 2,
-						type = "toggle",
-						name = L["Show aura duration"],
-						desc = L["Shows a cooldown wheel on the indicator with how much time is left on the aura."]
-					},
-					priority = {
-						order = 3,
-						type = "range",
-						name = L["Priority"],
-						desc = L["If multiple auras are shown in the same indicator, the higher priority one is shown first."],
-						min = 0, max = 100, step = 1
 					}
 				}
 			},
@@ -8029,7 +8320,7 @@ local function loadAuraIndicatorsOptions()
 	local unitFilterTable = {
 		order = 1,
 		type = "toggle",
-		name = function(info) return info[#(info)] == "boss" and L["Boss Auras"] or L["Curable Auras"] end,
+		name = L["Curable Auras"],
 		desc = function(info)
 			local auraIndicators = ShadowUF.db.profile.units[info[3]].auraIndicators
 			return auraIndicators["filter-" .. info[#(info)]] and string.format(L["Disabled for %s."], L.units[info[3]]) or string.format(L["Enabled for %s."], L.units[info[3]])
@@ -8041,7 +8332,7 @@ local function loadAuraIndicatorsOptions()
 	local globalUnitFilterTable = {
 		order = 1,
 		type = "toggle",
-		name = function(info) return info[#(info)] == "boss" and L["Boss Auras"] or L["Curable Auras"] end,
+		name = L["Curable Auras"],
 		disabled = function(info) for unit in pairs(setGlobalUnits) do return false end return true end,
 		set = function(info, value)
 			local key = "filter-" .. info[#(info)]
@@ -8112,6 +8403,45 @@ local function loadAuraIndicatorsOptions()
 
 	local widthReset
 
+	-- Shared by the whitelist dropdown and the free spell input
+	local function addIndicatorAura(spellID, group)
+		local whitelistInfo = Indicators.whitelistedSpells[tonumber(spellID)]
+		group = group or (whitelistInfo and whitelistInfo.group) or L["Miscellaneous"]
+
+		if( not ShadowUF.db.profile.auraIndicators.auras[spellID] ) then
+			Indicators.auraConfig[spellID] = {indicator = "", group = group, iconTexture = GetSpellTexture(tonumber(spellID)), priority = 0, r = 0, g = 0, b = 0}
+			writeAuraTable(spellID)
+
+			auraID = auraID + 1
+			auraMap[tostring(auraID)] = spellID
+			auraGroupTable.args[tostring(auraID)] = auraConfigTable
+		end
+
+		-- Check if the group exists
+		local gID
+		for id, name in pairs(groupMap) do
+			if( name == group ) then
+				gID = id
+				break
+			end
+		end
+
+		if( not gID ) then
+			groupID = groupID + 1
+			groupMap[tostring(groupID)] = group
+
+			unitTable.args.groups.args[tostring(groupID)] = unitGroupTable
+			options.args.auraIndicators.args.units.args.global.args.groups.args[tostring(groupID)] = globalUnitGroupTable
+			options.args.auraIndicators.args.auras.args.groups.args[tostring(groupID)] = auraGroupTable
+		end
+
+		-- Shunt the user to the this groups page
+		AceDialog.Status.ShadowedUF.children.auraIndicators.children.auras.status.groups.selected = tostring(gID or groupID)
+		AceRegistry:NotifyChange("ShadowedUF")
+
+		ShadowUF.Layout:Reload()
+	end
+
 	-- Actual tab view thing
 	options.args.auraIndicators = {
 		order = 4.5,
@@ -8146,7 +8476,7 @@ local function loadAuraIndicatorsOptions()
 										set = function(info, value)
 											local id = string.format("%d", GetTime() + math.random(100))
 											ShadowUF.db.profile.auraIndicators.indicators[id] = {enabled = true, friendly = true, hostile = true, name = value, anchorPoint = "C", anchorTo = "$parent", height = 10, width = 10, alpha = 1.0, x = 0, y = 0}
-											ShadowUF.db.profile.auraIndicators.filters[id] = {boss = {}, curable = {}}
+											ShadowUF.db.profile.auraIndicators.filters[id] = {curable = {}}
 
 											options.args.auraIndicators.args.indicators.args[id] = indicatorTable
 											options.args.auraIndicators.args.auras.args.filters.args[id] = auraFilterConfigTable
@@ -8196,7 +8526,7 @@ local function loadAuraIndicatorsOptions()
 								type = "select",
 								width = "full",
 								name = L["Spell"],
-								desc = L["Only Blizzard-whitelisted spells are available (guaranteed to work in combat)."],
+								desc = L["Curated list of class and healer spells. Combat display works for buffs on friendly units; the missing option requires a Blizzard-whitelisted spell."],
 								values = function()
 									local vals = {}
 									for spellID, info in pairs(Indicators.whitelistedSpells) do
@@ -8208,51 +8538,68 @@ local function loadAuraIndicatorsOptions()
 									end
 									return vals
 								end,
+								get = function() return addAura.pick end,
+								set = function(info, value)
+									addAura.pick = value
+									addAura.spell = value
+									addAura.customText = nil
+									local wl = Indicators.whitelistedSpells[tonumber(value)]
+									if( wl ) then addAura.group = wl.group end
+								end,
+							},
+							custom = {
+								order = 0.5,
+								type = "input",
+								width = "full",
+								name = L["Add spell"],
+								desc = L["Accepts a spell ID, a spell link (shift-click a spell) or an exact spell name. You can also drag a spell from the spellbook onto this field. Spell names only resolve for spells your character currently knows; use the spell ID for anything else."],
+								dialogControl = "ShadowUF_SpellEditBox",
+								validate = function(info, value)
+									if( not resolveSpellInput(value) ) then return L["Unknown spell. Enter a spell ID, a spell link or an exact spell name."] end
+									return true
+								end,
+								get = function() return addAura.customText or "" end,
+								set = function(info, value)
+									local spellID = resolveSpellInput(value)
+									if( not spellID ) then return end
+									addAura.customText = value
+									addAura.spell = tostring(spellID)
+									addAura.pick = nil
+								end,
+							},
+							group = {
+								order = 0.75,
+								type = "select",
+								name = L["Group"],
+								desc = L["Group this aura will be listed under. Both a spell and a group are required to add an aura."],
+								values = function()
+									local vals = {}
+									for _, info in pairs(Indicators.whitelistedSpells) do
+										vals[info.group] = info.group
+									end
+									for key in pairs(ShadowUF.db.profile.auraIndicators.auras) do
+										local config = Indicators.auraConfig[key]
+										if( config and config.group ) then
+											vals[config.group] = config.group
+										end
+									end
+									vals[L["Miscellaneous"]] = L["Miscellaneous"]
+									return vals
+								end,
 							},
 							create = {
 								order = 1,
 								type = "execute",
 								name = L["Add Aura"],
-								disabled = function(info) return not addAura.name end,
+								disabled = function(info) return not (addAura.spell and addAura.group) end,
 								func = function(info)
-									local spellID = addAura.name
-									local whitelistInfo = Indicators.whitelistedSpells[tonumber(spellID)]
-									local group = whitelistInfo and whitelistInfo.group or L["Miscellaneous"]
-
-									if( not ShadowUF.db.profile.auraIndicators.auras[spellID] ) then
-										Indicators.auraConfig[spellID] = {indicator = "", group = group, iconTexture = GetSpellTexture(tonumber(spellID)), priority = 0, r = 0, g = 0, b = 0}
-										writeAuraTable(spellID)
-
-										auraID = auraID + 1
-										auraMap[tostring(auraID)] = addAura.name
-										auraGroupTable.args[tostring(auraID)] = auraConfigTable
-									end
-
-									addAura.name = nil
-
-									-- Check if the group exists
-									local gID
-									for id, name in pairs(groupMap) do
-										if( name == group ) then
-											gID = id
-											break
-										end
-									end
-
-									if( not gID ) then
-										groupID = groupID + 1
-										groupMap[tostring(groupID)] = group
-
-										unitTable.args.groups.args[tostring(groupID)] = unitGroupTable
-										options.args.auraIndicators.args.units.args.global.args.groups.args[tostring(groupID)] = globalUnitGroupTable
-										options.args.auraIndicators.args.auras.args.groups.args[tostring(groupID)] = auraGroupTable
-									end
-
-									-- Shunt the user to the this groups page
-									AceDialog.Status.ShadowedUF.children.auraIndicators.children.auras.status.groups.selected = tostring(gID or groupID)
-									AceRegistry:NotifyChange("ShadowedUF")
-
-									ShadowUF.Layout:Reload()
+									local spellID = tonumber(addAura.spell)
+									addIndicatorAura(addAura.spell, addAura.group)
+									ShadowUF:Print(string.format(L["Added %s (#%d)."], spellID and GetSpellName(spellID) or L["Unknown"], spellID or 0))
+									addAura.spell = nil
+									addAura.pick = nil
+									addAura.customText = nil
+									addAura.group = nil
 								end,
 							},
 						},
@@ -8580,7 +8927,6 @@ local function loadPerformanceOptions()
 		{key = "tagMonitorSlow",   order = 4, name = L["Slow tag refresh"],      desc = L["Refresh rate for slowly changing tags like AFK timers (seconds)."]},
 		{key = "fakeCastMonitor",  order = 5, name = L["Fake cast monitor"],     desc = L["Polling rate for cast bars on non-event units like focus target (seconds)."]},
 		{key = "combatIndicator",  order = 6, name = L["Combat indicator"],      desc = L["How often to poll NPC combat status for the combat indicator (seconds)."]},
-		{key = "tempEnchantScan",  order = 7, name = L["Temp enchant scan"],     desc = L["How often to scan for temporary weapon enchants (seconds)."]},
 	}
 
 	for _, def in ipairs(sliderDefs) do
@@ -8642,6 +8988,7 @@ local function loadOptions()
 	loadHideOptions()
 	loadTagOptions()
 	loadFilterOptions()
+	loadCustomFilterOptions()
 	loadVisibilityOptions()
 	loadAuraIndicatorsOptions()
 	loadPerformanceOptions()
@@ -8652,6 +8999,7 @@ local function loadOptions()
 	options.args.enableUnits.order = 2
 	options.args.units.order = 3
 	options.args.filter.order = 4
+	options.args.customFilters.order = 4.2
 	options.args.auraIndicators.order = 4.5
 	options.args.hideBlizzard.order = 5
 	options.args.visibility.order = 6
@@ -8669,6 +9017,7 @@ local defaultToggles
 function Config:Open()
 	AceDialog = AceDialog or LibStub("AceConfigDialog-3.0")
 	AceRegistry = AceRegistry or LibStub("AceConfigRegistry-3.0")
+	registerSpellEditBox()
 
 	if( not registered ) then
 		loadOptions()

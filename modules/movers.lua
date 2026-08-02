@@ -1,4 +1,4 @@
--- I am undecided if this is a brilliant idea or an insane one
+﻿-- I am undecided if this is a brilliant idea or an insane one
 local L = ShadowUF.L
 local Movers = {}
 local originalEnvs = {}
@@ -266,68 +266,206 @@ local function OnLeave(self)
 	GameTooltip:Hide()
 end
 
-local function setupUnits(childrenOnly)
-	for frame in pairs(ShadowUF.Units.frameList) do
-		if( frame.configMode ) then
-			-- Units visible, but it's not supposed to be
-			if( frame:IsVisible() and ( not ShadowUF.db.profile.units[frame.unitType].enabled or frame.isPlaceholderHidden ) ) then
-				RegisterUnitWatch(frame, frame.hasStateWatch)
-				if( not UnitExists(frame.unit) ) then frame:Hide() end
+-- Unlocking every frame at once blows past one execution's CPU budget
+-- Steps are queued per module (unit type) and drained over as many ticks as needed
+local STAGE_BUDGET = 6
+local stageQueue, stageHead, stageTail, stageDriver = {}, 1, 0
 
-			-- Unit's not visible and it's enabled so it should
-			elseif( not frame.isPlaceholderHidden and not frame:IsVisible() and ShadowUF.db.profile.units[frame.unitType].enabled ) then
-				UnregisterUnitWatch(frame)
+local function queueStage(step)
+	stageTail = stageTail + 1
+	stageQueue[stageTail] = step
+end
 
-				frame:SetAttribute("state-unitexists", true)
-				frame:FullUpdate()
-				frame:Show()
+local function runStages()
+	-- Combat can start mid drain, the remaining steps are protected calls and the lock watcher restores everything anyway
+	if( InCombatLockdown() ) then
+		stageQueue, stageHead, stageTail = {}, 1, 0
+		stageDriver:Hide()
+		return
+	end
+
+	local started = debugprofilestop()
+	while( stageHead <= stageTail ) do
+		local step = stageQueue[stageHead]
+		stageQueue[stageHead] = nil
+		stageHead = stageHead + 1
+
+		-- A step with more work than fits a slice hands back a continuation, it goes in front to keep phase order
+		local continuation = step()
+		if( continuation ) then
+			stageHead = stageHead - 1
+			stageQueue[stageHead] = continuation
+		end
+
+		-- Another addon can restart the profiler under us, a negative delta just ends the slice
+		local elapsed = debugprofilestop() - started
+		if( elapsed < 0 or elapsed >= STAGE_BUDGET ) then return end
+	end
+
+	stageHead, stageTail = 1, 0
+	stageDriver:Hide()
+end
+
+-- Teardown steps cannot be dropped, run everything now (continuations included)
+local function flushStages()
+	while( stageHead <= stageTail ) do
+		local step = stageQueue[stageHead]
+		stageQueue[stageHead] = nil
+		stageHead = stageHead + 1
+
+		local continuation = step()
+		if( continuation ) then
+			stageHead = stageHead - 1
+			stageQueue[stageHead] = continuation
+		end
+	end
+
+	stageHead, stageTail = 1, 0
+	if( stageDriver ) then
+		stageDriver:Hide()
+		stageDriver:UnregisterEvent("PLAYER_REGEN_DISABLED")
+	end
+end
+
+-- armFlush is set by teardown drains, their protected calls must complete inside the regen window if combat starts
+local function startStages(armFlush)
+	if( not stageDriver ) then
+		stageDriver = CreateFrame("Frame")
+		stageDriver:Hide()
+		stageDriver:SetScript("OnUpdate", runStages)
+		stageDriver:SetScript("OnEvent", function()
+			stageDriver:UnregisterEvent("PLAYER_REGEN_DISABLED")
+			flushStages()
+		end)
+	end
+	if( armFlush ) then
+		stageDriver:RegisterEvent("PLAYER_REGEN_DISABLED")
+	end
+	stageDriver:Show()
+end
+
+-- Anything still queued belongs to the state we are leaving
+local function cancelStages()
+	stageQueue, stageHead, stageTail = {}, 1, 0
+	if( stageDriver ) then
+		stageDriver:Hide()
+		stageDriver:UnregisterEvent("PLAYER_REGEN_DISABLED")
+	end
+end
+
+local function setupConfigHeader(header)
+	-- Force show headers hidden by state monitors
+	-- so SecureGroupHeaderTemplate creates children with negative startingIndex
+	if( ShadowUF.db.profile.units[header.unitType].enabled and not header:IsShown() ) then
+		header:Show()
+	end
+
+	for key in pairs(attributeBlacklist) do
+		header:SetAttribute(key, nil)
+	end
+
+	local config = ShadowUF.db.profile.units[header.unitType]
+	if( config.frameSplit ) then
+		header:SetAttribute("startingIndex", -4)
+	elseif( config.maxColumns ) then
+		local maxUnits = MAX_RAID_MEMBERS
+		if( config.filters ) then
+			for _, enabled in pairs(config.filters) do
+				if( not enabled ) then
+					maxUnits = maxUnits - 5
+				end
 			end
-		elseif( not frame.configMode and ShadowUF.db.profile.units[frame.unitType].enabled ) then
-			frame.originalUnit = frame:GetAttribute("unit")
-			frame.originalOnEnter = frame.OnEnter
-			frame.originalOnLeave = frame.OnLeave
-			frame.originalOnUpdate = frame:GetScript("OnUpdate")
-			frame:SetMovable(not ShadowUF.Units.childUnits[frame.unitType])
-			frame:SetScript("OnDragStop", OnDragStop)
-			frame:SetScript("OnDragStart", OnDragStart)
-			frame.OnEnter = OnEnter
-			frame.OnLeave = OnLeave
-			frame:SetScript("OnEvent", nil)
-			frame:SetScript("OnUpdate", nil)
-			frame:RegisterForDrag("LeftButton")
-			frame.configMode = true
-			frame.unitOwner = nil
-			frame.originalMenu = frame.menu
-			frame.menu = nil
+		end
 
-			local unit
-			if( frame.placeholderUnit ) then
-				unit = frame.placeholderUnit
-			elseif( frame.isChildUnit ) then
-				local unitFormat = string.gsub(string.gsub(frame.unitType, "target$", "%%dtarget"), "pet$", "pet%%d")
-				unit = string.format(unitFormat, frame.parent.configUnitID or "")
-			else
-				unit = frame.unitType .. (frame.configUnitID or "")
-			end
+		header:SetAttribute("startingIndex", -math.min(config.maxColumns * config.unitsPerColumn, maxUnits) + 1)
+	elseif( ShadowUF[header.unitType .. "Units"] ) then
+		-- Party gets an extra slot to host the placeholder player frame
+		local extra = (header.unitType == "party") and 1 or 0
+		header:SetAttribute("startingIndex", -#(ShadowUF[header.unitType .. "Units"]) + 1 - extra)
+	end
 
-			ShadowUF.Units.OnAttributeChanged(frame, "unit", unit)
+	header.startingIndex = header:GetAttribute("startingIndex")
+	header:SetMovable(true)
+	prepareChildUnits(header, header:GetChildren())
+end
 
-			if( frame.healthBar ) then frame.healthBar:SetScript("OnUpdate", nil) end
-			if( frame.powerBar ) then frame.powerBar:SetScript("OnUpdate", nil) end
-			if( frame.indicators ) then frame.indicators:SetScript("OnUpdate", nil) end
+local function setupConfigFrame(frame)
+	if( frame.configMode ) then
+		-- Units visible, but it's not supposed to be
+		if( frame:IsVisible() and ( not ShadowUF.db.profile.units[frame.unitType].enabled or frame.isPlaceholderHidden ) ) then
+			RegisterUnitWatch(frame, frame.hasStateWatch)
+			if( not UnitExists(frame.unit) ) then frame:Hide() end
 
+		-- Unit's not visible and it's enabled so it should
+		elseif( not frame.isPlaceholderHidden and not frame:IsVisible() and ShadowUF.db.profile.units[frame.unitType].enabled ) then
 			UnregisterUnitWatch(frame)
+
+			frame:SetAttribute("state-unitexists", true)
 			frame:FullUpdate()
-			if( frame.isPlaceholderHidden ) then
-				frame:Hide()
-			else
-				frame:Show()
-			end
+			frame:Show()
+		end
+	elseif( ShadowUF.db.profile.units[frame.unitType].enabled ) then
+		frame.originalUnit = frame:GetAttribute("unit")
+		frame.originalOnEnter = frame.OnEnter
+		frame.originalOnLeave = frame.OnLeave
+		frame.originalOnUpdate = frame:GetScript("OnUpdate")
+		frame:SetMovable(not ShadowUF.Units.childUnits[frame.unitType])
+		frame:SetScript("OnDragStop", OnDragStop)
+		frame:SetScript("OnDragStart", OnDragStart)
+		frame.OnEnter = OnEnter
+		frame.OnLeave = OnLeave
+		frame:SetScript("OnEvent", nil)
+		frame:SetScript("OnUpdate", nil)
+		frame:RegisterForDrag("LeftButton")
+		frame.configMode = true
+		frame.unitOwner = nil
+		frame.originalMenu = frame.menu
+		frame.menu = nil
+
+		local unit
+		if( frame.placeholderUnit ) then
+			unit = frame.placeholderUnit
+		elseif( frame.isChildUnit ) then
+			local unitFormat = string.gsub(string.gsub(frame.unitType, "target$", "%%dtarget"), "pet$", "pet%%d")
+			unit = string.format(unitFormat, frame.parent.configUnitID or "")
+		else
+			unit = frame.unitType .. (frame.configUnitID or "")
+		end
+
+		ShadowUF.Units.OnAttributeChanged(frame, "unit", unit)
+
+		if( frame.healthBar ) then frame.healthBar:SetScript("OnUpdate", nil) end
+		if( frame.powerBar ) then frame.powerBar:SetScript("OnUpdate", nil) end
+		if( frame.indicators ) then frame.indicators:SetScript("OnUpdate", nil) end
+
+		UnregisterUnitWatch(frame)
+		frame:FullUpdate()
+		if( frame.isPlaceholderHidden ) then
+			frame:Hide()
+		else
+			frame:Show()
+		end
+	end
+end
+
+local function setupUnits(unitType)
+	for frame in pairs(ShadowUF.Units.frameList) do
+		if( not unitType or frame.unitType == unitType ) then
+			setupConfigFrame(frame)
 		end
 	end
 end
 
 function Movers:Enable()
+	-- Header attributes are protected, unlocking has to wait for the regen
+	if( InCombatLockdown() ) then
+		ShadowUF.db.profile.locked = true
+		ShadowUF:Print(L["Unit frames cannot be unlocked while in combat."])
+		local ACR = LibStub("AceConfigRegistry-3.0", true)
+		if( ACR ) then ACR:NotifyChange("ShadowedUF") end
+		return
+	end
+
 	-- Clear any active test modes before entering full config mode
 	if( next(self.testModeUnits) ) then
 		for func, env in pairs(testOriginalEnvs) do
@@ -348,50 +486,6 @@ function Movers:Enable()
 	end
 
 	createConfigEnv()
-
-	-- Force create zone headers
-	for type, zone in pairs(ShadowUF.Units.zoneUnits) do
-		if( ShadowUF.db.profile.units[type].enabled ) then
-			ShadowUF.Units:InitializeFrame(type)
-		end
-	end
-
-	-- Setup the headers
-	for _, header in pairs(ShadowUF.Units.headerFrames) do
-		-- Force show headers hidden by state monitors
-		-- so SecureGroupHeaderTemplate creates children with negative startingIndex
-		if( ShadowUF.db.profile.units[header.unitType].enabled and not header:IsShown() ) then
-			header:Show()
-		end
-
-		for key in pairs(attributeBlacklist) do
-			header:SetAttribute(key, nil)
-		end
-
-		local config = ShadowUF.db.profile.units[header.unitType]
-		if( config.frameSplit ) then
-			header:SetAttribute("startingIndex", -4)
-		elseif( config.maxColumns ) then
-			local maxUnits = MAX_RAID_MEMBERS
-			if( config.filters ) then
-				for _, enabled in pairs(config.filters) do
-					if( not enabled ) then
-						maxUnits = maxUnits - 5
-					end
-				end
-			end
-
-			header:SetAttribute("startingIndex", -math.min(config.maxColumns * config.unitsPerColumn, maxUnits) + 1)
-		elseif( ShadowUF[header.unitType .. "Units"] ) then
-			-- Party gets an extra slot to host the placeholder player frame
-			local extra = (header.unitType == "party") and 1 or 0
-			header:SetAttribute("startingIndex", -#(ShadowUF[header.unitType .. "Units"]) + 1 - extra)
-		end
-
-		header.startingIndex = header:GetAttribute("startingIndex")
-		header:SetMovable(true)
-		prepareChildUnits(header, header:GetChildren())
-	end
 
 	-- Setup the test env
 	if( not self.isEnabled ) then
@@ -414,18 +508,74 @@ function Movers:Enable()
 		end
 	end
 
-	-- Why is this called twice you ask? Child units are created on the OnAttributeChanged call
-	-- so the first call gets all the parent units, the second call gets the child units
-	setupUnits()
-	setupUnits(true)
+	-- Config mode is on from here, the display streams in over the next few ticks
+	self.isEnabled = true
+	cancelStages()
 
-	for unitType in pairs(ShadowUF.Units.zoneUnits) do
-		local header = ShadowUF.Units.headerFrames[unitType]
-		if( ShadowUF.db.profile.units[unitType].enabled and header ) then
-			header:SetAttribute("childChanged", 1)
+	-- One step per header: zone headers are force created here, then the secure template spawns its children
+	local headerKeys, seenHeader = {}, {}
+	for key in pairs(ShadowUF.Units.headerFrames) do
+		headerKeys[#headerKeys + 1] = key
+		seenHeader[key] = true
+	end
+	for type in pairs(ShadowUF.Units.zoneUnits) do
+		if( ShadowUF.db.profile.units[type].enabled and not seenHeader[type] ) then
+			headerKeys[#headerKeys + 1] = type
+			seenHeader[type] = true
 		end
 	end
 
+	for _, key in ipairs(headerKeys) do
+		local isZone = ShadowUF.Units.zoneUnits[key] and ShadowUF.db.profile.units[key] and ShadowUF.db.profile.units[key].enabled
+		queueStage(function()
+			if( isZone ) then ShadowUF.Units:InitializeFrame(key) end
+
+			local header = ShadowUF.Units.headerFrames[key]
+			if( header ) then setupConfigHeader(header) end
+		end)
+	end
+
+	-- Then the frames themselves, one module at a time, time-boxed per frame so a 6+6 aura profile cannot overflow a slice
+	for _, unitType in ipairs(ShadowUF.unitList) do
+		local pending
+		local function step()
+			if( not pending ) then
+				pending = {}
+				for frame in pairs(ShadowUF.Units.frameList) do
+					if( frame.unitType == unitType ) then
+						pending[#pending + 1] = frame
+					end
+				end
+			end
+
+			local started = debugprofilestop()
+			while( true ) do
+				local frame = table.remove(pending)
+				if( not frame ) then return end
+				setupConfigFrame(frame)
+
+				local elapsed = debugprofilestop() - started
+				if( elapsed < 0 or elapsed >= STAGE_BUDGET ) then
+					return #pending > 0 and step or nil
+				end
+			end
+		end
+		queueStage(step)
+	end
+
+	-- Child units are created along the way, one last sweep picks up whatever appeared
+	queueStage(function() setupUnits() end)
+
+	queueStage(function()
+		for unitType in pairs(ShadowUF.Units.zoneUnits) do
+			local header = ShadowUF.Units.headerFrames[unitType]
+			if( ShadowUF.db.profile.units[unitType].enabled and header ) then
+				header:SetAttribute("childChanged", 1)
+			end
+		end
+	end)
+
+	startStages()
 
 	-- Don't show the dialog if the configuration is opened through the configmode spec
 	if( not self.isConfigModeSpec ) then
@@ -434,72 +584,170 @@ function Movers:Enable()
 	elseif( self.infoFrame ) then
 		self.infoFrame:Hide()
 	end
-
-	self.isEnabled = true
 end
 
-function Movers:Disable()
+local function setupTestFrame(frame, unitType)
+	frame.originalUnit = frame:GetAttribute("unit")
+	frame.originalOnUpdate = frame:GetScript("OnUpdate")
+	frame.configMode = true
+	frame.unitOwner = nil
+
+	local unit
+	if( frame.placeholderUnit ) then
+		unit = frame.placeholderUnit
+	elseif( frame.isChildUnit ) then
+		local unitFormat = string.gsub(string.gsub(unitType, "target$", "%%dtarget"), "pet$", "pet%%d")
+		unit = string.format(unitFormat, frame.parent and frame.parent.configUnitID or "")
+	else
+		unit = unitType .. (frame.configUnitID or "")
+	end
+
+	frame:SetAttribute("state-unitexists", true)
+	ShadowUF.Units.OnAttributeChanged(frame, "unit", unit)
+
+	frame:SetScript("OnEvent", nil)
+	frame:SetScript("OnUpdate", nil)
+	if( frame.healthBar ) then frame.healthBar:SetScript("OnUpdate", nil) end
+	if( frame.powerBar ) then frame.powerBar:SetScript("OnUpdate", nil) end
+	if( frame.indicators ) then frame.indicators:SetScript("OnUpdate", nil) end
+
+	UnregisterUnitWatch(frame)
+	frame:FullUpdate()
+	if( frame.isPlaceholderHidden ) then
+		frame:Hide()
+	else
+		frame:Show()
+	end
+end
+
+local function teardownTestFrame(frame)
+	frame.configMode = nil
+	frame.unitOwner = nil
+	frame.unit = nil
+	frame.configUnitID = nil
+	if( frame.isPlaceholderHidden ) then
+		frame.isPlaceholderHidden = nil
+		frame:SetAttribute("statehidden", nil)
+		frame:Show()
+	end
+	-- Restore before clearing placeholderUnit, the attribute cascade must still see the flag to skip ghost children
+	frame:SetAttribute("unit", frame.originalUnit)
+	frame.placeholderUnit = nil
+	frame:SetScript("OnEvent", frame:IsVisible() and ShadowUF.Units.OnEvent or nil)
+	frame:SetScript("OnUpdate", frame.originalOnUpdate)
+
+	if( frame.isChildUnit ) then
+		ShadowUF.Units.OnAttributeChanged(frame, "unit", SecureButton_GetModifiedUnit(frame))
+	end
+
+	RegisterUnitWatch(frame, frame.hasStateWatch)
+	if( not UnitExists(frame.unit) ) then frame:Hide() end
+end
+
+local function teardownConfigFrame(frame)
+	if( frame.isMoving ) then
+		frame:GetScript("OnDragStop")(frame)
+	end
+
+	frame.configMode = nil
+	frame.unitOwner = nil
+	frame.unit = nil
+	frame.configUnitID = nil
+	if( frame.isPlaceholderHidden ) then
+		frame.isPlaceholderHidden = nil
+		frame:SetAttribute("statehidden", nil)
+		frame:Show()
+	end
+	frame.menu = frame.originalMenu
+	frame.originalMenu = nil
+	frame.Hide = frame.originalHide
+	-- Restore before clearing placeholderUnit, the attribute cascade must still see the flag to skip ghost children
+	frame:SetAttribute("unit", frame.originalUnit)
+	frame.placeholderUnit = nil
+	frame:SetScript("OnDragStop", nil)
+	frame:SetScript("OnDragStart", nil)
+	frame:SetScript("OnEvent", frame:IsVisible() and ShadowUF.Units.OnEvent or nil)
+	frame:SetScript("OnUpdate", frame.originalOnUpdate)
+	frame.OnEnter = frame.originalOnEnter
+	frame.OnLeave = frame.originalOnLeave
+	frame:SetMovable(false)
+	frame:RegisterForDrag()
+
+	if( frame.isChildUnit ) then
+		ShadowUF.Units.OnAttributeChanged(frame, "unit", SecureButton_GetModifiedUnit(frame))
+	end
+
+	RegisterUnitWatch(frame, frame.hasStateWatch)
+	if( not UnitExists(frame.unit) ) then frame:Hide() end
+end
+
+function Movers:Disable(immediate)
 	if( not self.isEnabled ) then return nil end
+	immediate = immediate or InCombatLockdown()
+
+	-- Whatever is left of the unlock belongs to the state we are leaving
+	cancelStages()
 
 	for func, env in pairs(originalEnvs) do
 		setfenv(func, env)
 		originalEnvs[func] = nil
 	end
 
-	for frame in pairs(ShadowUF.Units.frameList) do
-		if( frame.configMode ) then
-			if( frame.isMoving ) then
-				frame:GetScript("OnDragStop")(frame)
+	local pending
+	local function frameStep()
+		if( not pending ) then
+			pending = {}
+			for frame in pairs(ShadowUF.Units.frameList) do
+				if( frame.configMode ) then
+					pending[#pending + 1] = frame
+				end
 			end
+		end
 
-			frame.configMode = nil
-			frame.unitOwner = nil
-			frame.unit = nil
-			frame.configUnitID = nil
-			frame.placeholderUnit = nil
-			if( frame.isPlaceholderHidden ) then
-				frame.isPlaceholderHidden = nil
-				frame:SetAttribute("statehidden", nil)
-				frame:Show()
+		local started = debugprofilestop()
+		while( true ) do
+			local frame = table.remove(pending)
+			if( not frame ) then return end
+			teardownConfigFrame(frame)
+
+			local elapsed = debugprofilestop() - started
+			if( elapsed < 0 or elapsed >= STAGE_BUDGET ) then
+				return #pending > 0 and frameStep or nil
 			end
-			frame.menu = frame.originalMenu
-			frame.originalMenu = nil
-			frame.Hide = frame.originalHide
-			frame:SetAttribute("unit", frame.originalUnit)
-			frame:SetScript("OnDragStop", nil)
-			frame:SetScript("OnDragStart", nil)
-			frame:SetScript("OnEvent", frame:IsVisible() and ShadowUF.Units.OnEvent or nil)
-			frame:SetScript("OnUpdate", frame.originalOnUpdate)
-			frame.OnEnter = frame.originalOnEnter
-			frame.OnLeave = frame.originalOnLeave
-			frame:SetMovable(false)
-			frame:RegisterForDrag()
-
-			if( frame.isChildUnit ) then
-				ShadowUF.Units.OnAttributeChanged(frame, "unit", SecureButton_GetModifiedUnit(frame))
-			end
-
-
-			RegisterUnitWatch(frame, frame.hasStateWatch)
-			if( not UnitExists(frame.unit) ) then frame:Hide() end
 		end
 	end
+	queueStage(frameStep)
 
 	for type, header in pairs(ShadowUF.Units.headerFrames) do
-		header:SetMovable(false)
-		header:SetAttribute("startingIndex", 1)
-		header:SetAttribute("initial-unitWatch", true)
+		queueStage(function()
+			header:SetMovable(false)
+			header:SetAttribute("startingIndex", 1)
+			header:SetAttribute("initial-unitWatch", true)
 
-		if( header.unitType == type or type == "raidParent" ) then
-			ShadowUF.Units:ReloadHeader(header.unitType)
-		end
+			if( header.unitType == type or type == "raidParent" ) then
+				ShadowUF.Units:ReloadHeader(header.unitType)
+			end
+		end)
 	end
 
-	ShadowUF.Units:CheckPlayerZone(true)
-	ShadowUF.Layout:Reload()
+	queueStage(function() ShadowUF.Units:CheckPlayerZone(true) end)
 
-	-- Don't store these so everything can be GCed
-	unitConfig = {}
+	-- The full Layout:Reload is the heaviest part of locking, one unit type per step
+	for _, unitType in ipairs(ShadowUF.unitList) do
+		queueStage(function() ShadowUF.Layout:Reload(unitType) end)
+	end
+
+	queueStage(function()
+		-- Don't store these so everything can be GCed
+		unitConfig = {}
+	end)
+
+	-- The auto-lock watcher fires inside the regen window, protected teardown must finish before the lockdown
+	if( immediate ) then
+		flushStages()
+	else
+		startStages(true)
+	end
 
 	if( self.infoFrame ) then
 		self.infoFrame:Hide()
@@ -593,132 +841,150 @@ function Movers:EnableTestMode(unitType)
 		self.testModeEnvActive = true
 	end
 
-	-- For header-based units, force-create and show the header
-	if( ShadowUF.Units.headerUnits[unitType] or ShadowUF.Units.zoneUnits[unitType] ) then
-		if( ShadowUF.Units.zoneUnits[unitType] ) then
-			ShadowUF.Units:InitializeFrame(unitType)
-		end
+	-- One step for the header, then the frames trickle in like the global unlock does
+	queueStage(function()
+		if( not Movers.testModeUnits[unitType] ) then return end
 
-		local header = ShadowUF.Units.headerFrames[unitType]
-		if( header ) then
-			if( not header:IsShown() ) then
-				header:Show()
+		-- For header-based units, force-create and show the header
+		if( ShadowUF.Units.headerUnits[unitType] or ShadowUF.Units.zoneUnits[unitType] ) then
+			if( ShadowUF.Units.zoneUnits[unitType] ) then
+				ShadowUF.Units:InitializeFrame(unitType)
 			end
 
-			for key in pairs(attributeBlacklist) do
-				header:SetAttribute(key, nil)
-			end
-
-			local config = ShadowUF.db.profile.units[unitType]
-			if( config.frameSplit ) then
-				header:SetAttribute("startingIndex", -4)
-			elseif( config.maxColumns ) then
-				local maxUnits = MAX_RAID_MEMBERS
-				if( config.filters ) then
-					for _, enabled in pairs(config.filters) do
-						if( not enabled ) then maxUnits = maxUnits - 5 end
-					end
+			local header = ShadowUF.Units.headerFrames[unitType]
+			if( header ) then
+				if( not header:IsShown() ) then
+					header:Show()
 				end
-				header:SetAttribute("startingIndex", -math.min(config.maxColumns * config.unitsPerColumn, maxUnits) + 1)
-			elseif( ShadowUF[unitType .. "Units"] ) then
-				-- Party gets an extra slot to host the placeholder player frame
-				local extra = (unitType == "party") and 1 or 0
-				header:SetAttribute("startingIndex", -#(ShadowUF[unitType .. "Units"]) + 1 - extra)
-			end
 
-			header.startingIndex = header:GetAttribute("startingIndex")
-			prepareChildUnits(header, header:GetChildren())
-		end
-	end
+				for key in pairs(attributeBlacklist) do
+					header:SetAttribute(key, nil)
+				end
 
-	-- Activate placeholder on frames of this unit type
-	for frame in pairs(ShadowUF.Units.frameList) do
-		if( frame.unitType == unitType and not frame.configMode and ShadowUF.db.profile.units[unitType].enabled ) then
-			frame.originalUnit = frame:GetAttribute("unit")
-			frame.originalOnUpdate = frame:GetScript("OnUpdate")
-			frame.configMode = true
-			frame.unitOwner = nil
+				local config = ShadowUF.db.profile.units[unitType]
+				if( config.frameSplit ) then
+					header:SetAttribute("startingIndex", -4)
+				elseif( config.maxColumns ) then
+					local maxUnits = MAX_RAID_MEMBERS
+					if( config.filters ) then
+						for _, enabled in pairs(config.filters) do
+							if( not enabled ) then maxUnits = maxUnits - 5 end
+						end
+					end
+					header:SetAttribute("startingIndex", -math.min(config.maxColumns * config.unitsPerColumn, maxUnits) + 1)
+				elseif( ShadowUF[unitType .. "Units"] ) then
+					-- Party gets an extra slot to host the placeholder player frame
+					local extra = (unitType == "party") and 1 or 0
+					header:SetAttribute("startingIndex", -#(ShadowUF[unitType .. "Units"]) + 1 - extra)
+				end
 
-			local unit
-			if( frame.placeholderUnit ) then
-				unit = frame.placeholderUnit
-			elseif( frame.isChildUnit ) then
-				local unitFormat = string.gsub(string.gsub(unitType, "target$", "%%dtarget"), "pet$", "pet%%d")
-				unit = string.format(unitFormat, frame.parent and frame.parent.configUnitID or "")
-			else
-				unit = unitType .. (frame.configUnitID or "")
-			end
-
-			frame:SetAttribute("state-unitexists", true)
-			ShadowUF.Units.OnAttributeChanged(frame, "unit", unit)
-
-			frame:SetScript("OnEvent", nil)
-			frame:SetScript("OnUpdate", nil)
-			if( frame.healthBar ) then frame.healthBar:SetScript("OnUpdate", nil) end
-			if( frame.powerBar ) then frame.powerBar:SetScript("OnUpdate", nil) end
-			if( frame.indicators ) then frame.indicators:SetScript("OnUpdate", nil) end
-
-			UnregisterUnitWatch(frame)
-			frame:FullUpdate()
-			if( frame.isPlaceholderHidden ) then
-				frame:Hide()
-			else
-				frame:Show()
+				header.startingIndex = header:GetAttribute("startingIndex")
+				prepareChildUnits(header, header:GetChildren())
 			end
 		end
+	end)
+
+	-- Activate placeholders on frames of this unit type, time-boxed per frame
+	local pending
+	local function frameStep()
+		if( not Movers.testModeUnits[unitType] ) then return end
+
+		if( not pending ) then
+			pending = {}
+			for frame in pairs(ShadowUF.Units.frameList) do
+				if( frame.unitType == unitType and not frame.configMode and ShadowUF.db.profile.units[unitType].enabled ) then
+					pending[#pending + 1] = frame
+				end
+			end
+		end
+
+		local started = debugprofilestop()
+		while( true ) do
+			local frame = table.remove(pending)
+			if( not frame ) then return end
+			setupTestFrame(frame, unitType)
+
+			local elapsed = debugprofilestop() - started
+			if( elapsed < 0 or elapsed >= STAGE_BUDGET ) then
+				return #pending > 0 and frameStep or nil
+			end
+		end
 	end
+	queueStage(frameStep)
+	startStages()
 end
 
-function Movers:DisableTestMode(unitType)
+function Movers:DisableTestMode(unitType, immediate)
 	if( self.isEnabled ) then return end
+	immediate = immediate or InCombatLockdown()
 
 	self.testModeUnits[unitType] = nil
 
-	-- Restore frames of this unit type
-	for frame in pairs(ShadowUF.Units.frameList) do
-		if( frame.unitType == unitType and frame.configMode ) then
-			frame.configMode = nil
-			frame.unitOwner = nil
-			frame.unit = nil
-			frame.configUnitID = nil
-			frame.placeholderUnit = nil
-			if( frame.isPlaceholderHidden ) then
-				frame.isPlaceholderHidden = nil
-				frame:SetAttribute("statehidden", nil)
-				frame:Show()
+	-- Restore frames of this unit type, time-boxed per frame
+	local pending
+	local function frameStep()
+		if( not pending ) then
+			pending = {}
+			for frame in pairs(ShadowUF.Units.frameList) do
+				if( frame.unitType == unitType and frame.configMode ) then
+					pending[#pending + 1] = frame
+				end
 			end
-			frame:SetAttribute("unit", frame.originalUnit)
-			frame:SetScript("OnEvent", frame:IsVisible() and ShadowUF.Units.OnEvent or nil)
-			frame:SetScript("OnUpdate", frame.originalOnUpdate)
+		end
 
-			if( frame.isChildUnit ) then
-				ShadowUF.Units.OnAttributeChanged(frame, "unit", SecureButton_GetModifiedUnit(frame))
+		local started = debugprofilestop()
+		while( true ) do
+			local frame = table.remove(pending)
+			if( not frame ) then return end
+			teardownTestFrame(frame)
+
+			local elapsed = debugprofilestop() - started
+			if( elapsed < 0 or elapsed >= STAGE_BUDGET ) then
+				return #pending > 0 and frameStep or nil
 			end
-
-			RegisterUnitWatch(frame, frame.hasStateWatch)
-			if( not UnitExists(frame.unit) ) then frame:Hide() end
 		end
 	end
+	queueStage(frameStep)
 
 	-- Restore header for header-based units
-	local header = ShadowUF.Units.headerFrames[unitType]
-	if( header ) then
-		header:SetAttribute("startingIndex", 1)
-		header:SetAttribute("initial-unitWatch", true)
-		if( header.unitType == unitType ) then
-			ShadowUF.Units:ReloadHeader(unitType)
+	queueStage(function()
+		local header = ShadowUF.Units.headerFrames[unitType]
+		if( header ) then
+			header:SetAttribute("startingIndex", 1)
+			header:SetAttribute("initial-unitWatch", true)
+			if( header.unitType == unitType ) then
+				ShadowUF.Units:ReloadHeader(unitType)
+			end
+		end
+	end)
+
+	-- If no more test mode units, restore all setfenv
+	-- Steps re-check the state, a test mode re-enabled during the drain keeps its environment
+	if( not next(self.testModeUnits) and self.testModeEnvActive ) then
+		queueStage(function()
+			if( next(Movers.testModeUnits) ) then return end
+
+			for func, env in pairs(testOriginalEnvs) do
+				setfenv(func, env)
+				testOriginalEnvs[func] = nil
+			end
+			Movers.testModeEnvActive = false
+			unitConfig = {}
+		end)
+
+		-- The full reload is the heaviest part, one unit type per step
+		for _, reloadType in ipairs(ShadowUF.unitList) do
+			queueStage(function()
+				if( next(Movers.testModeUnits) ) then return end
+				ShadowUF.Layout:Reload(reloadType)
+			end)
 		end
 	end
 
-	-- If no more test mode units, restore all setfenv
-	if( not next(self.testModeUnits) and self.testModeEnvActive ) then
-		for func, env in pairs(testOriginalEnvs) do
-			setfenv(func, env)
-			testOriginalEnvs[func] = nil
-		end
-		self.testModeEnvActive = false
-		unitConfig = {}
-		ShadowUF.Layout:Reload()
+	if( immediate ) then
+		flushStages()
+	else
+		startStages(true)
 	end
 end
 
@@ -829,7 +1095,8 @@ function Movers:CreateInfoFrame()
 	frame:SetScript("OnEvent", function(f)
 		if( not ShadowUF.db.profile.locked and f:IsVisible() ) then
 			ShadowUF.db.profile.locked = true
-			Movers:Disable()
+			-- Combat is starting, the whole teardown must run inside this event's window
+			Movers:Disable(true)
 
 			DEFAULT_CHAT_FRAME:AddMessage(L["You have entered combat, unit frames have been locked. Once you leave combat you will need to unlock them again through /shadowuf."])
 		end

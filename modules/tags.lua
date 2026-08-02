@@ -456,12 +456,20 @@ function ShadowUF:SmartFormatNumber(number)
 	return string.format("%s", number) -- Secret fallback
 end
 
+-- UnitClass returns secrets when the unit's identity is secret (target/focus/boss in combat)
+-- Comparing or table-indexing those errors, class-driven logic treats them as unknown
+function ShadowUF.UnitClassToken(unit)
+	local class = select(2, UnitClass(unit))
+	if( issecretvalue and issecretvalue(class) ) then return nil end
+	return class
+end
+
 function ShadowUF:GetClassColor(unit)
 	if( not UnitIsPlayer(unit) ) then
 		return nil
 	end
 
-	local class = select(2, UnitClass(unit))
+	local class = ShadowUF.UnitClassToken(unit)
 	return class and ShadowUF:Hex(ShadowUF.db.profile.classColors[class])
 end
 
@@ -503,6 +511,11 @@ Druid.TreeForm = GetSpellName(33891)
 Druid.AquaticForm = GetSpellName(1066)
 Druid.SwiftFlightForm = GetSpellName(40120)
 Druid.FlightForm = GetSpellName(33943)
+-- Shapeshift form IDs (DRUID_*_FORM constants, Blizzard_FrameXMLBase/Constants.lua)
+-- GetShapeshiftFormID() is combat-safe, unlike aura queries (secret/error in combat)
+-- Localization keys resolved through ShadowUF.L at tag runtime
+Druid.shortFormKeys = { [1] = "C", [2] = "T", [3] = "T", [4] = "A", [5] = "B", [27] = "F", [29] = "F", [31] = "M", [35] = "M" }
+Druid.formKeys = { [1] = "Cat", [2] = "Tree", [3] = "Travel", [4] = "Aquatic", [5] = "Bear", [27] = "Flight", [29] = "Flight", [31] = "Moonkin", [35] = "Moonkin" }
 ShadowUF.Druid = Druid
 
 Tags.defaultTags = {
@@ -521,9 +534,17 @@ Tags.defaultTags = {
 		return ShadowUF:Hex(ShadowUF.modules.healthBar.getGradientColor(unit))
 	end]],
 	["short:druidform"] = [[function(unit, unitOwner)
-		if( select(2, UnitClass(unit)) ~= "DRUID" ) then return nil end
+		if( ShadowUF.UnitClassToken(unit) ~= "DRUID" ) then return nil end
 
 		local Druid = ShadowUF.Druid
+		-- Player form ID is combat-safe, aura queries aren't
+		if( unitOwner == "player" ) then
+			local formID = GetShapeshiftFormID()
+			local key = formID and Druid.shortFormKeys[formID]
+			return key and ShadowUF.L[key] or nil
+		end
+
+		-- Other units have no form API, aura lookup works out of combat only
 		if( ShadowUF.UnitAuraBySpell(unit, Druid.CatForm) ) then
 			return ShadowUF.L["C"]
 		elseif( ShadowUF.UnitAuraBySpell(unit, Druid.TreeForm) ) then
@@ -541,9 +562,17 @@ Tags.defaultTags = {
 		end
 	end]],
 	["druidform"] = [[function(unit, unitOwner)
-		if( select(2, UnitClass(unit)) ~= "DRUID" ) then return nil end
+		if( ShadowUF.UnitClassToken(unit) ~= "DRUID" ) then return nil end
 
 		local Druid = ShadowUF.Druid
+		-- Player form ID is combat-safe, aura queries aren't
+		if( unitOwner == "player" ) then
+			local formID = GetShapeshiftFormID()
+			local key = formID and Druid.formKeys[formID]
+			return key and ShadowUF.L[key] or nil
+		end
+
+		-- Other units have no form API, aura lookup works out of combat only
 		if( ShadowUF.UnitAuraBySpell(unit, Druid.CatForm) ) then
 			return ShadowUF.L["Cat"]
 		elseif( ShadowUF.UnitAuraBySpell(unit, Druid.TreeForm) ) then
@@ -561,7 +590,9 @@ Tags.defaultTags = {
 		end
 	end]],
 	["guild"] = [[function(unit, unitOwner)
-		return GetGuildInfo(unitOwner)
+		-- GetGuildInfo rejects compound unit tokens (targettarget...)
+		local ok, name = pcall(GetGuildInfo, unitOwner)
+		return ok and name or nil
 	end]],
 	["abbrev:name"] = [[function(unit, unitOwner)
 		local name = UnitName(unitOwner)
@@ -976,7 +1007,7 @@ Tags.defaultTags = {
 	["plus"] = [[function(unit, unitOwner) local classif = UnitClassification(unit) return (classif == "elite" or classif == "rareelite") and "+" end]],
 	["race"] = [[function(unit, unitOwner) return UnitRace(unit) end]],
 	["rare"] = [[function(unit, unitOwner) local classif = UnitClassification(unit) return (classif == "rare" or classif == "rareelite") and ShadowUF.L["Rare"] end]],
-	["sex"] = [[function(unit, unitOwner) local sex = UnitSex(unit) return sex == 2 and ShadowUF.L["Male"] or sex == 3 and ShadowUF.L["Female"] end]],
+	["sex"] = [[function(unit, unitOwner) local sex = UnitSex(unit) if( issecretvalue(sex) ) then return nil end return sex == 2 and ShadowUF.L["Male"] or sex == 3 and ShadowUF.L["Female"] end]],
 	["smartclass"] = [[function(unit, unitOwner) return UnitIsPlayer(unit) and ShadowUF.tagFunc.class(unit) or ShadowUF.tagFunc.creature(unit) end]],
 	["status"] = [[function(unit, unitOwner)
 		if( UnitIsDead(unit) ) then
@@ -1061,7 +1092,8 @@ Tags.defaultTags = {
 		return classif == "rare" and "R" or classif == "rareelite" and "R+" or classif == "elite" and "+" or classif == "worldboss" and "B" or classif == "minus" and "M"
 	end]],
 	["group"] = [[function(unit, unitOwner)
-		if( not UnitInRaid(unitOwner) ) then return nil end
+		local inRaid = UnitInRaid(unitOwner)
+		if( issecretvalue(inRaid) or not inRaid ) then return nil end
 		local name, server = UnitName(unitOwner)
 		if issecretvalue(name) then return nil end
 		if( server and server ~= "" ) then
@@ -1078,19 +1110,19 @@ Tags.defaultTags = {
 		return nil
 	end]],
 	["druid:curpp"] = [[function(unit, unitOwner)
-		if( select(2, UnitClass(unit)) ~= "DRUID" ) then return nil end
+		if( ShadowUF.UnitClassToken(unit) ~= "DRUID" ) then return nil end
 		local powerType = UnitPowerType(unit)
 		if( powerType ~= Enum.PowerType.Rage and powerType ~= Enum.PowerType.Energy and powerType ~= Enum.PowerType.LunarPower ) then return nil end
 		return ShadowUF:FormatLargeNumber(UnitPower(unit, Enum.PowerType.Mana))
 	end]],
 	["druid:abscurpp"] = [[function(unit, unitOwner)
-		if( select(2, UnitClass(unit)) ~= "DRUID" ) then return nil end
+		if( ShadowUF.UnitClassToken(unit) ~= "DRUID" ) then return nil end
 		local powerType = UnitPowerType(unit)
 		if( powerType ~= Enum.PowerType.Rage and powerType ~= Enum.PowerType.Energy and powerType ~= Enum.PowerType.LunarPower ) then return nil end
 		return UnitPower(unit, Enum.PowerType.Mana)
 	end]],
 	["druid:curmaxpp"] = [[function(unit, unitOwner)
-		if( select(2, UnitClass(unit)) ~= "DRUID" ) then return nil end
+		if( ShadowUF.UnitClassToken(unit) ~= "DRUID" ) then return nil end
 		local powerType = UnitPowerType(unit)
 		if( powerType ~= Enum.PowerType.Rage and powerType ~= Enum.PowerType.Energy and powerType ~= Enum.PowerType.LunarPower ) then return nil end
 
@@ -1105,14 +1137,14 @@ Tags.defaultTags = {
 		return string.format("%s/%s", ShadowUF:FormatLargeNumber(power), ShadowUF:FormatLargeNumber(maxPower))
 	end]],
 	["druid:absolutepp"] = [[function(unit, unitOwner)
-		if( select(2, UnitClass(unit)) ~= "DRUID" ) then return nil end
+		if( ShadowUF.UnitClassToken(unit) ~= "DRUID" ) then return nil end
 		local powerType = UnitPowerType(unit)
 		if( powerType ~= Enum.PowerType.Rage and powerType ~= Enum.PowerType.Energy and powerType ~= Enum.PowerType.LunarPower ) then return nil end
 
 		return UnitPower(unit, Enum.PowerType.Mana)
 	end]],
 	["sec:curpp"] = [[function(unit, unitOwner)
-		local class = select(2, UnitClass(unit))
+		local class = ShadowUF.UnitClassToken(unit)
 		local powerType = UnitPowerType(unit)
 		if( class == "DRUID" ) then
 			if( powerType ~= Enum.PowerType.Rage and powerType ~= Enum.PowerType.Energy and powerType ~= Enum.PowerType.LunarPower ) then return nil end
@@ -1126,7 +1158,7 @@ Tags.defaultTags = {
 		return ShadowUF:FormatLargeNumber(UnitPower(unit, Enum.PowerType.Mana))
 	end]],
 	["sec:abscurpp"] = [[function(unit, unitOwner)
-		local class = select(2, UnitClass(unit))
+		local class = ShadowUF.UnitClassToken(unit)
 		local powerType = UnitPowerType(unit)
 		if( class == "DRUID" ) then
 			if( powerType ~= Enum.PowerType.Rage and powerType ~= Enum.PowerType.Energy and powerType ~= Enum.PowerType.LunarPower ) then return nil end
@@ -1140,7 +1172,7 @@ Tags.defaultTags = {
 		return UnitPower(unit, Enum.PowerType.Mana)
 	end]],
 	["sec:curmaxpp"] = [[function(unit, unitOwner)
-		local class = select(2, UnitClass(unit))
+		local class = ShadowUF.UnitClassToken(unit)
 		local powerType = UnitPowerType(unit)
 		if( class == "DRUID" ) then
 			if( powerType ~= Enum.PowerType.Rage and powerType ~= Enum.PowerType.Energy and powerType ~= Enum.PowerType.LunarPower ) then return nil end
@@ -1163,7 +1195,7 @@ Tags.defaultTags = {
 		return string.format("%s/%s", ShadowUF:FormatLargeNumber(power), ShadowUF:FormatLargeNumber(maxPower))
 	end]],
 	["sec:absolutepp"] = [[function(unit, unitOwner)
-		local class = select(2, UnitClass(unit))
+		local class = ShadowUF.UnitClassToken(unit)
 		local powerType = UnitPowerType(unit)
 		if( class == "DRUID" ) then
 			if( powerType ~= Enum.PowerType.Rage and powerType ~= Enum.PowerType.Energy and powerType ~= Enum.PowerType.LunarPower ) then return nil end
@@ -1290,8 +1322,8 @@ Tags.defaultEvents = {
 	["totem:timer"]				= "SUF_TOTEM_TIMER",
 	["rune:timer"]				= "SUF_RUNE_TIMER",
 	["hp:color"]				= "UNIT_HEALTH UNIT_MAXHEALTH",
-	["short:druidform"]			= "UNIT_AURA",
-	["druidform"]				= "UNIT_AURA",
+	["short:druidform"]			= "UNIT_AURA UPDATE_SHAPESHIFT_FORM",
+	["druidform"]				= "UNIT_AURA UPDATE_SHAPESHIFT_FORM",
 	["guild"]					= "UNIT_NAME_UPDATE",
 	-- ["per:incheal"]			= "UNIT_HEAL_PREDICTION", -- 12.0: Disabled
 	["abs:incheal"]				= "UNIT_HEAL_PREDICTION",
@@ -1699,6 +1731,7 @@ Tags.eventType = {
 	["PLAYER_REGEN_ENABLED"] = "unitless",
 	["PLAYER_XP_UPDATE"] = "unitless",
 	["PLAYER_TOTEM_UPDATE"] = "unitless",
+	["UPDATE_SHAPESHIFT_FORM"] = "unitless",
 	["PLAYER_LEVEL_UP"] = "unitless",
 	["UPDATE_EXHAUSTION"] = "unitless",
 	["PLAYER_UPDATE_RESTING"] = "unitless",

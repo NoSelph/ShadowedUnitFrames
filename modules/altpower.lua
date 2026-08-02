@@ -24,7 +24,7 @@ function AltPower:UpdateVisibility(frame)
 	if( barInfo and barInfo.barType ) then
 		if( ( frame.unitType == "player" or frame.unitType == "pet" ) or not barInfo.hideFromOthers ) then
 			visible = true
-		elseif( barInfo.showOnRaid and ( UnitInRaid(frame.unit) or UnitInParty(frame.unit) ) ) then
+		elseif( barInfo.showOnRaid and not ShadowUF.IsUnitIdentitySecret(frame.unit) and ( UnitInRaid(frame.unit) or UnitInParty(frame.unit) ) ) then
 			visible = true
 		end
 	end

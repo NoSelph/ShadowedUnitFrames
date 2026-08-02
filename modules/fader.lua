@@ -6,7 +6,7 @@ ShadowUF:RegisterModule(Fader, "fader", ShadowUF.L["Combat fader"])
 local function tempAuraFader(frame, alpha)
 	if( not frame.auras ) then return end
 
-	local childAlpha = 0.8 * alpha
+	local childAlpha = (ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8) * alpha
 	if( frame.auras.buffs ) then
 		for id, button in pairs(frame.auras.buffs.buttons) do
 			button.cooldown:SetSwipeColor(0, 0, 0, childAlpha)

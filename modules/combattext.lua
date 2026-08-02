@@ -10,6 +10,7 @@ function Combat:OnEnable(frame)
 		frame.combatText:SetFrameLevel(frame.topFrameLevel)
 
 		frame.combatText.feedbackStartTime = 0
+		frame.combatText.feedbackFontHeight = ShadowUF.db.profile.font.size + 1
 		frame.combatText:SetScript("OnUpdate", CombatFeedback_OnUpdate)
 		frame.combatText:SetHeight(1)
 		frame.combatText:SetWidth(1)
@@ -35,6 +36,8 @@ function Combat:OnDisable(frame)
 end
 
 function Combat:Update(frame, event, unit, type, ...)
+	-- Blizzard's CombatFeedback errors on a nil font height (the layout only sets it when combat text is visible)
+	if( not frame.visibility.combatText or not frame.combatText.feedbackFontHeight ) then return end
 	CombatFeedback_OnCombatEvent(frame.combatText, type, ...)
 	if( type == "IMMUNE" ) then
 		frame.combatText.feedbackText:SetTextHeight(frame.combatText.feedbackFontHeight * 0.75)

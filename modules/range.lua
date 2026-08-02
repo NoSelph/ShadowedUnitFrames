@@ -66,6 +66,8 @@ local rangeSpells = {}
 local UnitPhaseReason_o = UnitPhaseReason
 local UnitPhaseReason = function(unit)
 	local phase = UnitPhaseReason_o(unit)
+	-- Secret when the unit's identity is secret, comparing would error
+	if( issecretvalue and issecretvalue(phase) ) then return nil end
 	if (phase == Enum.PhaseReason.WarMode or phase == Enum.PhaseReason.ChromieTime or phase == Enum.PhaseReason.TimerunningHwt) and UnitIsVisible(unit) then
 		return nil
 	end
@@ -125,7 +127,7 @@ local function checkRange(self)
     end
 
     -- Fallback: UnitInRange for group members (handles secret booleans via SetAlphaFromBoolean)
-    if UnitInRaid(frame.unit) or UnitInParty(frame.unit) then
+    if not ShadowUF.IsUnitIdentitySecret(frame.unit) and (UnitInRaid(frame.unit) or UnitInParty(frame.unit)) then
         local ok, inRange = pcall(UnitInRange, frame.unit)
         if ok and not frame.disableRangeAlpha then
             if frame.SetAlphaFromBoolean then

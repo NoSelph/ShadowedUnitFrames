@@ -1,72 +1,86 @@
-local Auras = {}
+﻿local Auras = {}
 local SML = LibStub("LibSharedMedia-3.0")
-local playerUnits = {player = true, vehicle = true, pet = true}
-local mainHand, offHand, tempEnchantScan = {time = 0}, {time = 0}
 local canCure = ShadowUF.Units.canCure
 ShadowUF:RegisterModule(Auras, "auras", ShadowUF.L["Auras"])
 
-local FILTER_STRINGS = {
-	HELPFUL = {PLAYER = "HELPFUL|PLAYER", RAID = "HELPFUL|RAID", RAID_PLAYER_DISPELLABLE = "HELPFUL|RAID_PLAYER_DISPELLABLE"},
-	HARMFUL = {PLAYER = "HARMFUL|PLAYER", RAID = "HARMFUL|RAID", RAID_PLAYER_DISPELLABLE = "HARMFUL|RAID_PLAYER_DISPELLABLE"},
-}
+-- Styling placeholders once per config generation is enough
+Auras.configStyleGeneration = 1
 
 local AURA_TYPES = {"buffs", "debuffs"}
 
-local columnsHaveScale = {}
-local _scanUnit, _scanFilter
-local function _safeGetAuraSlots()
-	return {C_UnitAuras.GetAuraSlots(_scanUnit, _scanFilter)}
+-- AuraButtons are forbidden under any aura restriction (combat, M+, PvP), combat lockdown alone is too narrow a proxy
+local function aurasAreSecret()
+	if( C_Secrets and C_Secrets.ShouldAurasBeSecret ) then
+		return C_Secrets.ShouldAurasBeSecret()
+	end
+	return InCombatLockdown() and true or false
+end
+Auras.AurasAreSecret = aurasAreSecret
+
+-- User dispel palette, handed to Blizzard via customDispelColorMap on our PreserveAsset borders (atlas styles keep the Blizzard look)
+local dispelColorMap
+local DISPEL_COLOR_TYPES = {"Magic", "Curse", "Disease", "Poison", "Bleed", "Enrage"}
+
+function Auras:GetDispelColorMap()
+	if( dispelColorMap ~= nil ) then return dispelColorMap or nil end
+
+	local colors = ShadowUF.db.profile.auraColors and ShadowUF.db.profile.auraColors.dispel
+	if( not colors ) then
+		dispelColorMap = false
+		return nil
+	end
+
+	local map = {}
+	for dispelType, color in pairs(colors) do
+		map[dispelType] = CreateColor(color.r or 1, color.g or 1, color.b or 1)
+	end
+	dispelColorMap = map
+	return map
 end
 
--- Hook that triggers a SUF aura re-scan after Blizzard's TargetFrame/FocusFrame finishes updating.
--- Ensures SUF reads fresh activeDebuffs/activeBuffs regardless of event handler ordering.
-local blizHooksInstalled = false
-
-local function onBlizAurasUpdated(blizFrame)
-	local unit = blizFrame.unit
-	if not unit then return end
-	local sufFrame = ShadowUF.Units.unitFrames[unit]
-	if sufFrame and sufFrame:IsVisible() then
-		Auras:Update(sufFrame)
-	end
+function Auras:InvalidateDispelColorMap()
+	dispelColorMap = nil
 end
 
-local function installBlizAuraHooks()
-	if blizHooksInstalled then return end
-	blizHooksInstalled = true
-	if TargetFrame then
-		hooksecurefunc(TargetFrame, "UpdateAuras", onBlizAurasUpdated)
+-- Border colors are frozen at button creation, the palette is part of the rebuild signatures
+function Auras:GetDispelColorsKey()
+	local colors = ShadowUF.db.profile.auraColors and ShadowUF.db.profile.auraColors.dispel
+	if( not colors ) then return "" end
+
+	local parts = {}
+	for _, dispelType in ipairs(DISPEL_COLOR_TYPES) do
+		local color = colors[dispelType]
+		if( color ) then
+			table.insert(parts, string.format("%.2f%.2f%.2f", color.r or 0, color.g or 0, color.b or 0))
+		end
 	end
-	if FocusFrame then
-		hooksecurefunc(FocusFrame, "UpdateAuras", onBlizAurasUpdated)
-	end
+	return table.concat(parts)
 end
+
+-- Managed AuraContainers (AuraGroups) drive the live display, legacy buttons only remain for config mode placeholders
+local hasContainers = false
+do
+	if( C_AddOns and C_AddOns.LoadAddOn ) then
+		pcall(C_AddOns.LoadAddOn, "Blizzard_AuraContainer")
+	end
+	local ok, result = pcall(function()
+		local probe = CreateFrame("AuraContainer", nil, UIParent, "CustomAuraContainerTemplate")
+		local hasGroups = type(probe.AddAuraGroup) == "function"
+		probe:SetEnabled(false)
+		probe:Hide()
+		return hasGroups
+	end)
+	hasContainers = ok and result == true
+end
+Auras.hasContainers = hasContainers
 
 function Auras:OnEnable(frame)
 	frame.auras = frame.auras or {}
 
+	-- Containers self-register UNIT_AURA and manage temp enchants natively
 	frame:RegisterNormalEvent("PLAYER_ENTERING_WORLD", self, "Update")
 	frame:RegisterNormalEvent("ZONE_CHANGED_NEW_AREA", self, "UpdateFilter")
-	frame:RegisterNormalEvent("WEAPON_ENCHANT_CHANGED", self, "OnWeaponEnchantChanged")
-	frame:RegisterUnitEvent("UNIT_AURA", self, "Update")
 	frame:RegisterUpdateFunc(self, "Update")
-
-	-- Install Blizzard frame hooks once if any aura frame uses the BLIZZARD filter
-	if not blizHooksInstalled then
-		local auraConfig = ShadowUF.db.profile.units[frame.unitType].auras
-		for _, at in ipairs(AURA_TYPES) do
-			local tc = auraConfig and auraConfig[at]
-			if tc then
-				for i = 1, 6 do
-					if tc[i] and tc[i].filter == "BLIZZARD" then
-						installBlizAuraHooks()
-						break
-					end
-				end
-			end
-			if blizHooksInstalled then break end
-		end
-	end
 
 	self:UpdateFilter(frame)
 end
@@ -114,7 +128,22 @@ end
 
 function Auras:OnDisable(frame)
 	frame:UnregisterAll(self)
+	-- Containers self-register their events and would keep displaying
+	self:DisableContainers(frame)
 	self:ClearBossDebuffs(frame)
+end
+
+function Auras:DisableContainers(frame)
+	if( not frame.auras ) then return end
+	for _, auraType in ipairs(AURA_TYPES) do
+		for i = 1, 6 do
+			local group = frame.auras[auraType .. i]
+			if( group and group.container ) then
+				group.container:SetEnabled(false)
+				group.container:Hide()
+			end
+		end
+	end
 end
 
 -- Aura positioning code
@@ -224,105 +253,6 @@ local function positionButton(id, group, config)
 end
 
 
--- Fixed layout, grid-based wrapping with inter-row offset compensation for scaled auras
-local function positionAllButtonsFixed(group, config)
-	local position = positionData[getPositionKey(config, group.forcedGrowH, group.forcedGrowV)]
-
-	-- Pass 1: figure out which rows have scaled auras
-	local columnID = 0
-	for id = 1, group.totalAuras do
-		local button = group.buttons[id]
-		if( not button or not button:IsShown() ) then break end
-
-		if( id % config.perRow == 1 or config.perRow == 1 ) then
-			columnID = columnID + 1
-			columnsHaveScale[columnID] = nil
-		end
-
-		if( not columnsHaveScale[columnID] and button.isSelfScaled ) then
-			local size = math.ceil(button:GetSize() * button:GetScale())
-			columnsHaveScale[columnID] = columnsHaveScale[columnID] and math.max(size, columnsHaveScale[columnID]) or size
-		end
-	end
-
-	-- Pass 2: position with offset compensation between rows
-	-- Center growth tracking
-	local rightEnd, leftEnd, rowCenter
-	columnID = 1
-	for id = 1, group.totalAuras do
-		local button = group.buttons[id]
-		if( not button or not button:IsShown() ) then break end
-
-		button.isAuraAnchor = nil
-
-		if( id > 1 ) then
-			if( id % config.perRow == 1 or config.perRow == 1 ) then
-				columnID = columnID + 1
-
-				-- Anchor to center button of previous row (center growth)
-				local anchorButton = position.isCenterGrowth and rowCenter or group.buttons[id - config.perRow]
-				local previousScale, currentScale = columnsHaveScale[columnID - 1], columnsHaveScale[columnID]
-				local offset = 0
-				if( previousScale and not anchorButton.isSelfScaled ) then
-					offset = (previousScale / 4)
-				end
-				if( currentScale and not button.isSelfScaled ) then
-					offset = offset + (currentScale / 4)
-				end
-				if( button.isSelfScaled and not anchorButton.isSelfScaled ) then
-					offset = offset - (currentScale / 6)
-				end
-				if( ( not button.isSelfScaled or not anchorButton.isSelfScaled ) and offset > 0 ) then
-					offset = offset + 1
-				end
-
-				position.column(button, anchorButton, math.ceil(offset))
-				button.isAuraAnchor = true
-
-				if position.isCenterGrowth then
-					rowCenter = button
-					rightEnd = button
-					leftEnd = button
-				end
-			elseif( position.isCenterGrowth ) then
-				local posInRow = ((id - 1) % config.perRow)
-				if posInRow % 2 == 1 then
-					position.auraRight(button, rightEnd)
-					rightEnd = button
-				else
-					position.auraLeft(button, leftEnd)
-					leftEnd = button
-				end
-			else
-				position.aura(button, group.buttons[id - 1])
-			end
-		else
-			-- First button: adjust initial anchor if row has scaled auras
-			local offset = 0
-			if( columnsHaveScale[columnID] ) then
-				offset = math.ceil(columnsHaveScale[columnID] / 8)
-				if( button.isSelfScaled ) then
-					offset = -(offset / 2)
-				else
-					offset = offset + 2
-				end
-			end
-
-			setupFirstButton(button, config, group, position)
-
-			if( offset ~= button.anchorOffset ) then
-				position.initialAnchor(button, offset)
-			end
-
-			if position.isCenterGrowth then
-				rowCenter = button
-				rightEnd = button
-				leftEnd = button
-			end
-		end
-	end
-end
-
 -- Dynamic layout: pixel-based flow wrapping when enlarged auras are present
 local function positionAllButtonsDynamic(group, config)
 	local position = positionData[getPositionKey(config, group.forcedGrowH, group.forcedGrowV)]
@@ -386,92 +316,30 @@ local function positionAllButtonsDynamic(group, config)
 	end
 end
 
--- Dispatch to the appropriate layout function based on user setting
+-- Config-mode placeholders only, the live layout is the container's flow layout
 local function positionAllButtons(group, config)
-	if( ShadowUF.db.profile.enlargeLayout ) then
-		positionAllButtonsFixed(group, config)
-	else
-		positionAllButtonsDynamic(group, config)
-	end
+	positionAllButtonsDynamic(group, config)
 end
 
 -- Aura button functions
--- Updates the X seconds left on aura tooltip while it's shown
-local function updateTooltip(self)
-	if( not GameTooltip:IsForbidden() and GameTooltip:IsOwned(self) ) then
-		if( self.filter == "HELPFUL" ) then
-			GameTooltip:SetUnitBuffByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
-		elseif( self.filter == "HARMFUL" ) then
-			GameTooltip:SetUnitDebuffByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
-		else
-			GameTooltip:SetUnitAuraByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
-		end
-	end
-end
-
-local function showTooltip(self)
-	if( not ShadowUF.db.profile.locked ) then return end
-	if( GameTooltip:IsForbidden() ) then return end
-	if( ShadowUF.db.profile.tooltipCombat and InCombatLockdown() ) then return end
-
-	GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
-	if( self.filter == "TEMP" ) then
-		GameTooltip:SetInventoryItem("player", self.auraID)
-		self:SetScript("OnUpdate", nil)
-	else
-		if( self.filter == "HELPFUL" ) then
-			GameTooltip:SetUnitBuffByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
-		elseif( self.filter == "HARMFUL" ) then
-			GameTooltip:SetUnitDebuffByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
-		else
-			GameTooltip:SetUnitAuraByAuraInstanceID(self.unit, self.auraInstanceID, self.filter)
-		end
-		
-		self:SetScript("OnUpdate", updateTooltip)
-	end
-end
-
-local function hideTooltip(self)
-	self:SetScript("OnUpdate", nil)
-	if not GameTooltip:IsForbidden() then
-		GameTooltip:Hide()
-	end
-end
-
-local function cancelAura(self, mouseButton)
-	if( mouseButton ~= "RightButton" ) then return end
-	if( InCombatLockdown() ) then return end
-	if( not self.filter or not self.filter:find("HELPFUL") ) then return end
-	if( not self.unit or not UnitIsUnit(self.unit, "player") ) then return end
-	
-	if( self.auraInstanceID ) then
-		local auraData = C_UnitAuras.GetAuraDataByAuraInstanceID("player", self.auraInstanceID)
-		if( auraData and auraData.name ) then
-			CancelSpellByName(auraData.name)
-		end
-	end
-end
-
+-- instanceID tooltip setters error while auras are secret, pcall keeps hover safe
+-- Only config-mode placeholders use this, the containers handle live tooltips and right-click cancel natively
 local function updateButton(id, group, config)
 	local button = group.buttons[id]
 	if( not button ) then
 		group.buttons[id] = CreateFrame("Button", nil, group)
 
 		button = group.buttons[id]
-		button:SetScript("OnEnter", showTooltip)
-		button:SetScript("OnLeave", hideTooltip)
-		button:RegisterForClicks("RightButtonUp")
 
-		button.cooldown = CreateFrame("Cooldown", group.parent:GetName() .. "Aura" .. group.type .. id .. "Cooldown", button, "CooldownFrameTemplate")
+		button.cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
 		button.cooldown:SetAllPoints(button)
 		button.cooldown:SetReverse(true)
 		button.cooldown:SetDrawEdge(false)
 		button.cooldown:SetDrawSwipe(true)
-		button.cooldown:SetSwipeColor(0, 0, 0, 0.8)
+		button.cooldown:SetSwipeColor(0, 0, 0, ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8)
 		button.cooldown:Hide()
 
 		button.stack = button:CreateFontString(nil, "OVERLAY")
-		ShadowUF:SetFontAndShadow(button.stack, "Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", 10, "OUTLINE", 0, 0, 0, 1.0, 0.50, -0.50)
 		button.stack:SetHeight(1)
 		button.stack:SetWidth(1)
 		button.stack:SetAllPoints(button)
@@ -509,16 +377,6 @@ local function updateButton(id, group, config)
 	button.border:SetWidth(config.size + 1)
 	ShadowUF:SetFontAndShadow(button.stack, "Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", math.floor((config.size * 0.60) + 0.5), "OUTLINE", 0, 0, 0, 1.0, 0.50, -0.50)
 
-	-- Click-through: disable mouse clicks but keep mouse motion (tooltips)
-	if not InCombatLockdown() then
-		button:SetMouseClickEnabled(not config.clickThrough)
-	end
-
-	if not config.clickThrough then
-		button:SetScript("OnClick", cancelAura)
-	else
-		button:SetScript("OnClick", nil)
-	end
 	button.parent = group.parent
 	button:ClearAllPoints()
 	button:Hide()
@@ -532,6 +390,8 @@ end
 
 function Auras:UpdateCooldownText(button, config)
 	if( not button or not button.cooldown ) then return end
+
+	button.cooldown:SetSwipeColor(0, 0, 0, ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8)
 
 	-- Try to get the cooldown text region if we haven't already
 	if( not button.cooldown.timerText ) then
@@ -567,6 +427,667 @@ end
 -- Let the mover access this for creating aura things
 Auras.updateButton = updateButton
 
+-- Container-based display (AuraContainer + AuraGroups)
+-- Blizzard's untainted code reads/filters/sorts the auras and drives the buttons, we just describe the groups up front
+-- Filters/sort/caps are runtime-mutable; structural changes still recreate the container, out of combat only, the protected-inherited container can't be hidden or moved in combat
+
+local pendingRebuilds = {}
+local regenWatcher, rebuildAnnounced
+-- announce is for user config changes made in combat, internal deferrals (spawns mid-fight, re-styles, M+ deaths) queue silently (or spam è_é)
+local function queueContainerRebuild(frame, announce)
+	pendingRebuilds[frame] = true
+
+	if( announce and not rebuildAnnounced ) then
+		rebuildAnnounced = true
+		ShadowUF:Print(ShadowUF.L["Some aura changes are deferred while combat restrictions are active (combat, dungeons, raids)."])
+	end
+
+	if( not regenWatcher ) then
+		regenWatcher = CreateFrame("Frame")
+		regenWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+		regenWatcher:SetScript("OnEvent", function()
+			rebuildAnnounced = nil
+			for pendingFrame in pairs(pendingRebuilds) do
+				pendingRebuilds[pendingFrame] = nil
+				if( pendingFrame.visibility and pendingFrame.visibility.auras ) then
+					Auras:OnLayoutApplied(pendingFrame, ShadowUF.db.profile.units[pendingFrame.unitType])
+				end
+			end
+		end)
+	end
+end
+
+-- Config changed in combat means the layout pipeline may be partially skipped, queue every aura-visible frame for a rebuild at regen
+function Auras:QueueAllContainerRebuilds()
+	for frame in pairs(ShadowUF.Units.frameList) do
+		if( frame.visibility and frame.visibility.auras ) then
+			queueContainerRebuild(frame, true)
+		end
+	end
+end
+
+local FLOW_H = { LEFT = "Left", RIGHT = "Right", CENTER = "Right" }
+local FLOW_V = { TOP = "Up", BOTTOM = "Down" }
+
+-- Pre-Sections UI, one filter split into PLAYER/!PLAYER groups when "enlarge my auras" is on (negation keeps the union duplicate-free)
+local function splitTokens(filterValue)
+	local tokens = {}
+	if( filterValue and filterValue ~= "ALL" and filterValue ~= "BLIZZARD" and not filterValue:find("^CUSTOM:") ) then
+		for token in string.gmatch(filterValue, "[^|]+") do
+			if( token ~= "ALL" ) then
+				tokens[token] = true
+			end
+		end
+	end
+	return tokens
+end
+
+local function buildSections(auraType, config)
+	local base = auraType == "buffs" and "HELPFUL" or "HARMFUL"
+	local filterValue = config.filter or "ALL"
+	-- CUSTOM:<name> = base filter + spell ID candidate filters resolved at runtime
+	local customFilter = filterValue:match("^CUSTOM:(.+)")
+	local filterString = base
+	if( filterValue ~= "ALL" and filterValue ~= "BLIZZARD" and not customFilter ) then
+		filterString = base .. "|" .. filterValue
+	end
+
+	-- BLIZZARD: replicate the default UI's aura selection via ProcessAura metadata, needs SetAuraProcessingPolicy(ProcessAura) on the container
+	local processedAuraType
+	if( filterValue == "BLIZZARD" and AuraUtil and AuraUtil.AuraUpdateChangedType ) then
+		processedAuraType = auraType == "buffs" and AuraUtil.AuraUpdateChangedType.Buff or AuraUtil.AuraUpdateChangedType.Debuff
+	end
+
+	local sections = {}
+	local largeSize = math.floor(config.size * (config.selfScale or 1.30) + 0.5)
+	local sortMethod = config.sortMethod
+	if( config.enlarge and config.enlarge.PLAYER and not filterString:find("PLAYER", nil, true) ) then
+		table.insert(sections, { filterString = filterString .. "|PLAYER", size = largeSize, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, tokens = splitTokens(filterValue .. "|PLAYER") })
+		table.insert(sections, { filterString = filterString .. "|!PLAYER", size = config.size, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, tokens = splitTokens(filterValue) })
+	elseif( config.enlarge and config.enlarge.PLAYER ) then
+		-- Filter is already player-only; everything shows enlarged
+		table.insert(sections, { filterString = filterString, size = largeSize, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, tokens = splitTokens(filterValue) })
+	else
+		table.insert(sections, { filterString = filterString, size = config.size, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, tokens = splitTokens(filterValue) })
+	end
+
+	if( config.sections ) then
+		for i = 1, 5 do
+			local extra = config.sections[i]
+			if( extra and extra.filter and extra.enabled ~= false ) then
+				local extraFilter = extra.filter
+				local extraCustom = extraFilter:match("^CUSTOM:(.+)")
+				local fs = base
+				if( extraFilter ~= "ALL" and extraFilter ~= "BLIZZARD" and not extraCustom ) then
+					fs = fs .. "|" .. extraFilter
+				end
+				local extraProcessed
+				if( extraFilter == "BLIZZARD" and AuraUtil and AuraUtil.AuraUpdateChangedType ) then
+					extraProcessed = auraType == "buffs" and AuraUtil.AuraUpdateChangedType.Buff or AuraUtil.AuraUpdateChangedType.Debuff
+				end
+				table.insert(sections, { filterString = fs, size = extra.size or config.size, auraType = auraType, customFilter = extraCustom, processedAuraType = extraProcessed, sortMethod = extra.sortMethod, maxCount = extra.maxCount, tokens = splitTokens(extraFilter) })
+			end
+		end
+	end
+
+	-- Disjoint cascade, every section negates the tokens of previous sections it doesn't share
+	-- A section whose tokens are a subset of a later one's (RAID before PLAYER|RAID, catch-all before anything) also negates the later section's extra tokens, ceding the intersection to the more specific one
+	-- "Show only" customs sit outside the cascade, they own their spell list and every other section cedes those spells (see UpdateContainerCandidateFilters)
+	-- "Hide" customs are catch-alls
+	local function isSubset(a, b)
+		for token in pairs(a) do
+			if( not b[token] ) then return false end
+		end
+		return true
+	end
+
+	local customFiltersDB = ShadowUF.db.profile.customFilters or {}
+	local function isIncludeCustom(section)
+		if( not section.customFilter ) then return false end
+		local custom = customFiltersDB[section.customFilter]
+		return not custom or custom.mode ~= "exclude"
+	end
+
+	for index, section in ipairs(sections) do
+		if( not isIncludeCustom(section) ) then
+			local seen = {}
+			for negated in section.filterString:gmatch("|!([^|]+)") do
+				seen[negated] = true
+			end
+			for otherIndex, other in ipairs(sections) do
+				if( otherIndex < index or (otherIndex > index and isSubset(section.tokens, other.tokens)) ) then
+					for token in pairs(other.tokens) do
+						if( not section.tokens[token] and not seen[token] ) then
+							seen[token] = true
+							section.filterString = section.filterString .. "|!" .. token
+						end
+					end
+				end
+			end
+		end
+	end
+	return sections
+end
+
+-- Numeric keys only, the zone assignment scopes where it applies
+local function buildSpellIDMap(filterList)
+	if( not filterList ) then return nil end
+
+	local map
+	for key in pairs(filterList) do
+		local spellID = tonumber(key)
+		if( spellID ) then
+			map = map or {}
+			map[spellID] = true
+		end
+	end
+	return map
+end
+
+-- Everything frozen at container creation goes in the signature; runtime-mutable settings (anchor, growth, row width, unit) stay out
+-- Returns (structural, full), filter strings/sort/caps are runtime-mutable so when only those differ the container is updated in place
+local function getContainerSignature(group, config, sections)
+	local structural, runtime = {}, {}
+	for _, section in ipairs(sections) do
+		-- Sizes are runtime too, the re-style loop resizes stored buttons so the size slider doesn't recreate containers
+		table.insert(runtime, section.filterString .. "@" .. section.size .. "@" .. (section.sortMethod or "") .. "@" .. (section.maxCount or ""))
+	end
+	local hideCC = config.disableBlizzardCC
+	if( hideCC == nil ) then hideCC = ShadowUF.db.profile.blizzardcc end
+	table.insert(structural, tostring(#sections))
+	table.insert(structural, ShadowUF.db.profile.auras.borderType)
+	table.insert(structural, Auras:GetDispelColorsKey())
+	table.insert(structural, tostring(hideCC))
+	table.insert(structural, tostring(ShadowUF.db.profile.auras.disableCooldown))
+	table.insert(structural, tostring(group.canCancel))
+	table.insert(structural, tostring(config.disableRemovableColor))
+	table.insert(structural, tostring(config.temporary and group.parent.unit == "player" and group.type == "buffs"))
+	table.insert(runtime, tostring(config.perRow * config.maxRows))
+	local structuralSignature = table.concat(structural, ";")
+	return structuralSignature, structuralSignature .. "##" .. table.concat(runtime, ";")
+end
+
+-- Regions must be children of the button (forbidden aspect inheritance) and templates with scripts are rejected, everything is created here at runtime
+local function makeButtonInitializer(group, config, section, sectionIndex)
+	local size = section.size
+	local auraType = section.auraType or group.type
+	local hideCC = config.disableBlizzardCC
+	if( hideCC == nil ) then hideCC = ShadowUF.db.profile.blizzardcc end
+	local borderType = ShadowUF.db.profile.auras.borderType
+	local canCancel = group.canCancel
+	-- Per-frame opt-out of the dispel tinting, custom borders only (the blizzard style IS the dispel border, cutting it would leave none)
+	local noDispelTint = config.disableRemovableColor
+
+	return function(button)
+		-- No API to enumerate a group's frames, keep our own list
+		-- sectionIndex (0 = item enchantment) lets the re-style loop resize without recreating the container
+		local record = { button = button, sectionIndex = sectionIndex }
+		table.insert(group.containerButtons, record)
+		button:SetSize(size, size)
+
+		local icon = button:CreateTexture(nil, "BACKGROUND")
+		icon:SetAllPoints(button)
+		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		button:SetIcon(icon)
+
+		-- The SetAuraBorder region only shows when dispellable, so it needs its own art on top of a separate always-visible neutral border
+		if( borderType == "blizzard" ) then
+			local dispel = button:CreateTexture(nil, "OVERLAY")
+			dispel:SetPoint("CENTER", button)
+			dispel:SetSize(size + 1, size + 1)
+			record.dispel = dispel
+			pcall(button.SetAuraBorder, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.BorderWithIcon or 1, showWhenHarmful = true, showWhenHelpful = true })
+		elseif( borderType ~= "" ) then
+			local border = button:CreateTexture(nil, "OVERLAY")
+			border:SetPoint("CENTER", button)
+			border:SetSize(size + 1, size + 1)
+			border:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. borderType)
+			if( auraType == "debuffs" ) then
+				border:SetVertexColor(0.8, 0, 0)
+			else
+				border:SetVertexColor(0.6, 0.6, 0.6)
+			end
+			record.border = border
+
+			if( not noDispelTint ) then
+				local dispel = button:CreateTexture(nil, "OVERLAY", nil, 1)
+				dispel:SetPoint("CENTER", button)
+				dispel:SetSize(size + 1, size + 1)
+				dispel:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. borderType)
+				record.dispel = dispel
+				-- PreserveAsset keeps our border art and only tints it by dispel type
+				pcall(button.SetAuraBorder, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, customDispelColorMap = Auras:GetDispelColorMap() })
+			end
+		end
+
+		local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+		cooldown:SetAllPoints(button)
+		cooldown:SetReverse(true)
+		cooldown:SetDrawEdge(false)
+		cooldown:SetDrawSwipe(true)
+		cooldown:SetSwipeColor(0, 0, 0, ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8)
+		cooldown:SetHideCountdownNumbers(hideCC)
+		if( not ShadowUF.db.profile.auras.disableCooldown ) then
+			pcall(button.SetDurationCooldown, button, cooldown)
+		end
+		record.cooldown = cooldown
+		Auras:UpdateCooldownText(record, config)
+
+		local stack = button:CreateFontString(nil, "OVERLAY")
+		ShadowUF:SetFontAndShadow(stack, "Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", math.floor((size * 0.60) + 0.5), "OUTLINE", 0, 0, 0, 1.0, 0.50, -0.50)
+		stack:SetAllPoints(button)
+		stack:SetJustifyV("BOTTOM")
+		stack:SetJustifyH("RIGHT")
+		record.stack = stack
+		-- No formatter option, it errors on secret values
+		pcall(button.SetApplicationCount, button, stack, {})
+
+		if( canCancel ) then
+			-- Blizzard-side click handler (CancelAuraByInstanceID), no taint
+			pcall(button.SetCancelAuraButtons, button, "RightButtonUp")
+		end
+		button:SetMouseMotionEnabled(ShadowUF.db.profile.locked and true or false)
+		-- "exceptAuras" keeps aura tooltips visible in combat
+		local tooltipMode = ShadowUF.db.profile.tooltipCombat
+		pcall(button.SetHideTooltipInCombat, button, (tooltipMode == true or tooltipMode == "all") and true or false)
+	end
+end
+
+local function columnRelativePoint(point, growV)
+	if( growV == "TOP" ) then
+		return (point:gsub("BOTTOM", "TOP")), 2
+	else
+		return (point:gsub("TOP", "BOTTOM")), -2
+	end
+end
+
+-- extraSections come from a SEQUENTIAL-anchored partner group
+local function configureGroupContainer(frame, group, config, extraSections)
+	local sections = buildSections(group.type, config)
+	if( extraSections ) then
+		for _, section in ipairs(extraSections) do
+			table.insert(sections, section)
+		end
+	end
+
+	group.canCancel = (frame.unit == "player" and group.type == "buffs" and not config.clickThrough) or nil
+	local structural, signature = getContainerSignature(group, config, sections)
+
+	if( group.container and group.containerSignature ~= signature ) then
+		-- Same group structure (count/sizes/style) and only filters/sort/caps changed, update the groups in place
+		local fastPathed = false
+		if( group.containerStructural == structural and group.container.SetAuraGroupFilterString ) then
+			fastPathed = true
+			local maxAuras = config.perRow * config.maxRows
+			for index, section in ipairs(sections) do
+				local key = "section" .. index
+				local sortValue = AuraContainerSortMethod and AuraContainerSortMethod[section.sortMethod or "Default"] or 0
+				-- The direction argument is mandatory (validated enum)
+				local sortDirection = AuraContainerSortDirection and AuraContainerSortDirection.Normal or 0
+				local okFilter = pcall(group.container.SetAuraGroupFilterString, group.container, key, section.filterString)
+				local okSort = pcall(group.container.SetAuraGroupSortMethod, group.container, key, sortValue, sortDirection)
+				local okMax = pcall(group.container.SetAuraGroupMaxFrameCount, group.container, key, section.maxCount or maxAuras)
+				if( not (okFilter and okSort and okMax) ) then
+					fastPathed = false
+					break
+				end
+			end
+		end
+
+		if( fastPathed ) then
+			group.containerSignature = signature
+		elseif( InCombatLockdown() ) then
+			-- Containers inherit protection from the secure unit frame and Hide is silently blocked in combat, leave the old container untouched and rebuild after regen
+			queueContainerRebuild(frame)
+			return
+		else
+			-- Groups can't be removed so retire the old container, frames can't be deleted but a disabled hidden one unregisters its events
+			group.container:SetEnabled(false)
+			group.container:Hide()
+			group.container = nil
+		end
+	end
+
+	if( not group.container ) then
+		-- Creating a container in combat works but positioning it under a protected unit frame is blocked (it would render nowhere), keep deferring to regen
+		if( InCombatLockdown() ) then
+			queueContainerRebuild(frame)
+			return
+		end
+
+		local ok, container = pcall(CreateFrame, "AuraContainer", nil, group, "CustomAuraContainerTemplate")
+		if( not ok or not container ) then return end
+
+		group.container = container
+		group.containerSignature = signature
+		group.containerStructural = structural
+		group.containerButtons = {}
+		container:SetFrameLevel(group:GetFrameLevel() + 1)
+
+		-- BLIZZARD-filter sections need ProcessAura metadata on the container
+		local needsProcessPolicy = false
+		for _, section in ipairs(sections) do
+			if( section.processedAuraType ) then needsProcessPolicy = true break end
+		end
+		if( needsProcessPolicy and CustomAuraContainerAuraProcessingPolicy ) then
+			pcall(container.SetAuraProcessingPolicy, container, CustomAuraContainerAuraProcessingPolicy.ProcessAura, {})
+		end
+
+		local maxAuras = config.perRow * config.maxRows
+		for index, section in ipairs(sections) do
+			-- Visible counts are secret so totals can't be balanced across sections, each one is capped on its own
+			local addOk, err = pcall(container.AddAuraGroup, container, "section" .. index, section.filterString, {
+				maxFrameCount = section.maxCount or maxAuras,
+				initializeFrame = makeButtonInitializer(group, config, section, index),
+				candidateFilters = section.processedAuraType and { processedAuraType = section.processedAuraType } or nil,
+				sortMethod = AuraContainerSortMethod and section.sortMethod and AuraContainerSortMethod[section.sortMethod] or nil,
+			})
+			if( not addOk and not group.hasContainerError ) then
+				ShadowUF:Print("Error adding aura group '" .. tostring(section.filterString) .. "' (logged once): " .. tostring(err))
+				group.hasContainerError = true
+			end
+		end
+
+		-- Native temp weapon enchants, appended to the flow layout
+		if( config.temporary and frame.unit == "player" and group.type == "buffs" ) then
+			local slots = AuraContainerItemEnchantmentSlot or { MainHand = 0, OffHand = 1 }
+			local enchantSection = { size = config.size, auraType = "buffs" }
+			pcall(container.AddItemEnchantment, container, slots.MainHand, { initializeFrame = makeButtonInitializer(group, config, enchantSection, 0) })
+			pcall(container.AddItemEnchantment, container, slots.OffHand, { initializeFrame = makeButtonInitializer(group, config, enchantSection, 0) })
+		end
+	end
+
+	-- Same-signature reconfigures (e.g. switching between two custom filters) still need fresh section descriptors for the candidate filter pass
+	group.containerSections = sections
+
+	-- The container inherits frame protection (SetPoint blocked in combat), freeze position changes and replay the config at regen
+	if( InCombatLockdown() ) then
+		queueContainerRebuild(frame)
+		return
+	end
+
+	-- Runtime-configurable (position, growth, row width, unit)
+	local container = group.container
+	local growH = config.growH or "RIGHT"
+	local growV = config.growV or "BOTTOM"
+	local point, relativePoint = ShadowUF.Layout:GetAuraPoint(config.anchorPoint, growH, growV)
+	local inset = (config.anchorPoint == "FREE") and 0 or ShadowUF.db.profile.backdrop.inset
+	local position = positionData[getPositionKey(config)]
+
+	container:ClearAllPoints()
+	container:SetPoint(point, group.anchorTo, relativePoint, config.x + (position.xMod * inset), config.y + (position.yMod * inset))
+	local setAnchorPoint = container.SetFlowLayoutAnchorPoint or container.SetAuraLayoutAnchorPoint
+	local setGrowthDirection = container.SetFlowLayoutGrowthDirection or container.SetAuraLayoutGrowthDirection
+	local setMaximumLineSize = container.SetFlowLayoutMaximumLineSize or container.SetAuraLayoutRowWidth
+	-- Center growth, the flow layout can't alternate around the origin so centering comes from the auto-sized box anchored by its centered edge (TOP/BOTTOM above)
+	-- The flow inside still fills from a corner or the icons would spill out of the box
+	local flowPoint = point
+	if( growH == "CENTER" ) then
+		flowPoint = (growV == "TOP") and "BOTTOMLEFT" or "TOPLEFT"
+	end
+	pcall(setAnchorPoint, container, flowPoint)
+	if( AnchorUtil and AnchorUtil.FlowDirection ) then
+		pcall(setGrowthDirection, container, AnchorUtil.FlowDirection[FLOW_H[growH]], AnchorUtil.FlowDirection[FLOW_V[growV]])
+	end
+	pcall(setMaximumLineSize, container, config.perRow * (config.size + 2))
+
+	container:Show()
+
+	-- Buttons are forbidden while auras are secret (any restriction, not just combat lockdown), skip the re-style and replay it through the rebuild queue
+	if( aurasAreSecret() ) then
+		queueContainerRebuild(frame)
+		return
+	end
+
+	-- Tooltip policy, cooldown fonts and sizes are runtime-mutable on stored buttons; timerText only exists once a cooldown has run
+	local motionEnabled = ShadowUF.db.profile.locked and true or false
+	local tooltipMode = ShadowUF.db.profile.tooltipCombat
+	local hideAuraTooltips = (tooltipMode == true or tooltipMode == "all") and true or false
+	for _, record in ipairs(group.containerButtons) do
+		-- Sizes are runtime (not in the structural signature), resize the button and its regions to the current section size
+		local size
+		if( record.sectionIndex == 0 ) then
+			size = config.size
+		elseif( record.sectionIndex and sections[record.sectionIndex] ) then
+			size = sections[record.sectionIndex].size
+		end
+		if( size ) then
+			record.button:SetSize(size, size)
+			if( record.border ) then record.border:SetSize(size + 1, size + 1) end
+			if( record.dispel ) then record.dispel:SetSize(size + 1, size + 1) end
+			if( record.stack ) then
+				ShadowUF:SetFontAndShadow(record.stack, "Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", math.floor((size * 0.60) + 0.5), "OUTLINE", 0, 0, 0, 1.0, 0.50, -0.50)
+			end
+		end
+
+		pcall(record.button.SetMouseMotionEnabled, record.button, motionEnabled)
+		pcall(record.button.SetHideTooltipInCombat, record.button, hideAuraTooltips)
+		Auras:UpdateCooldownText(record, config)
+	end
+
+	-- Containers don't receive OnSizeChanged (aspect), re-run the flow layout to reposition resized buttons
+	pcall(container.UpdateAllAuras, container)
+end
+
+-- Called from OnLayoutApplied once anchor pairs are known
+-- SEQUENTIAL pairs merge the child's groups into the parent's container (buffs/debuffs are disjoint filters, no duplicates)
+function Auras:ConfigureContainers(frame, config)
+	local mergedPairs = {}
+	if( frame.auras.anchorPairs ) then
+		for i = 1, 6 do
+			local pair = frame.auras.anchorPairs[i]
+			if( pair and pair.sequential ) then
+				mergedPairs[pair.child] = pair
+			end
+		end
+	end
+
+	for _, auraType in ipairs(AURA_TYPES) do
+		local typeConfig = config.auras[auraType]
+		if( typeConfig ) then
+			for i = 1, 6 do
+				local frameConfig = typeConfig[i]
+				local group = frame.auras[auraType .. i]
+				if( group and frameConfig and frameConfig.enabled ) then
+					group.containerDisabled = nil
+					if( mergedPairs[group] ) then
+						-- Child of a sequential pair: its auras live in the parent's container
+						group.containerMerged = true
+						if( group.container ) then
+							group.container:SetEnabled(false)
+							group.container:Hide()
+						end
+					else
+						group.containerMerged = nil
+						local extraSections
+						for _, pair in pairs(mergedPairs) do
+							if( pair.parent == group ) then
+								extraSections = buildSections(pair.child.type, pair.childConfig)
+								break
+							end
+						end
+						configureGroupContainer(frame, group, frameConfig, extraSections)
+					end
+				elseif( group and group.container ) then
+					-- Group disabled by config, silence its container (the flag keeps UpdateContainers from re-enabling it, Hide is blocked in combat so replay at regen)
+					group.containerDisabled = true
+					if( InCombatLockdown() ) then
+						queueContainerRebuild(frame)
+					else
+						group.container:SetEnabled(false)
+						group.container:Hide()
+					end
+				end
+			end
+		end
+	end
+
+	-- Column pairs anchor the child's container to the parent's, containers auto-resize so the column tracks the parent's visible footprint
+	if( frame.auras.anchorPairs ) then
+		for i = 1, 6 do
+			local pair = frame.auras.anchorPairs[i]
+			if( pair and not pair.sequential and pair.parent.container and pair.child.container ) then
+				local growH = pair.parentConfig.growH or "RIGHT"
+				local growV = pair.parentConfig.growV or "BOTTOM"
+				local point = ShadowUF.Layout:GetAuraPoint(pair.parentConfig.anchorPoint, growH, growV)
+				local rel, offset = columnRelativePoint(point, growV)
+				pair.child.container:ClearAllPoints()
+				pair.child.container:SetPoint(point, pair.parent.container, rel, 0, offset)
+			end
+		end
+	end
+
+	-- Containers may have just been (re)created: apply zone filters now
+	self:UpdateContainerCandidateFilters(frame)
+end
+
+-- Candidate filters are runtime-mutable (unlike filter strings), filter edits and zone changes need no rebuild
+-- Blizzard ignores spell ID filters on friendly-unit debuffs and enemy-unit buffs (identity gate), those lists just do nothing there
+function Auras:UpdateContainerCandidateFilters(frame)
+	if( not frame.auras ) then return end
+	local whitelist = frame.auras.whitelist
+	local blacklist = frame.auras.blacklist
+	local customFilters = ShadowUF.db.profile.customFilters or {}
+
+	for _, auraType in ipairs(AURA_TYPES) do
+		for i = 1, 6 do
+			local group = frame.auras[auraType .. i]
+			if( group and group.container and group.containerSections ) then
+				-- "Show only" customs own their spells wherever they sit, every other section cedes them and between customs the first one wins
+				local allCustomSpells
+				for _, section in ipairs(group.containerSections) do
+					local custom = section.customFilter and customFilters[section.customFilter]
+					if( custom and custom.mode ~= "exclude" and custom.spells ) then
+						allCustomSpells = allCustomSpells or {}
+						for spellID in pairs(custom.spells) do
+							allCustomSpells[spellID] = true
+						end
+					end
+				end
+
+				local carriedExcludes
+				for index, section in ipairs(group.containerSections) do
+					local include, exclude
+					local custom = section.customFilter and customFilters[section.customFilter]
+					if( custom and custom.spells ) then
+						if( custom.mode == "exclude" ) then
+							exclude = CopyTable(custom.spells)
+							if( allCustomSpells ) then
+								for spellID in pairs(allCustomSpells) do
+									exclude[spellID] = true
+								end
+							end
+						else
+							include = custom.spells
+							exclude = carriedExcludes and CopyTable(carriedExcludes) or nil
+						end
+					else
+						-- Zone-assigned lists apply on their own, the assignment (zone x unit type) is the opt-in
+						include = buildSpellIDMap(whitelist)
+						exclude = buildSpellIDMap(blacklist)
+						if( allCustomSpells ) then
+							exclude = exclude and CopyTable(exclude) or {}
+							for spellID in pairs(allCustomSpells) do
+								exclude[spellID] = true
+							end
+						end
+					end
+
+					local filters
+					if( include or exclude ) then
+						filters = { includeSpellIDs = include, excludeSpellIDs = exclude }
+					end
+					-- Setting candidate filters replaces the whole table, keep the BLIZZARD metadata alive across refreshes
+					if( section.processedAuraType ) then
+						filters = filters or {}
+						filters.processedAuraType = section.processedAuraType
+					end
+					pcall(group.container.SetAuraGroupCandidateFilters, group.container, "section" .. index, filters)
+
+					if( custom and custom.mode ~= "exclude" and custom.spells ) then
+						carriedExcludes = carriedExcludes or {}
+						for spellID in pairs(custom.spells) do
+							carriedExcludes[spellID] = true
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+-- The container refreshes itself on UNIT_AURA (never read that payload), we only track unit identity here
+function Auras:UpdateContainers(frame)
+	-- Live path owns the containers again, let config mode redo its pass if we go back to it
+	frame.auras.containersToggled = nil
+
+	-- SetUnit early-outs on an unchanged token, so retargets (same token, different unit) need an UpdateAllAuras kick
+	-- Kicking every call makes polled compound units (targettarget...) flash twice a second, so only kick when the resolved identity changed (or on event updates when it's secret)
+	local identity
+	if( frame.unit and not ShadowUF.IsUnitIdentitySecret(frame.unit) ) then
+		local ok, guid = pcall(UnitGUID, frame.unit)
+		if( ok ) then identity = guid end
+	end
+
+	for _, auraType in ipairs(AURA_TYPES) do
+		for i = 1, 6 do
+			local group = frame.auras[auraType .. i]
+			local container = group and group.container
+			if( container and not group.containerMerged and not group.containerDisabled ) then
+				if( frame.unit ) then
+					local ok = pcall(container.SetUnit, container, frame.unit)
+					if( ok ) then
+						container:SetEnabled(true)
+						-- Show is blocked in combat (inherited protection)
+						if( not InCombatLockdown() ) then
+							container:Show()
+						end
+
+						local kick
+						if( identity ~= nil ) then
+							kick = group.containerIdentity ~= identity
+						else
+							kick = not frame.pollingUpdate
+						end
+						group.containerIdentity = identity
+						if( kick ) then
+							pcall(container.UpdateAllAuras, container)
+						end
+					else
+						-- Token rejected (compound units, etc.), keep it quiet
+						container:SetEnabled(false)
+					end
+				else
+					container:SetEnabled(false)
+				end
+			end
+		end
+	end
+
+	self:UpdateBossDebuffs(frame)
+end
+
+-- Config mode swaps containers off and legacy placeholder buttons in
+-- Called on every config mode update, skip the container calls once they are already in the wanted state
+function Auras:SetContainersEnabled(frame, enabled)
+	if( frame.auras.containersToggled == enabled ) then return end
+	frame.auras.containersToggled = enabled
+
+	for _, auraType in ipairs(AURA_TYPES) do
+		for i = 1, 6 do
+			local group = frame.auras[auraType .. i]
+			if( group and group.container ) then
+				group.container:SetEnabled(enabled and not group.containerMerged or false)
+				if( enabled and not group.containerMerged ) then
+					group.container:Show()
+				else
+					group.container:Hide()
+				end
+			end
+		end
+	end
+end
+
 -- Create an aura anchor as well as the buttons to contain it
 local function updateGroup(self, groupKey, config, reverseConfig)
 	self.auras[groupKey] = self.auras[groupKey] or CreateFrame("Frame", nil, self.highFrame)
@@ -588,17 +1109,8 @@ local function updateGroup(self, groupKey, config, reverseConfig)
 	group:SetFrameLevel(self.highFrame:GetFrameLevel() + 1)
 	group:Show()
 
-	-- Temp enchants for any player buffs frame with temporary enabled
-	if( self.unit == "player" and config.temporary ) then
-		mainHand.time = 0
-		mainHand.has = false
-		offHand.time = 0
-		offHand.has = false
-		timeElapsed = ShadowUF.Performance:GetRate("tempEnchantScan") -- Force immediate scan on next OnUpdate
-		group:SetScript("OnUpdate", tempEnchantScan)
-	else
-		group:SetScript("OnUpdate", nil)
-	end
+	-- Temp enchants are handled natively by the container (AddItemEnchantment)
+	group:SetScript("OnUpdate", nil)
 
 	-- Extract base type from groupKey
 	local baseType = groupKey:match("^(%a+)%d*$") or groupKey
@@ -613,6 +1125,9 @@ end
 -- Update aura positions based off of configuration
 -- Support multiple frames per type
 function Auras:OnLayoutApplied(frame, config)
+	-- Any aura config change lands here, placeholder styling from older generations is stale
+	self.configStyleGeneration = self.configStyleGeneration + 1
+
 	-- Hide all existing aura buttons first
 	if( frame.auras ) then
 		for auraType, _ in pairs({buffs = true, debuffs = true}) do
@@ -627,7 +1142,10 @@ function Auras:OnLayoutApplied(frame, config)
 		end
 	end
 
-	if( not frame.visibility.auras ) then return end
+	if( not frame.visibility.auras ) then
+		self:DisableContainers(frame)
+		return
+	end
 
 	-- Setup enabled aura frames
 	for _, auraType in pairs({"buffs", "debuffs"}) do
@@ -657,9 +1175,21 @@ function Auras:OnLayoutApplied(frame, config)
 		local buffsGroup = frame.auras["buffs" .. i]
 		local debuffsGroup = frame.auras["debuffs" .. i]
 
-		-- Clear skipScan on both groups (may have been set by a previous layout)
-		if( buffsGroup ) then buffsGroup.skipScan = nil end
-		if( debuffsGroup ) then debuffsGroup.skipScan = nil end
+		-- Clear pair state on both groups, a previous layout may have stamped it and frames persist across reloads
+		if( buffsGroup ) then
+			buffsGroup.skipScan = nil
+			buffsGroup.forcedAnchorPoint = nil
+			buffsGroup.forcedGrowH = nil
+			buffsGroup.forcedGrowV = nil
+			buffsGroup.configPairRepositioned = nil
+		end
+		if( debuffsGroup ) then
+			debuffsGroup.skipScan = nil
+			debuffsGroup.forcedAnchorPoint = nil
+			debuffsGroup.forcedGrowH = nil
+			debuffsGroup.forcedGrowV = nil
+			debuffsGroup.configPairRepositioned = nil
+		end
 
 		if( buffsConfig and buffsConfig.enabled and debuffsConfig and debuffsConfig.enabled and buffsGroup and debuffsGroup ) then
 			local anchorOnConfig, parentGroup, childGroup, parentConfig, childConfig
@@ -696,7 +1226,12 @@ function Auras:OnLayoutApplied(frame, config)
 	end
 
 	self:UpdateFilter(frame)
-	
+
+	-- Build/refresh the managed containers now that anchor pairs are known
+	if( hasContainers ) then
+		self:ConfigureContainers(frame, config)
+	end
+
 	-- Setup Boss Debuffs if enabled
 	if config.auras.bossDebuffs and config.auras.bossDebuffs.enabled then
 		self:SetupBossDebuffs(frame, config.auras.bossDebuffs)
@@ -719,6 +1254,9 @@ local privateAuraUnits = {
 
 function Auras:ClearBossDebuffs(frame)
 	if not frame.bossDebuffs then return end
+
+	frame.bossDebuffs.configStamp = nil
+	frame.bossDebuffs.signature = nil
 
 	local anchors = frame.bossDebuffs.anchorIDs
 	if anchors and RemovePrivateAuraAnchor then
@@ -761,25 +1299,35 @@ function Auras:SetupBossDebuffs(frame, config)
 		frame.bossDebuffs.container:SetFrameStrata("MEDIUM")
 	end
 
+	-- Every layout pass lands here, redoing the geometry and the private aura anchors is only worth it when the config moved
+	local signature = table.concat({config.perRow or 3, config.maxRows or 1, config.size or 32, config.anchorPoint or "CENTER", config.x or 0, config.y or 0, tostring(config.showCooldown), tostring(config.showCooldownNumbers)}, ":")
+	if( frame.bossDebuffs.signature == signature ) then return end
+	frame.bossDebuffs.signature = signature
+
 	local container = frame.bossDebuffs.container
 	local perRow = config.perRow or 3
 	local maxRows = config.maxRows or 1
 	local maxAuras = perRow * maxRows
-	local iconSize = config.size or 32
+	-- Private aura internals (countdown font) are forbidden, so the timer text can't follow iconWidth/iconHeight
+	-- Everything is laid out at a fixed base size and the whole container is scaled instead, icons/borders/countdown all follow the configured size
+	local BASE_SIZE = 32
+	local scale = (config.size or 32) / BASE_SIZE
+	local iconSize = BASE_SIZE
 	local spacing = 2
 
-	-- Calculate total size
+	-- Base units, the container scale applies the configured size
 	local totalWidth = (iconSize * perRow) + (spacing * (perRow - 1))
 	local totalHeight = (iconSize * maxRows) + (spacing * (maxRows - 1))
 
+	container:SetScale(scale)
 	container:SetSize(totalWidth, totalHeight)
 	container:ClearAllPoints()
 
-	-- Position based on anchorPoint
+	-- A frame's own anchor offsets are in its own scale, divide so the configured offsets stay in screen units
 	local relativePoint = config.anchorPoint or "CENTER"
 	local anchorFrame = (relativePoint == "FREE") and UIParent or frame
 	if relativePoint == "FREE" then relativePoint = "CENTER" end
-	container:SetPoint("CENTER", anchorFrame, relativePoint, config.x or 0, config.y or 0)
+	container:SetPoint("CENTER", anchorFrame, relativePoint, (config.x or 0) / scale, (config.y or 0) / scale)
 	container:SetFrameLevel(frame.highFrame:GetFrameLevel() + 2)
 	container:Show()
 
@@ -789,8 +1337,10 @@ function Auras:SetupBossDebuffs(frame, config)
 	frame.bossDebuffs.perRow = perRow
 	frame.bossDebuffs.iconSize = iconSize
 	frame.bossDebuffs.spacing = spacing
+	frame.bossDebuffs.scale = scale
 
-	-- Force update
+	-- Force update, sizes just changed so the placeholder styling is stale too
+	frame.bossDebuffs.configStamp = nil
 	frame.bossDebuffs.unit = nil
 	Auras:UpdateBossDebuffs(frame)
 end
@@ -806,8 +1356,9 @@ function Auras:UpdateBossDebuffs(frame)
 		return
 	end
 
-	-- Hide placeholders when leaving config mode
-	if frame.bossDebuffs.testButtons then
+	-- Hide placeholders when leaving config mode, this runs on every live update so only pay it once
+	if frame.bossDebuffs.placeholdersShown then
+		frame.bossDebuffs.placeholdersShown = nil
 		for i = 1, #frame.bossDebuffs.testButtons do
 			frame.bossDebuffs.testButtons[i]:Hide()
 		end
@@ -892,6 +1443,19 @@ local bossTestTextures = {
 
 function Auras:ShowBossDebuffsPlaceholders(frame)
 	local bd = frame.bossDebuffs
+
+	-- Fake data styled from the boss debuff config alone, only a real config change (Setup/Clear) invalidates it
+	if( bd.configStamp ) then
+		for i = 1, bd.maxAuras do
+			local button = bd.testButtons[i]
+			if( button ) then button:Show() end
+		end
+		bd.placeholdersShown = true
+		return
+	end
+	bd.configStamp = true
+	bd.placeholdersShown = true
+
 	local container = bd.container
 	local maxAuras = bd.maxAuras
 	local perRow = bd.perRow
@@ -905,12 +1469,12 @@ function Auras:ShowBossDebuffsPlaceholders(frame)
 			-- Same structure as updateButton: icon, border, cooldown, stack
 			button = CreateFrame("Button", nil, container)
 
-			button.cooldown = CreateFrame("Cooldown", (frame:GetName() or "SUFBossAura") .. "BossAura" .. i .. "Cooldown", button, "CooldownFrameTemplate")
+			button.cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
 			button.cooldown:SetAllPoints(button)
 			button.cooldown:SetReverse(true)
 			button.cooldown:SetDrawEdge(false)
 			button.cooldown:SetDrawSwipe(true)
-			button.cooldown:SetSwipeColor(0, 0, 0, 0.8)
+			button.cooldown:SetSwipeColor(0, 0, 0, ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8)
 			button.cooldown:Hide()
 
 			button.stack = button:CreateFontString(nil, "OVERLAY")
@@ -983,131 +1547,6 @@ function Auras:ShowBossDebuffsPlaceholders(frame)
 	end
 end
 
--- Temporary enchant support
-local timeElapsed = 0
-local function updateTemporaryEnchant(frame, slot, tempData, hasEnchant, enchantId, timeLeft, charges)
-	charges = charges or 0
-
-	-- Detect new or changed enchant (different id, reapply with higher time, or first appearance)
-	local isNewEnchant = not tempData.has or tempData.enchantId ~= enchantId or timeLeft > tempData.time
-
-	-- For the same ongoing enchant, skip if less than 750ms elapsed (only charges/icon could differ)
-	if( not isNewEnchant and ( tempData.time - timeLeft ) < 750 ) then return false end
-
-	-- Record start time only on new enchant detection
-	if( isNewEnchant ) then
-		tempData.startTime = GetTime()
-	end
-
-	tempData.has = hasEnchant
-	tempData.time = timeLeft
-	tempData.charges = charges
-	tempData.enchantId = enchantId
-
-	local config = ShadowUF.db.profile.units[frame.parent.unitType].auras[frame.type][frame.frameIndex]
-
-	-- Create any buttons we need
-	if( #(frame.buttons) < frame.temporaryEnchants ) then
-		updateButton(frame.temporaryEnchants, frame, config)
-	end
-
-	local button = frame.buttons[frame.temporaryEnchants]
-
-	-- Temp enchants are always player auras — respect enlarge setting
-	if( config.enlarge and config.enlarge.PLAYER ) then
-		button.isSelfScaled = true
-		button:SetScale(config.selfScale or 1.30)
-	else
-		button.isSelfScaled = nil
-		button:SetScale(1)
-	end
-
-	-- Ensure correct positioning for this slot
-	positionButton(frame.temporaryEnchants, frame, config)
-
-	-- Purple border
-	button.border:SetVertexColor(0.50, 0, 0.50)
-
-	-- Set cooldown only once per enchant — the CooldownFrameTemplate handles the countdown natively.
-	if( isNewEnchant ) then
-		if( not ShadowUF.db.profile.auras.disableCooldown ) then
-			button.cooldown:SetCooldown(tempData.startTime, timeLeft / 1000)
-			button.cooldown:Show()
-		else
-			button.cooldown:Hide()
-		end
-	end
-
-	-- Size it
-	button:SetHeight(config.size)
-	button:SetWidth(config.size)
-	button.border:SetHeight(config.size + 1)
-	button.border:SetWidth(config.size + 1)
-
-	-- Stack + icon + show!
-	button.auraID = slot
-	button.filter = "TEMP"
-	button.unit = nil
-	button.icon:SetTexture(GetInventoryItemTexture("player", slot))
-	button.stack:SetText(charges > 1 and charges or "")
-	button:Show()
-end
-
--- Unfortunately, temporary enchants have basically no support beyond hacks. So we will hack!
-tempEnchantScan = function(self, elapsed)
-	if( self.parent.unit == self.parent.vehicleUnit and self.lastTemporary > 0 ) then
-		mainHand.has = false
-		offHand.has = false
-
-		self.temporaryEnchants = 0
-		self.lastTemporary = 0
-
-		Auras:Update(self.parent)
-		return
-	end
-
-	timeElapsed = timeElapsed + elapsed
-	local tempEnchantRate = ShadowUF.Performance:GetRate("tempEnchantScan")
-	if( timeElapsed < tempEnchantRate ) then return end
-	timeElapsed = timeElapsed - tempEnchantRate
-
-
-	local hasMain, mainTimeLeft, mainCharges, mainEnchantId, hasOff, offTimeLeft, offCharges, offEnchantId = GetWeaponEnchantInfo()
-	self.temporaryEnchants = 0
-
-	if( hasMain ) then
-		self.temporaryEnchants = self.temporaryEnchants + 1
-		updateTemporaryEnchant(self, 16, mainHand, hasMain, mainEnchantId, mainTimeLeft or 0, mainCharges)
-	end
-
-	mainHand.has = hasMain
-
-	if( hasOff and self.temporaryEnchants < self.maxAuras ) then
-		self.temporaryEnchants = self.temporaryEnchants + 1
-		updateTemporaryEnchant(self, 17, offHand, hasOff, offEnchantId, offTimeLeft or 0, offCharges)
-	end
-
-	offHand.has = hasOff
-
-	-- Update if totals changed
-	if( self.lastTemporary ~= self.temporaryEnchants ) then
-		self.lastTemporary = self.temporaryEnchants
-		Auras:Update(self.parent)
-	end
-end
-
--- Force a fresh rescan when a weapon enchant changes (applied, removed, or replaced)
-function Auras:OnWeaponEnchantChanged(frame)
-	mainHand.has = false
-	mainHand.time = 0
-	mainHand.enchantId = nil
-	offHand.has = false
-	offHand.time = 0
-	offHand.enchantId = nil
-	timeElapsed = ShadowUF.Performance:GetRate("tempEnchantScan")
-	self:Update(frame)
-end
-
 -- Zone-based aura filtering (blacklist/whitelist per zone + unit type)
 local filterDefault = {}
 function Auras:UpdateFilter(frame)
@@ -1116,10 +1555,19 @@ function Auras:UpdateFilter(frame)
 	if( zone == "scenario" ) then zone = "party" end
 	if( zone == "interior" ) then zone = "neighborhood" end
 
+	-- Zone assignments point at the unified custom filters, only accept a list whose mode matches the assignment slot
+	local customs = ShadowUF.db.profile.customFilters or filterDefault
 	local white = ShadowUF.db.profile.filters.zonewhite[zone .. frame.unitType]
 	local black = ShadowUF.db.profile.filters.zoneblack[zone .. frame.unitType]
-	frame.auras.whitelist = white and ShadowUF.db.profile.filters.whitelists[white] or filterDefault
-	frame.auras.blacklist = black and ShadowUF.db.profile.filters.blacklists[black] or filterDefault
+	local whiteList = white and customs[white]
+	local blackList = black and customs[black]
+	frame.auras.whitelist = (whiteList and whiteList.mode ~= "exclude") and whiteList.spells or filterDefault
+	frame.auras.blacklist = (blackList and blackList.mode == "exclude") and blackList.spells or filterDefault
+
+	-- Push the zone filters onto the containers as candidate filters
+	if( hasContainers ) then
+		self:UpdateContainerCandidateFilters(frame)
+	end
 end
 
 
@@ -1145,7 +1593,12 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 		button.border:SetVertexColor(ShadowUF.db.profile.auraColors.removable.r, ShadowUF.db.profile.auraColors.removable.g, ShadowUF.db.profile.auraColors.removable.b)
 	else
 		local curve = C_UnitAuras.GetAuraDispelTypeColor and C_CurveUtil and Auras:GetDispelColorCurve(type)
-		local color = curve and C_UnitAuras.GetAuraDispelTypeColor(frame.parent.unit, auraInstanceID, curve)
+		local color
+		if( curve ) then
+			-- Errors while auras are secret (RequiresUnitAuraAccess)
+			local okColor, result = pcall(C_UnitAuras.GetAuraDispelTypeColor, frame.parent.unit, auraInstanceID, curve)
+			color = okColor and result or nil
+		end
 		if( color ) then
 			button.border:SetVertexColorFromBoolean(true, color, color)
 		elseif( type == "buffs" ) then
@@ -1158,8 +1611,9 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 	-- Show the cooldown ring
 	-- 12.0: Simplified - always show timers if enabled (ALL) or for player auras (PLAYER)
 	if( not ShadowUF.db.profile.auras.disableCooldown and durationObject and ( config.timers.ALL or ( isPlayerAura and config.timers.PLAYER ) ) ) then
-		local durationInfo = C_UnitAuras.GetAuraDuration(frame.parent.unit, auraInstanceID)
-		if( durationInfo ) then
+		-- Requires unit aura access, errors while auras are secret
+		local okDuration, durationInfo = pcall(C_UnitAuras.GetAuraDuration, frame.parent.unit, auraInstanceID)
+		if( okDuration and durationInfo ) then
 			button.cooldown:SetCooldownFromDurationObject(durationInfo)
 			button.cooldown:Show()
 		else
@@ -1193,7 +1647,14 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 	
 	-- Stack count
 	if( button.stack ) then
-		button.stack:SetText(C_UnitAuras.GetAuraApplicationDisplayCount(frame.parent.unit, auraInstanceID, 2))
+		-- Errors while auras are secret (RequiresUnitAuraAccess)
+		-- Never boolean-test countText, it can be a secret string (SetText takes secrets, Lua truth tests don't)
+		local okCount, countText = pcall(C_UnitAuras.GetAuraApplicationDisplayCount, frame.parent.unit, auraInstanceID, 2)
+		if( okCount ) then
+			button.stack:SetText(countText)
+		else
+			button.stack:SetText("")
+		end
 		button.stack:Show()
 	end
 	
@@ -1202,260 +1663,164 @@ end
 
 
 -- Generate test auras for config mode preview
+-- One test texture per section so the batches are visually distinct
+local configTestTextures = {
+	buffs = {"Interface\\Icons\\Spell_Nature_Rejuvenation", "Interface\\Icons\\Spell_Holy_PowerWordShield", "Interface\\Icons\\Spell_Nature_Regeneration", "Interface\\Icons\\Spell_Holy_FlashHeal", "Interface\\Icons\\Spell_Nature_LightningShield", "Interface\\Icons\\Spell_Holy_DevotionAura"},
+	debuffs = {"Interface\\Icons\\Ability_DualWield", "Interface\\Icons\\Spell_Shadow_ShadowWordPain", "Interface\\Icons\\Ability_Rogue_Rupture", "Interface\\Icons\\Spell_Fire_Immolation", "Interface\\Icons\\Spell_Shadow_CurseOfSargeras", "Interface\\Icons\\Spell_Nature_CorrosiveBreath"},
+}
+
 local function scanConfigMode(parent, frame, type, config, displayConfig, filter)
-	local testCount = config.perRow * config.maxRows
+	local totalBudget = config.perRow * config.maxRows
 	local isBuff = (type == "buffs")
-	
-	for i = 1, testCount do
-		local mod = i % 5
-		local auraType = mod == 0 and "Magic" or mod == 1 and "Curse" or mod == 2 and "Poison" or mod == 3 and "Disease" or ""
-		
-		-- Create test data
-		local name = ShadowUF.L["Test Aura"]
-		local texture = isBuff and "Interface\\Icons\\Spell_Nature_Rejuvenation" or "Interface\\Icons\\Ability_DualWield"
-		local count = i % 3 == 0 and math.random(1, 5) or 0
-		local isPlayerAura = i % 2 == 0
-		local isRemovable = (type == "debuffs" and i % 3 == 0) or (type == "buffs" and i % 4 == 0)
-		local spellID = 1000 + i
-		local auraInstanceID = i
-		
-		-- Create any buttons we need
-		frame.totalAuras = frame.totalAuras + 1
-		if( #(frame.buttons) < frame.totalAuras ) then
-			updateButton(frame.totalAuras, frame, config)
-		end
-		
-		local button = frame.buttons[frame.totalAuras]
-		
-		-- Set border color based on aura type
-		if( isRemovable and not isBuff and not config.disableRemovableColor ) then
-			button.border:SetVertexColor(ShadowUF.db.profile.auraColors.removable.r, ShadowUF.db.profile.auraColors.removable.g, ShadowUF.db.profile.auraColors.removable.b)
-		elseif( auraType == "Magic" ) then
-			button.border:SetVertexColor(0.2, 0.6, 1)
-		elseif( auraType == "Curse" ) then
-			button.border:SetVertexColor(0.6, 0, 1)
-		elseif( auraType == "Disease" ) then
-			button.border:SetVertexColor(0.6, 0.4, 0)
-		elseif( auraType == "Poison" ) then
-			button.border:SetVertexColor(0, 0.6, 0)
-		elseif( isBuff ) then
-			button.border:SetVertexColor(0.6, 0.6, 0.6)
-		else
-			button.border:SetVertexColor(0.8, 0, 0)
-		end
-		
-		-- Show cooldown for test
-		if( not ShadowUF.db.profile.auras.disableCooldown and ( config.timers.ALL or ( isPlayerAura and config.timers.PLAYER ) ) ) then
-			local duration = 300
-			local startTime = GetTime() - (i * 20)
-			button.cooldown:SetCooldown(startTime, duration)
-			button.cooldown:Show()
-		else
-			button.cooldown:Hide()
-		end
-		
-		-- Size it
-		button:SetHeight(config.size)
-		button:SetWidth(config.size)
-		button.border:SetHeight(config.size + 1)
-		button.border:SetWidth(config.size + 1)
+	local textures = configTestTextures[type] or configTestTextures.buffs
 
-		-- Scale player auras in config mode
-		if isPlayerAura and config.enlarge and config.enlarge.PLAYER then
-			button.isSelfScaled = true
-			button:SetScale(config.selfScale or 1.30)
-		else
-			button.isSelfScaled = nil
-			button:SetScale(1)
-		end
+	-- Mirror the live container, one batch of test icons per section with the section's size and cap (sorting aside, the data is fake anyway)
+	-- Enlarge is covered too, buildSections encodes it as its own section
+	local sections = buildSections(type, config)
+	local sectionCount = #sections
+	local baseShare = math.max(1, math.floor(totalBudget / sectionCount))
 
-		-- Set button properties
-		button.auraID = i
-		button.auraInstanceID = auraInstanceID
-		button.filter = filter
-		button.unit = frame.parent.unit
-		button.icon:SetTexture(texture)
-		
-		-- Stack count
-		if( button.stack ) then
-			button.stack:SetText(count > 0 and count or "")
-			button.stack:Show()
+	local i = 0
+	for sectionIndex, section in ipairs(sections) do
+		local share = (sectionIndex == sectionCount) and (totalBudget - baseShare * (sectionCount - 1)) or baseShare
+		if( section.maxCount and section.maxCount > 0 and share > section.maxCount ) then
+			share = section.maxCount
 		end
-		
-		button:Show()
-		
+		local scale = section.size / config.size
+		local texture = textures[((sectionIndex - 1) % #textures) + 1]
+
+		for _ = 1, share do
+			i = i + 1
+
+			-- Create any buttons we need
+			frame.totalAuras = frame.totalAuras + 1
+			if( #(frame.buttons) < frame.totalAuras ) then
+				updateButton(frame.totalAuras, frame, config)
+			end
+
+			local button = frame.buttons[frame.totalAuras]
+
+			-- Fake data does not change, restyle only when the config generation moved
+			if( button.configStamp ~= Auras.configStyleGeneration ) then
+				button.configStamp = Auras.configStyleGeneration
+
+				local mod = i % 5
+				local auraType = mod == 0 and "Magic" or mod == 1 and "Curse" or mod == 2 and "Poison" or mod == 3 and "Disease" or ""
+				local count = i % 3 == 0 and math.random(1, 5) or 0
+				local isPlayerAura = i % 2 == 0
+				local isRemovable = (type == "debuffs" and i % 3 == 0) or (type == "buffs" and i % 4 == 0)
+
+				-- Set border color based on aura type
+				if( isRemovable and not isBuff and not config.disableRemovableColor ) then
+					button.border:SetVertexColor(ShadowUF.db.profile.auraColors.removable.r, ShadowUF.db.profile.auraColors.removable.g, ShadowUF.db.profile.auraColors.removable.b)
+				elseif( auraType == "Magic" ) then
+					button.border:SetVertexColor(0.2, 0.6, 1)
+				elseif( auraType == "Curse" ) then
+					button.border:SetVertexColor(0.6, 0, 1)
+				elseif( auraType == "Disease" ) then
+					button.border:SetVertexColor(0.6, 0.4, 0)
+				elseif( auraType == "Poison" ) then
+					button.border:SetVertexColor(0, 0.6, 0)
+				elseif( isBuff ) then
+					button.border:SetVertexColor(0.6, 0.6, 0.6)
+				else
+					button.border:SetVertexColor(0.8, 0, 0)
+				end
+
+				-- Show cooldown for test
+				if( not ShadowUF.db.profile.auras.disableCooldown and ( config.timers.ALL or ( isPlayerAura and config.timers.PLAYER ) ) ) then
+					local duration = 300
+					local startTime = GetTime() - (i * 20)
+					button.cooldown:SetCooldown(startTime, duration)
+					button.cooldown:Show()
+				else
+					button.cooldown:Hide()
+				end
+
+				-- Size it (base size, the section size comes from the scale)
+				button:SetHeight(config.size)
+				button:SetWidth(config.size)
+				button.border:SetHeight(config.size + 1)
+				button.border:SetWidth(config.size + 1)
+
+				button:SetScale(scale)
+				button.isSelfScaled = scale ~= 1 and true or nil
+
+				-- Set button properties
+				button.auraID = i
+				button.auraInstanceID = i
+				button.filter = filter
+				button.unit = frame.parent.unit
+				button.icon:SetTexture(texture)
+
+				-- Stack count
+				if( button.stack ) then
+					button.stack:SetText(count > 0 and count or "")
+					button.stack:Show()
+				end
+			end
+
+			button:Show()
+
+			if( frame.totalAuras >= frame.maxAuras ) then break end
+		end
 		if( frame.totalAuras >= frame.maxAuras ) then break end
 	end
-	
+
 	for i=frame.totalAuras + 1, #(frame.buttons) do frame.buttons[i]:Hide() end
 end
 
 -- Scan for auras
 -- Helper: process a single auraData and call renderAura
-local function processAura(parent, frame, type, config, displayConfig, filter, unit, isFriendly, curable, index, auraData)
-	local name = auraData.name
-	local texture = auraData.icon
-	local count = auraData.applications
-	local durationObject = auraData
-	local filterStrings = (type == "debuffs") and FILTER_STRINGS.HARMFUL or FILTER_STRINGS.HELPFUL
-
-	local isPlayerAura = (config.filter == "PLAYER") or
-		not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, filterStrings.PLAYER)
-
-	local isRaid = (config.filter == "RAID") or
-		not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, filterStrings.RAID)
-
-	-- Removable = dispellable debuffs on friendlies OR stealable/purgeable buffs on enemies
-	local canRemove = (type == "debuffs" and isFriendly) or (type == "buffs" and not isFriendly)
-	local isRemovable = canRemove and not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraData.auraInstanceID, filterStrings.RAID_PLAYER_DISPELLABLE)
-
-	local canApplyAura = (type == "buffs") and isRaid
-	local caster = isPlayerAura and "player" or nil
-	local rawSpellId = auraData.spellId
-	local isSecret = issecretvalue and issecretvalue(rawSpellId)
-	local spellID = isSecret and 0 or (rawSpellId or 0)
-	local auraType = auraData.dispelName
-
-	-- Blacklist/whitelist check (zone-based, non-secret spells only)
-	local whitelist = parent.whitelist
-	local blacklist = parent.blacklist
-	if config.useFilter and not isSecret and (whitelist or blacklist) then
-		local spellStr = tostring(spellID)
-		if whitelist[type] and not whitelist[spellID] and not whitelist[spellStr] then
-			return
-		end
-		if blacklist[type] and (blacklist[spellID] or blacklist[spellStr]) then
-			return
-		end
-	end
-
-	renderAura(parent, frame, type, config, displayConfig, index, filter, isFriendly, curable, name, texture, count, auraType, durationObject, caster, isRemovable, auraData.nameplateShowPersonal, spellID, canApplyAura, isPlayerAura, auraData.auraInstanceID)
-end
-
+-- Live scanning is gone (containers drive the real display), these shims only feed the config-mode placeholder renderer
 local function scan(parent, frame, type, config, displayConfig, filter)
 	if( frame.totalAuras >= frame.maxAuras or not config.enabled ) then return end
 
-	-- Config/test mode: show test auras
 	if( frame.parent.configMode ) then
 		return scanConfigMode(parent, frame, type, config, displayConfig, filter)
 	end
-
-	if not frame.parent.unit then return end
-	local unit = frame.parent.unit
-
-	-- UnitIsFriend=true during duels, UnitIsEnemy=false for neutrals
-	-- Combine both: true only for actual friendlies (not neutrals, not duel targets)
-	local isEnemy = UnitIsEnemy(unit, "player")
-	local isFriendly = UnitIsFriend(unit, "player") and not isEnemy
-	local curable = (isFriendly and type == "debuffs")
-
-	-- 12.0: All aura APIs use UnitTokenRestrictedForAddOns which blocks compound unit tokens
-	-- (boss1target, etc.) except "targettarget" & focustarget which are explicitly exempted.
-	-- pcall to silently skip unsupported units instead of throwing errors.
-	_scanUnit, _scanFilter = unit, filter
-	local ok, slots = pcall(_safeGetAuraSlots)
-	if( not ok ) then
-		for i = frame.totalAuras + 1, #(frame.buttons) do frame.buttons[i]:Hide() end
-		return
-	end
-
-	-- Index 1 is continuation token, slots start at 2
-	for i = 2, #slots do
-		local index = slots[i]
-		local auraData = C_UnitAuras.GetAuraDataBySlot(unit, index)
-		if( auraData ) then
-			processAura(parent, frame, type, config, displayConfig, filter, unit, isFriendly, curable, i - 1, auraData)
-		end
-		if( frame.totalAuras >= frame.maxAuras ) then break end
-	end
-
-	for i=frame.totalAuras + 1, #(frame.buttons) do frame.buttons[i]:Hide() end
 end
 
-Auras.scan = scan
-
--- Read Blizzard-filtered auraInstanceIDs directly from Blizzard frame objects.
--- Returns a list of IDs, empty table if Blizzard has data but nothing to show, or nil if unavailable.
-local function getBlizzardAuraIDs(unit, auraType)
-	local ids = {}
-	local typeKey = (auraType == "buffs")
-
-	-- Target and Focus, read from PriorityTable
-	local directFrames = { target = TargetFrame, focus = FocusFrame }
-	local blizFrame = directFrames[unit]
-	if blizFrame then
-		local tbl = typeKey and blizFrame.activeBuffs or blizFrame.activeDebuffs
-		if tbl then
-			tbl:Iterate(function(id)
-				ids[#ids + 1] = id
-				return false
-			end)
-		end
-		return tbl and ids or nil
-	end
-
-	return nil
-end
-
--- Scan using Blizzard frames' own filtered aura list.
--- Reads auraInstanceIDs directly from Blizzard frame objects at scan time,
--- then fetches each aura's data. Falls back to unfiltered scan if unavailable.
 local function scanBlizzard(parent, frame, type, config, displayConfig)
-	if frame.totalAuras >= frame.maxAuras or not config.enabled then return end
+	if( frame.totalAuras >= frame.maxAuras or not config.enabled ) then return end
 
 	if( frame.parent.configMode ) then
 		local baseFilter = (type == "buffs") and "HELPFUL" or "HARMFUL"
 		return scanConfigMode(parent, frame, type, config, displayConfig, baseFilter)
 	end
+end
 
-	local unit = frame.parent.unit
-	if not unit then return end
-
-	local auraIDs = getBlizzardAuraIDs(unit, type)
-	if not auraIDs then
-		-- No Blizzard frame data, fall back to player auras only
-		local baseFilter = (type == "buffs") and "HELPFUL|PLAYER" or "HARMFUL|PLAYER"
-		return scan(parent, frame, type, config, displayConfig, baseFilter)
-	end
-
-	local isEnemy = UnitIsEnemy(unit, "player")
-	local isFriendly = UnitIsFriend(unit, "player") and not isEnemy
-	local curable = isFriendly and (type == "debuffs")
-	local baseFilter = (type == "buffs") and "HELPFUL" or "HARMFUL"
-
-	for idx = 1, #auraIDs do
-		local ok, auraData = pcall(C_UnitAuras.GetAuraDataByAuraInstanceID, unit, auraIDs[idx])
-		if ok and auraData then
-			processAura(parent, frame, type, config, displayConfig, baseFilter, unit, isFriendly, curable, idx, auraData)
-		end
-		if frame.totalAuras >= frame.maxAuras then break end
-	end
-
-	for i = frame.totalAuras + 1, #(frame.buttons) do frame.buttons[i]:Hide() end
+-- Child takes over the parent's own position
+local function anchorChildToBase(config, group, childGroup)
+	local position = positionData[getPositionKey(config)]
+	local growH = config.growH or "RIGHT"
+	local growV = config.growV or "BOTTOM"
+	local inset = (config.anchorPoint == "FREE") and 0 or ShadowUF.db.profile.backdrop.inset
+	local point, relativePoint = ShadowUF.Layout:GetAuraPoint(config.anchorPoint, growH, growV)
+	childGroup.buttons[1]:ClearAllPoints()
+	childGroup.buttons[1]:SetPoint(point, group.anchorTo, relativePoint, config.x + (position.xMod * inset), config.y + (position.yMod * inset))
 end
 
 local function anchorGroupToGroup(frame, config, group, childConfig, childGroup)
 	if( not childGroup.buttons[1] ) then return end
 
-	-- Parent group empty, child takes over parent's position
 	if( group.totalAuras == 0 ) then
-		local position = positionData[getPositionKey(config)]
-		local growH = config.growH or "RIGHT"
-		local growV = config.growV or "BOTTOM"
-		local inset = (config.anchorPoint == "FREE") and 0 or ShadowUF.db.profile.backdrop.inset
-		local point, relativePoint = ShadowUF.Layout:GetAuraPoint(config.anchorPoint, growH, growV)
-		childGroup.buttons[1]:ClearAllPoints()
-		childGroup.buttons[1]:SetPoint(point, group.anchorTo, relativePoint, config.x + (position.xMod * inset), config.y + (position.yMod * inset))
-		return
+		return anchorChildToBase(config, group, childGroup)
 	end
 
+	-- IsShown, not IsVisible: config mode computes this while the frame itself is still hidden
 	local anchorTo
 	for i=#(group.buttons), 1, -1 do
 		local button = group.buttons[i]
-		if( button.isAuraAnchor and button:IsVisible() ) then
+		if( button.isAuraAnchor and button:IsShown() ) then
 			anchorTo = button
 			break
 		end
+	end
+
+	-- Anchoring to nil would silently leave the whole child group unpositioned
+	if( not anchorTo ) then
+		return anchorChildToBase(config, group, childGroup)
 	end
 
 	local position = positionData[getPositionKey(childConfig, childGroup.forcedGrowH, childGroup.forcedGrowV)]
@@ -1467,8 +1832,30 @@ Auras.anchorGroupToGroup = anchorGroupToGroup
 -- Do an update and figure out what we need to scan
 -- Support multiple frames per type
 function Auras:Update(frame)
+	-- Containers self-refresh on UNIT_AURA, config mode falls through to the legacy pipeline for placeholder rendering
+	if( hasContainers ) then
+		if( frame.configMode ) then
+			self:SetContainersEnabled(frame, false)
+		else
+			return self:UpdateContainers(frame)
+		end
+	end
+
 	local config = ShadowUF.db.profile.units[frame.unitType].auras
-	
+
+	-- Pair members need a full reposition in config mode, their legacy buttons are created lazily and only a layout pass gives button 1 a base anchor otherwise
+	local pairMembers
+	if( frame.configMode and frame.auras.anchorPairs ) then
+		for i = 1, 6 do
+			local pair = frame.auras.anchorPairs[i]
+			if( pair ) then
+				pairMembers = pairMembers or {}
+				pairMembers[pair.parent] = true
+				pairMembers[pair.child] = true
+			end
+		end
+	end
+
 	-- Iterate over all possible aura frames
 	for _, auraType in ipairs(AURA_TYPES) do
 		local typeConfig = config[auraType]
@@ -1499,9 +1886,14 @@ function Auras:Update(frame)
 						group.hasErrored = true
 					end
 
-					-- Reposition: needed for enlarged auras or center growth layout
-					if( group.totalAuras > 0 and ((frameConfig.enlarge and frameConfig.enlarge.PLAYER) or frameConfig.growH == "CENTER") ) then
+					-- Reposition: needed for enlarged auras, center growth, sections, or pair members in config mode
+					-- Pair members only need it once to give lazily created buttons their base anchor, the layout reset clears the flag
+					local needsPairBase = pairMembers and pairMembers[group] and not group.configPairRepositioned
+					if( group.totalAuras > 0 and ((frameConfig.enlarge and frameConfig.enlarge.PLAYER) or frameConfig.growH == "CENTER" or (frameConfig.sections and #frameConfig.sections > 0) or needsPairBase) ) then
 						positionAllButtons(group, frameConfig)
+						if( pairMembers and pairMembers[group] ) then
+							group.configPairRepositioned = true
+						end
 					end
 				end
 			end
@@ -1532,7 +1924,7 @@ function Auras:Update(frame)
 					end
 
 					-- Reposition: same as earlier
-					if( pair.parent.totalAuras > 0 and ((pair.parentConfig.enlarge and pair.parentConfig.enlarge.PLAYER) or pair.parentConfig.growH == "CENTER") ) then
+					if( pair.parent.totalAuras > 0 and ((pair.parentConfig.enlarge and pair.parentConfig.enlarge.PLAYER) or pair.parentConfig.growH == "CENTER" or (pair.parentConfig.sections and #pair.parentConfig.sections > 0)) ) then
 						positionAllButtons(pair.parent, pair.parentConfig)
 					end
 

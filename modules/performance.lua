@@ -9,7 +9,6 @@ local RATES = {
 	tagMonitorSlow   = {default = 1.00, min = 0.50, max = 3.00},
 	fakeCastMonitor  = {default = 0.10, min = 0.05, max = 0.50},
 	combatIndicator  = {default = 1.00, min = 0.50, max = 3.00},
-	tempEnchantScan  = {default = 0.50, min = 0.25, max = 2.00},
 }
 
 function Performance:GetRate(key)
@@ -30,7 +29,7 @@ end
 
 function Performance:GetAllRateKeys()
 	return {"rangeCheck", "tagMonitorFast", "tagMonitorNormal", "tagMonitorSlow",
-			"fakeCastMonitor", "combatIndicator", "tempEnchantScan"}
+			"fakeCastMonitor", "combatIndicator"}
 end
 
 local callbacks = {}
