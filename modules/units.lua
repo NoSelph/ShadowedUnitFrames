@@ -1312,8 +1312,6 @@ function Units:LoadZoneHeader(type)
 		frame:SetAttribute("unitID", id)
 		frame:Hide()
 
-		-- Override with our arena specific concerns
-		frame.UnitClassToken = ArenaClassToken
 		frame:SetScript("OnShow", OnShowForced)
 
 		headerFrame.children[id] = frame
@@ -1322,6 +1320,9 @@ function Units:LoadZoneHeader(type)
 		-- Arena frames are only allowed to be shown not hidden from the unit existing, or else when a Rogue
 		-- stealths the frame will hide which looks bad. Instead force it to stay open and it has to be manually hidden when the player leaves an arena.
 		if( type == "arena" ) then
+			-- Class comes from the opponent spec, which stays readable when unit identity is secret
+			frame.UnitClassToken = ArenaClassToken
+
 			stateMonitor:WrapScript(frame, "OnAttributeChanged", [[
 				if( name == "state-unitexists" ) then
 					local parent = self:GetParent()
@@ -1551,13 +1552,36 @@ function Units:CreateBar(parent)
 	return bar
 end
 
+-- 2D/3D portraits can't render a unit that doesn't exist, clear them instead of keeping the previous occupant
+local function ResetPortrait(frame)
+	if( ShadowUF.db.profile.units[frame.unitType].portrait.type == "3D" ) then
+		frame.portrait:ClearModel()
+		if( frame.portrait.fallbackTexture ) then
+			frame.portrait.fallbackTexture:Hide()
+		end
+	else
+		frame.portrait:SetTexture("")
+	end
+end
+
 -- Handle showing for the arena prep frames
 function Units:InitializeArena()
 	if( not headerFrames.arena or InCombatLockdown() ) then return end
 
-	-- Clear all arena frame GUIDs to prevent stale data from previous match
+	-- Clear all arena frame GUIDs and icon textures to prevent stale data from previous match
 	for i=1, #(headerFrames.arena.children) do
-		headerFrames.arena.children[i].unitGUID = nil
+		local frame = headerFrames.arena.children[i]
+		frame.unitGUID = nil
+
+		if( frame.indicators ) then
+			if( frame.indicators.arenaSpec ) then frame.indicators.arenaSpec:Hide() end
+			if( frame.indicators.class ) then frame.indicators.class:Hide() end
+			if( frame.indicators.lfdRole ) then frame.indicators.lfdRole:Hide() end
+		end
+
+		if( frame.portrait ) then
+			ResetPortrait(frame)
+		end
 	end
 
 	local specs = GetNumArenaOpponentSpecs()
@@ -1578,10 +1602,10 @@ end
 
 -- Fill health/power bars and show spec name when unit doesn't exist yet (gates closed)
 function Units:ArenaPreparationUpdate(frame)
-	local specID = GetArenaOpponentSpec(frame.unitID)
+	local specID, gender = GetArenaOpponentSpec(frame.unitID)
 	if( not specID or specID == 0 ) then return end
 
-	local _, specName, _, _, _, classToken = GetSpecializationInfoByID(specID)
+	local _, specName, _, _, _, classToken = GetSpecializationInfoByID(specID, gender)
 	if( not classToken ) then return end
 
 	if( frame.healthBar ) then
@@ -1596,12 +1620,31 @@ function Units:ArenaPreparationUpdate(frame)
 	if( frame.powerBar ) then
 		frame.powerBar:SetMinMaxValues(0, 1)
 		frame.powerBar:SetValue(1)
+		-- Power type is unknown without a unit, fall back to mana over the previous match's color
+		local color = ShadowUF.db.profile.powerColors["MANA"]
+		if( color ) then
+			frame:SetBarColor("powerBar", color.r, color.g, color.b)
+		end
 	end
 
 	-- Set spec name on fontStrings directly (no tags, UnitExists is false)
 	if( frame.fontStrings ) then
 		for _, fontString in pairs(frame.fontStrings) do
 			fontString:SetFormattedText("%s", specName or "")
+		end
+	end
+
+	if( frame.indicators ) then
+		ShadowUF.modules.indicators:UpdateArenaSpec(frame)
+		ShadowUF.modules.indicators:UpdateClass(frame)
+		ShadowUF.modules.indicators:UpdateLFDRole(frame)
+	end
+
+	if( frame.portrait ) then
+		if( ShadowUF.db.profile.units[frame.unitType].portrait.type == "class" ) then
+			ShadowUF.modules.portrait:Update(frame)
+		else
+			ResetPortrait(frame)
 		end
 	end
 end

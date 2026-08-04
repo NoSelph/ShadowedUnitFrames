@@ -25,8 +25,9 @@ end
 function Indicators:UpdateClass(frame)
 	if( not frame.indicators.class or not frame.indicators.class.enabled ) then return end
 
+	-- Arena opponents are always players, and UnitIsPlayer is false during the prep phase
 	local class = frame:UnitClassToken()
-	if( UnitIsPlayer(frame.unit) and class ) then
+	if( class and (frame.unitType == "arena" or UnitIsPlayer(frame.unit)) ) then
 		local coords = CLASS_ICON_TCOORDS[class]
 		frame.indicators.class:SetTexture("Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes")
 		frame.indicators.class:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
@@ -128,7 +129,7 @@ function Indicators:UpdateLFDRole(frame, event)
 		role = secretToNil(UnitGroupRolesAssigned(frame.unitOwner))
 	else
 		local specID = GetArenaOpponentSpec(frame.unitID)
-		role = specID and select(6, GetSpecializationInfoByID(specID))
+		role = specID and select(5, GetSpecializationInfoByID(specID))
 	end
 
 	if( role == "TANK" ) then
