@@ -600,7 +600,7 @@ local function getContainerSignature(group, config, sections)
 	table.insert(structural, tostring(hideCC))
 	table.insert(structural, tostring(ShadowUF.db.profile.auras.disableCooldown))
 	table.insert(structural, tostring(group.canCancel))
-	table.insert(structural, tostring(config.disableRemovableColor))
+	table.insert(structural, tostring(ShadowUF.db.profile.auraColors.disableDispel))
 	table.insert(structural, tostring(config.temporary and group.parent.unit == "player" and group.type == "buffs"))
 	table.insert(runtime, tostring(config.perRow * config.maxRows))
 	local structuralSignature = table.concat(structural, ";")
@@ -615,8 +615,8 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 	if( hideCC == nil ) then hideCC = ShadowUF.db.profile.blizzardcc end
 	local borderType = ShadowUF.db.profile.auras.borderType
 	local canCancel = group.canCancel
-	-- Per-frame opt-out of the dispel tinting, custom borders only (the blizzard style IS the dispel border, cutting it would leave none)
-	local noDispelTint = config.disableRemovableColor
+	-- Global opt-out of the dispel tinting, custom borders only (the blizzard style IS the dispel border, cutting it would leave none)
+	local noDispelTint = ShadowUF.db.profile.auraColors.disableDispel
 
 	return function(button)
 		-- No API to enumerate a group's frames, keep our own list
@@ -1587,25 +1587,21 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 		updateButton(frame.totalAuras, frame, frameConfig)
 	end
 
-	-- Show debuff border, or a special colored border if it's stealable
+	-- Border tinted by dispel type, neutral when the aura has none or the tinting is off
 	local button = frame.buttons[frame.totalAuras]
-	if( isRemovable and not config.disableRemovableColor ) then
-		button.border:SetVertexColor(ShadowUF.db.profile.auraColors.removable.r, ShadowUF.db.profile.auraColors.removable.g, ShadowUF.db.profile.auraColors.removable.b)
+	local curve = not ShadowUF.db.profile.auraColors.disableDispel and C_UnitAuras.GetAuraDispelTypeColor and C_CurveUtil and Auras:GetDispelColorCurve(type)
+	local color
+	if( curve ) then
+		-- Errors while auras are secret (RequiresUnitAuraAccess)
+		local okColor, result = pcall(C_UnitAuras.GetAuraDispelTypeColor, frame.parent.unit, auraInstanceID, curve)
+		color = okColor and result or nil
+	end
+	if( color ) then
+		button.border:SetVertexColorFromBoolean(true, color, color)
+	elseif( type == "buffs" ) then
+		button.border:SetVertexColor(0.6, 0.6, 0.6)
 	else
-		local curve = C_UnitAuras.GetAuraDispelTypeColor and C_CurveUtil and Auras:GetDispelColorCurve(type)
-		local color
-		if( curve ) then
-			-- Errors while auras are secret (RequiresUnitAuraAccess)
-			local okColor, result = pcall(C_UnitAuras.GetAuraDispelTypeColor, frame.parent.unit, auraInstanceID, curve)
-			color = okColor and result or nil
-		end
-		if( color ) then
-			button.border:SetVertexColorFromBoolean(true, color, color)
-		elseif( type == "buffs" ) then
-			button.border:SetVertexColor(0.6, 0.6, 0.6)
-		else
-			button.border:SetVertexColor(0.8, 0, 0)
-		end
+		button.border:SetVertexColor(0.8, 0, 0)
 	end
 
 	-- Show the cooldown ring
@@ -1708,19 +1704,12 @@ local function scanConfigMode(parent, frame, type, config, displayConfig, filter
 				local auraType = mod == 0 and "Magic" or mod == 1 and "Curse" or mod == 2 and "Poison" or mod == 3 and "Disease" or ""
 				local count = i % 3 == 0 and math.random(1, 5) or 0
 				local isPlayerAura = i % 2 == 0
-				local isRemovable = (type == "debuffs" and i % 3 == 0) or (type == "buffs" and i % 4 == 0)
 
-				-- Set border color based on aura type
-				if( isRemovable and not isBuff and not config.disableRemovableColor ) then
-					button.border:SetVertexColor(ShadowUF.db.profile.auraColors.removable.r, ShadowUF.db.profile.auraColors.removable.g, ShadowUF.db.profile.auraColors.removable.b)
-				elseif( auraType == "Magic" ) then
-					button.border:SetVertexColor(0.2, 0.6, 1)
-				elseif( auraType == "Curse" ) then
-					button.border:SetVertexColor(0.6, 0, 1)
-				elseif( auraType == "Disease" ) then
-					button.border:SetVertexColor(0.6, 0.4, 0)
-				elseif( auraType == "Poison" ) then
-					button.border:SetVertexColor(0, 0.6, 0)
+				-- Same tinting rules as the live buttons, using the configured palette
+				local colorMap = not ShadowUF.db.profile.auraColors.disableDispel and auraType ~= "" and Auras:GetDispelColorMap()
+				local dispelColor = colorMap and colorMap[auraType]
+				if( dispelColor ) then
+					button.border:SetVertexColor(dispelColor:GetRGB())
 				elseif( isBuff ) then
 					button.border:SetVertexColor(0.6, 0.6, 0.6)
 				else

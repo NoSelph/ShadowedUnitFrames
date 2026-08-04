@@ -1583,25 +1583,6 @@ local function loadGeneralOptions()
 						type = "group",
 						inline = true,
 						name = L["Aura borders"],
-						set = setColor,
-						get = getColor,
-						hidden = hideAdvancedOption,
-						args = {
-							removableColor = {
-								order = 0,
-								type = "color",
-								name = L["Stealable/Curable/Dispellable"],
-								desc = L["Border coloring of stealable, curable and dispellable auras."],
-								arg = "auraColors.removable",
-								width = "double"
-							}
-						}
-					},
-					dispelColors = {
-						order = 3.6,
-						type = "group",
-						inline = true,
-						name = L["Dispel colors"],
 						set = function(info, r, g, b)
 							local color = ShadowUF.db.profile.auraColors.dispel and ShadowUF.db.profile.auraColors.dispel[info[#(info)]]
 							if( not color ) then return end
@@ -1626,6 +1607,20 @@ local function loadGeneralOptions()
 							Poison = {order = 4, type = "color", name = L["Poison"]},
 							Bleed = {order = 5, type = "color", name = L["Bleed"]},
 							Enrage = {order = 6, type = "color", name = L["Enrage"]},
+							disableDispel = {
+								order = 7,
+								type = "toggle",
+								name = L["Disable dispel type borders"],
+								desc = L["Aura borders keep their neutral color instead of being tinted by dispel type. Has no effect with the Blizzard border style."],
+								width = "double",
+								set = function(info, value)
+									ShadowUF.db.profile.auraColors.disableDispel = value
+									queueLayoutReload()
+								end,
+								get = function(info)
+									return ShadowUF.db.profile.auraColors.disableDispel
+								end,
+							},
 						}
 					},
 					classColors = {
@@ -2675,26 +2670,6 @@ local function loadUnitOptions()
 					set = function(info, value)
 						local auraType = info[#(info) - 2]
 						setAuraFrameValue(info[2], auraType, frameIndex, "clickThrough", value)
-					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
-					end,
-				},
-				disableRemovableColor = {
-					order = 1.8,
-					type = "toggle",
-					name = L["Disable dispel coloring"],
-					desc = L["Disables the dispel type tinting of aura borders; they keep their neutral color. Has no effect with the Blizzard border style."],
-					get = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return cfg and cfg.disableRemovableColor
-					end,
-					set = function(info, value)
-						local auraType = info[#(info) - 2]
-						setAuraFrameValue(info[2], auraType, frameIndex, "disableRemovableColor", value)
 					end,
 					disabled = function(info)
 						local auraType = info[#(info) - 2]
