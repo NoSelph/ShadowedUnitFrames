@@ -180,6 +180,29 @@ function ShadowUF:CheckUpgrade()
 			end
 		end
 	end
+	-- Automatically add missing border colors to legacy profiles without changing existing ones.
+	local auraColors = self.db.profile.auraColors
+	if( not auraColors ) then
+		auraColors = {}
+		self.db.profile.auraColors = auraColors
+	end
+	auraColors.dispel = auraColors.dispel or {}
+	local paletteDefaults = {
+		Magic = {r = 0.2, g = 0.6, b = 1},
+		Curse = {r = 0.6, g = 0, b = 1},
+		Disease = {r = 0.6, g = 0.4, b = 0},
+		Poison = {r = 0, g = 0.6, b = 0},
+		Bleed = {r = 0.8, g = 0, b = 0},
+		Enrage = {r = 1, g = 0.6, b = 0},
+	}
+	for dispelType, color in pairs(paletteDefaults) do
+		if( not auraColors.dispel[dispelType] ) then
+			auraColors.dispel[dispelType] = {r = color.r, g = color.g, b = color.b}
+		end
+	end
+	auraColors.removable = auraColors.removable or {r = 1, g = 0.70, b = 0.10}
+	auraColors.pandemic = auraColors.pandemic or {r = 1, g = 1, b = 1, a = 0.35}
+
 	if( revision <= 70 ) then
 		-- Blizzard filter disabled for buffs, haven't seen anything useful returned
 		for _, unitCfg in pairs(self.db.profile.units) do
@@ -227,17 +250,6 @@ function ShadowUF:CheckUpgrade()
 			if( unitCfg.auraIndicators ) then
 				unitCfg.auraIndicators["filter-boss"] = nil
 			end
-		end
-
-		if( self.db.profile.auraColors and not self.db.profile.auraColors.dispel ) then
-			self.db.profile.auraColors.dispel = {
-				Magic = {r = 0.2, g = 0.6, b = 1},
-				Curse = {r = 0.6, g = 0, b = 1},
-				Disease = {r = 0.6, g = 0.4, b = 0},
-				Poison = {r = 0, g = 0.6, b = 0},
-				Bleed = {r = 0.8, g = 0, b = 0},
-				Enrage = {r = 1, g = 0.6, b = 0},
-			}
 		end
 
 		-- Merge the zone whitelists/blacklists into the custom filters — same data, one creation UI, zone assignments just point at the unified lists now
@@ -1048,6 +1060,11 @@ function ShadowUF:ProfilesChanged()
 	self.Layout:CheckMedia()
 	self.Units:ProfileChanged()
 	self.modules.movers:Update()
+
+	-- Config trees that enumerate profile data need a rebuild, no-op while the options addon isn't loaded
+	if( self.Config and self.Config.ProfilesChanged ) then
+		self.Config:ProfilesChanged()
+	end
 
 	-- The reset path runs deferred, an open config dialog has already refreshed against the pre-layout state
 	local ACR = LibStub("AceConfigRegistry-3.0", true)

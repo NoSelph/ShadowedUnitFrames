@@ -126,6 +126,8 @@ function ShadowUF:LoadDefaultLayout(useMerge)
 	end
 
 	config.auraColors = {
+		removable = {r = 1, g = 0.70, b = 0.10},
+		pandemic = {r = 1, g = 1, b = 1, a = 0.35},
 		dispel = {
 			Magic = {r = 0.2, g = 0.6, b = 1},
 			Curse = {r = 0.6, g = 0, b = 1},

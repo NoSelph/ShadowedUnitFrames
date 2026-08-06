@@ -9,6 +9,16 @@ ShadowUF.Config = Config
 local GetSpellName = C_Spell.GetSpellName
 local GetSpellTexture = C_Spell.GetSpellTexture
 
+-- Shown by the color pickers when a profile has no stored value yet
+local dispelPaletteDefaults = {
+	Magic = {r = 0.2, g = 0.6, b = 1},
+	Curse = {r = 0.6, g = 0, b = 1},
+	Disease = {r = 0.6, g = 0.4, b = 0},
+	Poison = {r = 0, g = 0.6, b = 0},
+	Bleed = {r = 0.8, g = 0, b = 0},
+	Enrage = {r = 1, g = 0.6, b = 0},
+}
+
 -- Sliders fire on every drag tick, coalesce layout reloads (~0.1s) and keep them scoped to the touched units so dragging stays smooth
 local pendingReloadUnits, pendingReloadAll, pendingReloadTimer = {}, false, nil
 local function queueLayoutReload(unit)
@@ -34,6 +44,29 @@ local function queueLayoutReload(unit)
 	end)
 end
 Config.queueLayoutReload = queueLayoutReload
+
+-- While the color wheel is dragged the rebuild is held, and it fires the moment the mouse button is released
+local paletteWatcher
+local function applyPaletteReload()
+	ShadowUF.modules.auras:InvalidateDispelColorMap()
+	queueLayoutReload()
+end
+
+local function queuePaletteReload()
+	if( not IsMouseButtonDown("LeftButton") ) then
+		applyPaletteReload()
+		return
+	end
+
+	if( paletteWatcher ) then return end
+	paletteWatcher = C_Timer.NewTicker(0.05, function()
+		if( not IsMouseButtonDown("LeftButton") ) then
+			paletteWatcher:Cancel()
+			paletteWatcher = nil
+			applyPaletteReload()
+		end
+	end)
+end
 
 --[[
 	The part that makes configuration a pain when you actually try is it gets unwieldly when you're adding special code to deal with
@@ -867,14 +900,6 @@ local function loadGeneralOptions()
 								name = "",
 								width = "full",
 							},
-							blizzardcc = {
-								order = 2.5,
-								type = "toggle",
-								name = L["Disable Blizzard Cooldown Count"],
-								desc = L["Disables showing Cooldown Count timers in all Shadowed Unit Frame auras."],
-								arg = "blizzardcc",
-								width = "double",
-							},
 							hideCombat = {
 								order = 3,
 								type = "select",
@@ -893,20 +918,6 @@ local function loadGeneralOptions()
 								end,
 								width = "double",
 							},
-							auraSpellIDs = {
-								order = 3.05,
-								type = "toggle",
-								name = L["Show spell IDs in aura tooltips"],
-								desc = L["Adds the spell ID to aura tooltips, handy for filling the spell fields of custom filters and aura indicators."],
-								get = function(info)
-									return ShadowUF.db.profile.tooltipAuraSpellIDs
-								end,
-								set = function(info, value)
-									ShadowUF.db.profile.tooltipAuraSpellIDs = value
-									ShadowUF:ApplyAuraSpellIDsCVar()
-								end,
-								width = "double",
-							},
 							bossmodCastNames = {
 								order = 3.1,
 								type = "toggle",
@@ -914,51 +925,6 @@ local function loadGeneralOptions()
 								desc = L["Use spell name overrides provided by boss mods (BigWigs) on the cast bars."],
 								arg = "bossmodSpellRename",
 								width = "double",
-							},
-							sep2 = {
-								order = 3.5,
-								type = "description",
-								name = "",
-								width = "full",
-							},
-							auraBorder = {
-								order = 5,
-								type = "select",
-								name = L["Aura border style"],
-								desc = L["Style of borders to show for all auras."],
-								values = {["dark"] = L["Dark"], ["light"] = L["Light"], ["blizzard"] = L["Blizzard"], [""] = L["None"]},
-								arg = "auras.borderType",
-							},
-							swipeAlpha = {
-								order = 5.5,
-								type = "range",
-								name = L["Cooldown swipe opacity"],
-								desc = L["Opacity of the dark overlay showing the remaining time on auras."],
-								min = 0, max = 1, step = 0.05, isPercent = true,
-								get = function(info)
-									return ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8
-								end,
-								set = function(info, value)
-									ShadowUF.db.profile.auras.cooldownSwipeAlpha = value
-									queueLayoutReload()
-								end,
-							},
-							statusbar = {
-								order = 6,
-								type = "select",
-								name = L["Bar texture"],
-								dialogControl = "LSM30_Statusbar",
-								values = getMediaData,
-								arg = "bars.texture",
-							},
-							spacing = {
-								order = 7,
-								type = "range",
-								name = L["Bar spacing"],
-								desc = L["How much spacing should be provided between all of the bars inside a unit frame, negative values move them farther apart, positive values bring them closer together. 0 for no spacing."],
-								min = -10, max = 10, step = 0.05, softMin = -5, softMax = 5,
-								arg = "bars.spacing",
-								hidden = hideAdvancedOption,
 							},
 						},
 					},
@@ -1132,10 +1098,15 @@ local function loadGeneralOptions()
 						order = 3.5,
 						type = "group",
 						inline = true,
-						name = L["Aura font"],
+						name = L["Auras"],
 						args = {
+							fontHeader = {
+								order = 6,
+								type = "header",
+								name = L["Aura font"],
+							},
 							color = {
-								order = 1,
+								order = 7,
 								type = "color",
 								name = L["Default color"],
 								desc = L["Default font color, any color tags inside individual tag texts will override this."],
@@ -1145,9 +1116,9 @@ local function loadGeneralOptions()
 								arg = "font.cooldownColor",
 								hidden = hideAdvancedOption,
 							},
-							sep = {order = 2, type = "description", name = "", hidden = hideAdvancedOption},
+							sep = {order = 8, type = "description", name = "", hidden = hideAdvancedOption},
 							font = {
-								order = 3,
+								order = 9,
 								type = "select",
 								name = L["Font"],
 								dialogControl = "LSM30_Font",
@@ -1155,29 +1126,103 @@ local function loadGeneralOptions()
 								arg = "font.cooldownName",
 							},
 							size = {
-								order = 4,
+								order = 10,
 								type = "range",
 								name = L["Size"],
 								min = 1, max = 50, step = 1, softMin = 1, softMax = 20,
 								arg = "font.cooldownSize",
 							},
 							outline = {
-								order = 5,
+								order = 11,
 								type = "select",
 								name = L["Outline"],
 								values = {["OUTLINE"] = L["Thin outline"], ["THICKOUTLINE"] = L["Thick outline"], ["MONOCHROMEOUTLINE"] = L["Monochrome Outline"], [""] = L["None"]},
 								arg = "font.cooldownOutline",
 								hidden = hideAdvancedOption,
 							},
+							auraBorder = {
+								order = 1,
+								type = "select",
+								name = L["Aura border style"],
+								desc = L["Style of borders to show for all auras."],
+								values = {["dark"] = L["Dark"], ["light"] = L["Light"], ["blizzard"] = L["Blizzard"], [""] = L["None"]},
+								arg = "auras.borderType",
+							},
+							swipeAlpha = {
+								order = 2,
+								type = "range",
+								name = L["Cooldown swipe opacity"],
+								desc = L["Opacity of the dark overlay showing the remaining time on auras."],
+								min = 0, max = 1, step = 0.05, isPercent = true,
+								get = function(info)
+									return ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.auras.cooldownSwipeAlpha = value
+									queueLayoutReload()
+								end,
+							},
+							pandemic = {
+								order = 3,
+								type = "toggle",
+								name = L["Pandemic overlay"],
+								desc = L["Pulses an overlay on your own auras inside their pandemic window, where refreshing them carries the remaining time over. Color and opacity are set in the Colors tab."],
+								width = "double",
+								get = function(info)
+									return ShadowUF.db.profile.auras.pandemic
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.auras.pandemic = value or nil
+									queueLayoutReload()
+								end,
+							},
+							blizzardcc = {
+								order = 4,
+								type = "toggle",
+								name = L["Disable Blizzard Cooldown Count"],
+								desc = L["Disables showing Cooldown Count timers in all Shadowed Unit Frame auras."],
+								arg = "blizzardcc",
+								width = "double",
+							},
+							auraSpellIDs = {
+								order = 5,
+								type = "toggle",
+								name = L["Show spell IDs in aura tooltips"],
+								desc = L["Adds the spell ID to aura tooltips, handy for filling the spell fields of custom filters and aura indicators."],
+								get = function(info)
+									return ShadowUF.db.profile.tooltipAuraSpellIDs
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.tooltipAuraSpellIDs = value
+									ShadowUF:ApplyAuraSpellIDsCVar()
+								end,
+								width = "double",
+							},
 						},
 					},
 					bar = {
-						order = 4,
+						order = 1.5,
 						type = "group",
 						inline = true,
 						name = L["Bars"],
-						hidden = hideAdvancedOption,
 						args = {
+							statusbar = {
+								order = -1,
+								type = "select",
+								name = L["Bar texture"],
+								dialogControl = "LSM30_Statusbar",
+								values = getMediaData,
+								arg = "bars.texture",
+							},
+							spacing = {
+								order = -0.5,
+								type = "range",
+								name = L["Bar spacing"],
+								desc = L["How much spacing should be provided between all of the bars inside a unit frame, negative values move them farther apart, positive values bring them closer together. 0 for no spacing."],
+								min = -10, max = 10, step = 0.05, softMin = -5, softMax = 5,
+								arg = "bars.spacing",
+								hidden = hideAdvancedOption,
+							},
 							override = {
 								order = 0,
 								type = "toggle",
@@ -1195,6 +1240,7 @@ local function loadGeneralOptions()
 								get = function(info)
 									return ShadowUF.db.profile.bars.backgroundColor and true or false
 								end,
+								hidden = hideAdvancedOption,
 							},
 							color = {
 								order = 1,
@@ -1211,8 +1257,9 @@ local function loadGeneralOptions()
 								end,
 								disabled = function(info) return not ShadowUF.db.profile.bars.backgroundColor end,
 								arg = "bars.backgroundColor",
+								hidden = hideAdvancedOption,
 							},
-							sep = { order = 2, type = "description", name = "", width = "full"},
+							sep = { order = 2, type = "description", name = "", width = "full", hidden = hideAdvancedOption},
 							barAlpha = {
 								order = 3,
 								type = "range",
@@ -1220,7 +1267,8 @@ local function loadGeneralOptions()
 								desc = L["Alpha to use for bar."],
 								arg = "bars.alpha",
 								min = 0, max = 1, step = 0.05,
-								isPercent = true
+								isPercent = true,
+								hidden = hideAdvancedOption,
 							},
 							backgroundAlpha = {
 								order = 4,
@@ -1229,7 +1277,8 @@ local function loadGeneralOptions()
 								desc = L["Alpha to use for bar backgrounds."],
 								arg = "bars.backgroundAlpha",
 								min = 0, max = 1, step = 0.05,
-								isPercent = true
+								isPercent = true,
+								hidden = hideAdvancedOption,
 							},
 						},
 					},
@@ -1584,14 +1633,17 @@ local function loadGeneralOptions()
 						inline = true,
 						name = L["Aura borders"],
 						set = function(info, r, g, b)
-							local color = ShadowUF.db.profile.auraColors.dispel and ShadowUF.db.profile.auraColors.dispel[info[#(info)]]
-							if( not color ) then return end
-							color.r, color.g, color.b = r, g, b
-							ShadowUF.modules.auras:InvalidateDispelColorMap()
-							queueLayoutReload()
+							local auraColors = ShadowUF.db.profile.auraColors
+							auraColors.dispel = auraColors.dispel or {}
+							auraColors.dispel[info[#(info)]] = {r = r, g = g, b = b}
+							queuePaletteReload()
 						end,
 						get = function(info)
-							local color = ShadowUF.db.profile.auraColors.dispel and ShadowUF.db.profile.auraColors.dispel[info[#(info)]]
+							local dispelType = info[#(info)]
+							local color = ShadowUF.db.profile.auraColors.dispel and ShadowUF.db.profile.auraColors.dispel[dispelType]
+							if( not color ) then
+								color = dispelPaletteDefaults[dispelType]
+							end
 							if( not color ) then return 1, 1, 1 end
 							return color.r or 1, color.g or 1, color.b or 1
 						end,
@@ -1601,14 +1653,59 @@ local function loadGeneralOptions()
 								type = "description",
 								name = L["Colors used for dispel type coloring: aura borders, health bar tinting and dispel highlighting."],
 							},
+							removableColor = {
+								order = 0.5,
+								type = "color",
+								name = L["Stealable"],
+								desc = L["Border coloring of stealable buffs. Replaces the dispel type color on those auras."],
+								set = function(info, r, g, b)
+									local color = ShadowUF.db.profile.auraColors.removable or {}
+									color.r, color.g, color.b = r, g, b
+									ShadowUF.db.profile.auraColors.removable = color
+									queuePaletteReload()
+								end,
+								get = getColor,
+								arg = "auraColors.removable",
+							},
 							Magic = {order = 1, type = "color", name = L["Magic"]},
 							Curse = {order = 2, type = "color", name = L["Curse"]},
 							Disease = {order = 3, type = "color", name = L["Disease"]},
 							Poison = {order = 4, type = "color", name = L["Poison"]},
 							Bleed = {order = 5, type = "color", name = L["Bleed"]},
 							Enrage = {order = 6, type = "color", name = L["Enrage"]},
-							disableDispel = {
+							pandemicColor = {
 								order = 7,
+								type = "color",
+								name = L["Pandemic overlay"],
+								desc = L["Color and opacity of the overlay pulsing on your own auras inside their pandemic window. Enabled in the general aura settings."],
+								width = "double",
+								hasAlpha = true,
+								set = function(info, r, g, b, a)
+									local color = ShadowUF.db.profile.auraColors.pandemic or {}
+									color.r, color.g, color.b, color.a = r, g, b, a
+									ShadowUF.db.profile.auraColors.pandemic = color
+									queuePaletteReload()
+								end,
+								get = getColor,
+								arg = "auraColors.pandemic",
+							},
+							disableRemovable = {
+								order = 8,
+								type = "toggle",
+								name = L["Disable stealable coloring"],
+								desc = L["Stealable buffs are tinted by dispel type like the others."],
+								width = "double",
+								set = function(info, value)
+									ShadowUF.db.profile.auraColors.disableRemovable = value
+									ShadowUF.modules.auras:InvalidateDispelColorMap()
+									queueLayoutReload()
+								end,
+								get = function(info)
+									return ShadowUF.db.profile.auraColors.disableRemovable
+								end,
+							},
+							disableDispel = {
+								order = 9,
 								type = "toggle",
 								name = L["Disable dispel type borders"],
 								desc = L["Aura borders keep their neutral color instead of being tinted by dispel type. Has no effect with the Blizzard border style."],
@@ -6947,6 +7044,8 @@ local function loadCustomFilterOptions()
 			Config.RebuildZoneFilters()
 		end
 	end
+	-- The filter list is enumerated at build time, a profile switch refreshes it through Config:ProfilesChanged
+	Config.RebuildCustomFilters = rebuildCustomFilters
 
 	options.args.customFilters = {
 		type = "group",
@@ -8807,73 +8906,111 @@ local function loadAuraIndicatorsOptions()
 		end,
 	}
 
-	-- Build links
-	local addedFrom = {}
-	for from, to in pairs(ShadowUF.db.profile.auraIndicators.linked) do
-		local pID = addedFrom[to]
-		if( not pID ) then
+	-- The trees below enumerate profile data, a profile switch rebuilds them through Config:ProfilesChanged
+	local function buildAuraTrees()
+		-- Build links
+		local addedFrom = {}
+		for from, to in pairs(ShadowUF.db.profile.auraIndicators.linked) do
+			local pID = addedFrom[to]
+			if( not pID ) then
+				linkID = linkID + 1
+				pID = linkID
+
+				addedFrom[to] = pID
+			end
+
 			linkID = linkID + 1
-			pID = linkID
 
-			addedFrom[to] = pID
+			ShadowUF.db.profile.auraIndicators.linked[from] = to
+			options.args.auraIndicators.args.linked.args[tostring(pID)] = parentLinkTable
+			parentLinkTable.args[tostring(linkID)] = childLinkTable
+
+			linkMap[tostring(linkID)] = from
+			linkMap[tostring(pID)] = to
 		end
 
-		linkID = linkID + 1
+		-- Build the aura configuration
+		local groups = {}
+		for name in pairs(ShadowUF.db.profile.auraIndicators.auras) do
+			local aura = Indicators.auraConfig[name]
+			if( aura.group ) then
+				auraMap[tostring(auraID)] = name
+				auraGroupTable.args[tostring(auraID)] = auraConfigTable
+				classTable.args[tostring(auraID)] = classAuraTable
+				auraID = auraID + 1
 
-		ShadowUF.db.profile.auraIndicators.linked[from] = to
-		options.args.auraIndicators.args.linked.args[tostring(pID)] = parentLinkTable
-		parentLinkTable.args[tostring(linkID)] = childLinkTable
+				groups[aura.group] = true
+			end
+		end
 
-		linkMap[tostring(linkID)] = from
-		linkMap[tostring(pID)] = to
-	end
+		-- Now create all of the parent stuff
+		for group in pairs(groups) do
+			groupMap[tostring(groupID)] = group
+			unitTable.args.groups.args[tostring(groupID)] = unitGroupTable
 
-	-- Build the aura configuration
-	local groups = {}
-	for name in pairs(ShadowUF.db.profile.auraIndicators.auras) do
-		local aura = Indicators.auraConfig[name]
-		if( aura.group ) then
-			auraMap[tostring(auraID)] = name
-			auraGroupTable.args[tostring(auraID)] = auraConfigTable
-			classTable.args[tostring(auraID)] = classAuraTable
-			auraID = auraID + 1
+			options.args.auraIndicators.args.units.args.global.args.groups.args[tostring(groupID)] = globalUnitGroupTable
+			options.args.auraIndicators.args.auras.args.groups.args[tostring(groupID)] = auraGroupTable
 
-			groups[aura.group] = true
+			groupID = groupID + 1
+		end
+
+		for _, type in pairs(auraFilters) do
+			unitTable.args.filters.args[type] = unitFilterTable
+			options.args.auraIndicators.args.units.args.global.args.filters.args[type] = globalUnitFilterTable
+		end
+
+		-- Aura status by unit
+		for unit, config in pairs(ShadowUF.db.profile.units) do
+			options.args.auraIndicators.args.units.args[unit] = unitTable
+		end
+
+		-- Build class status thing
+		for classToken in pairs(RAID_CLASS_COLORS) do
+			if ShadowUF.db.profile.classColors[classToken] then
+				options.args.auraIndicators.args.classes.args[classToken] = classTable
+			end
+		end
+
+		-- Quickly build the indicator one
+		for key in pairs(ShadowUF.db.profile.auraIndicators.indicators) do
+			options.args.auraIndicators.args.indicators.args[key] = indicatorTable
+			options.args.auraIndicators.args.auras.args.filters.args[key] = auraFilterConfigTable
 		end
 	end
 
-	-- Now create all of the parent stuff
-	for group in pairs(groups) do
-		groupMap[tostring(groupID)] = group
-		unitTable.args.groups.args[tostring(groupID)] = unitGroupTable
-
-		options.args.auraIndicators.args.units.args.global.args.groups.args[tostring(groupID)] = globalUnitGroupTable
-		options.args.auraIndicators.args.auras.args.groups.args[tostring(groupID)] = auraGroupTable
-
-		groupID = groupID + 1
-	end
-
-	for _, type in pairs(auraFilters) do
-		unitTable.args.filters.args[type] = unitFilterTable
-		options.args.auraIndicators.args.units.args.global.args.filters.args[type] = globalUnitFilterTable
-	end
-
-	-- Aura status by unit
-	for unit, config in pairs(ShadowUF.db.profile.units) do
-		options.args.auraIndicators.args.units.args[unit] = unitTable
-	end
-
-	-- Build class status thing
-	for classToken in pairs(RAID_CLASS_COLORS) do
-		if ShadowUF.db.profile.classColors[classToken] then
-			options.args.auraIndicators.args.classes.args[classToken] = classTable
+	-- Numbered args and name-keyed entries from the previous profile go away, static keys just get re-assigned by the build
+	local function clearAuraTrees()
+		for id in pairs(auraMap) do
+			auraGroupTable.args[id] = nil
+			classTable.args[id] = nil
+			auraMap[id] = nil
+		end
+		for id in pairs(groupMap) do
+			unitTable.args.groups.args[id] = nil
+			options.args.auraIndicators.args.units.args.global.args.groups.args[id] = nil
+			options.args.auraIndicators.args.auras.args.groups.args[id] = nil
+			groupMap[id] = nil
+		end
+		for id in pairs(linkMap) do
+			options.args.auraIndicators.args.linked.args[id] = nil
+			parentLinkTable.args[id] = nil
+			linkMap[id] = nil
+		end
+		local indicatorArgs = options.args.auraIndicators.args.indicators.args
+		for key, value in pairs(indicatorArgs) do
+			if( value == indicatorTable ) then indicatorArgs[key] = nil end
+		end
+		local filterArgs = options.args.auraIndicators.args.auras.args.filters.args
+		for key, value in pairs(filterArgs) do
+			if( value == auraFilterConfigTable ) then filterArgs[key] = nil end
 		end
 	end
 
-	-- Quickly build the indicator one
-	for key in pairs(ShadowUF.db.profile.auraIndicators.indicators) do
-		options.args.auraIndicators.args.indicators.args[key] = indicatorTable
-		options.args.auraIndicators.args.auras.args.filters.args[key] = auraFilterConfigTable
+	buildAuraTrees()
+
+	Config.RebuildAuraIndicators = function()
+		clearAuraTrees()
+		buildAuraTrees()
 	end
 
 	-- Automatically unlock the advanced text configuration for raid frames, regardless of advanced being enabled
@@ -8986,6 +9123,13 @@ local function loadOptions()
 
 	-- Options finished loading, fire callback for any non-default modules that want to be included
 	ShadowUF:FireModuleEvent("OnConfigurationLoad")
+end
+
+-- The aura indicator and custom filter trees snapshot profile data when built, everything else reads live through dynamic getters
+function Config:ProfilesChanged()
+	if( not options ) then return end
+	if( Config.RebuildAuraIndicators ) then Config.RebuildAuraIndicators() end
+	if( Config.RebuildCustomFilters ) then Config.RebuildCustomFilters() end
 end
 
 local defaultToggles

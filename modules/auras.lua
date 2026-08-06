@@ -17,8 +17,9 @@ local function aurasAreSecret()
 end
 Auras.AurasAreSecret = aurasAreSecret
 
--- User dispel palette, handed to Blizzard via customDispelColorMap on our PreserveAsset borders (atlas styles keep the Blizzard look)
+-- User dispel palette, every border consumes it as a customDispelColorMap keyed by dispel name, frozen per registration by securecopy
 local dispelColorMap
+local removableColorMap
 local DISPEL_COLOR_TYPES = {"Magic", "Curse", "Disease", "Poison", "Bleed", "Enrage"}
 
 function Auras:GetDispelColorMap()
@@ -38,13 +39,39 @@ function Auras:GetDispelColorMap()
 	return map
 end
 
+-- Constant map for the stealable border texture, every type keys to the stealable color
+function Auras:GetRemovableColorMap()
+	if( removableColorMap ~= nil ) then return removableColorMap or nil end
+
+	local removable = ShadowUF.db.profile.auraColors and ShadowUF.db.profile.auraColors.removable
+	if( not removable ) then
+		removableColorMap = false
+		return nil
+	end
+
+	local color = CreateColor(removable.r or 1, removable.g or 1, removable.b or 1)
+	local map = {None = color}
+	for _, dispelType in ipairs(DISPEL_COLOR_TYPES) do
+		map[dispelType] = color
+	end
+	removableColorMap = map
+	return map
+end
+
 function Auras:InvalidateDispelColorMap()
 	dispelColorMap = nil
+	removableColorMap = nil
+end
+
+-- Cached curves belong to the profile that built them, a switch must not leak them into the next one
+function Auras:OnProfileChange()
+	self:InvalidateDispelColorMap()
 end
 
 -- Border colors are frozen at button creation, the palette is part of the rebuild signatures
 function Auras:GetDispelColorsKey()
-	local colors = ShadowUF.db.profile.auraColors and ShadowUF.db.profile.auraColors.dispel
+	local auraColors = ShadowUF.db.profile.auraColors
+	local colors = auraColors and auraColors.dispel
 	if( not colors ) then return "" end
 
 	local parts = {}
@@ -54,7 +81,59 @@ function Auras:GetDispelColorsKey()
 			table.insert(parts, string.format("%.2f%.2f%.2f", color.r or 0, color.g or 0, color.b or 0))
 		end
 	end
-	return table.concat(parts)
+
+	-- What the player can dispel decides which types get the removable color, and it changes with the spec
+	local removable = auraColors.removable
+	if( removable ) then
+		table.insert(parts, string.format("%.2f%.2f%.2f", removable.r or 0, removable.g or 0, removable.b or 0))
+	end
+	local pandemic = auraColors.pandemic
+	if( pandemic ) then
+		table.insert(parts, string.format("%.2f%.2f%.2f%.2f", pandemic.r or 0, pandemic.g or 0, pandemic.b or 0, pandemic.a or 1))
+	end
+	table.insert(parts, tostring(auraColors.disableRemovable))
+	return table.concat(parts, ":")
+end
+
+-- Overlay on the icon, pulsing between zero and the configured alpha
+-- Shown while the aura sits in its pandemic window
+function Auras:CreatePandemicOverlay(button, layer, sublevel)
+	local color = ShadowUF.db.profile.auraColors.pandemic
+
+	local overlay = button:CreateTexture(nil, layer or "ARTWORK", nil, sublevel)
+	overlay:SetAllPoints(button)
+	overlay:SetColorTexture(color and color.r or 1, color and color.g or 1, color and color.b or 1, color and color.a or 0.35)
+
+	local pulse = overlay:CreateAnimationGroup()
+	pulse:SetLooping("REPEAT")
+	local fadeOut = pulse:CreateAnimation("Alpha")
+	fadeOut:SetFromAlpha(1)
+	fadeOut:SetToAlpha(0)
+	fadeOut:SetDuration(0.6)
+	fadeOut:SetOrder(1)
+	fadeOut:SetSmoothing("IN_OUT")
+	local fadeIn = pulse:CreateAnimation("Alpha")
+	fadeIn:SetFromAlpha(0)
+	fadeIn:SetToAlpha(1)
+	fadeIn:SetDuration(0.6)
+	fadeIn:SetOrder(2)
+	fadeIn:SetSmoothing("IN_OUT")
+	pulse:Play()
+
+	return overlay
+end
+
+local function getBorderColorMap(stealableOnly)
+	local auraColors = ShadowUF.db.profile.auraColors
+	if( auraColors.disableDispel ) then return nil end
+
+	local schoolMap = Auras:GetDispelColorMap()
+	if( not schoolMap ) then return nil end
+
+	if( not stealableOnly ) then return schoolMap end
+
+	if( auraColors.disableRemovable ) then return schoolMap end
+	return Auras:GetRemovableColorMap() or schoolMap
 end
 
 -- Managed AuraContainers (AuraGroups) drive the live display, legacy buttons only remain for config mode placeholders
@@ -83,47 +162,6 @@ function Auras:OnEnable(frame)
 	frame:RegisterUpdateFunc(self, "Update")
 
 	self:UpdateFilter(frame)
-end
-
-function Auras:GetDispelColorCurve(auraType)
-	local isBuff = (auraType == "buffs")
-	local cacheKey = isBuff and "_buffCurve" or "_debuffCurve"
-	
-	if( self[cacheKey] ) then return self[cacheKey] end
-	if( not C_CurveUtil or not C_CurveUtil.CreateColorCurve ) then return nil end
-
-	local curve = C_CurveUtil.CreateColorCurve()
-	-- Use Enum values if available to ensure correct mapping
-	local E = Enum and Enum.AuraDispelType
-	local noneID = (E and E.None) or 0
-	local magicID = (E and E.Magic) or 1
-	local curseID = (E and E.Curse) or 2
-	local diseaseID = (E and E.Disease) or 3
-	local poisonID = (E and E.Poison) or 4
-	local bleedID = (E and E.Bleed) or 11
-
-	if( curve.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step ) then
-		curve:SetType(Enum.LuaCurveType.Step)
-	end
-
-	-- Hardcode standard colors
-	local baseR, baseG, baseB
-	if( isBuff ) then
-		baseR, baseG, baseB = 0.6, 0.6, 0.6
-	else
-		baseR, baseG, baseB = 0.8, 0, 0 -- Red
-	end
-	
-	-- Add points using the resolved IDs
-	curve:AddPoint(noneID, CreateColor(baseR, baseG, baseB))
-	curve:AddPoint(magicID, CreateColor(0.2, 0.6, 1))   -- Magic (Blue)
-	curve:AddPoint(curseID, CreateColor(0.6, 0, 1))     -- Curse (Purple)
-	curve:AddPoint(diseaseID, CreateColor(0.6, 0.4, 0)) -- Disease (Brown)
-	curve:AddPoint(poisonID, CreateColor(0, 0.6, 0))    -- Poison (Green)
-	curve:AddPoint(bleedID, CreateColor(baseR, baseG, baseB)) -- Bleed (Red)
-	
-	self[cacheKey] = curve
-	return curve
 end
 
 function Auras:OnDisable(frame)
@@ -502,13 +540,13 @@ local function buildSections(auraType, config)
 	local largeSize = math.floor(config.size * (config.selfScale or 1.30) + 0.5)
 	local sortMethod = config.sortMethod
 	if( config.enlarge and config.enlarge.PLAYER and not filterString:find("PLAYER", nil, true) ) then
-		table.insert(sections, { filterString = filterString .. "|PLAYER", size = largeSize, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, tokens = splitTokens(filterValue .. "|PLAYER") })
-		table.insert(sections, { filterString = filterString .. "|!PLAYER", size = config.size, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, tokens = splitTokens(filterValue) })
+		table.insert(sections, { filterString = filterString .. "|PLAYER", size = largeSize, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue .. "|PLAYER") })
+		table.insert(sections, { filterString = filterString .. "|!PLAYER", size = config.size, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
 	elseif( config.enlarge and config.enlarge.PLAYER ) then
 		-- Filter is already player-only; everything shows enlarged
-		table.insert(sections, { filterString = filterString, size = largeSize, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, tokens = splitTokens(filterValue) })
+		table.insert(sections, { filterString = filterString, size = largeSize, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
 	else
-		table.insert(sections, { filterString = filterString, size = config.size, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, tokens = splitTokens(filterValue) })
+		table.insert(sections, { filterString = filterString, size = config.size, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
 	end
 
 	if( config.sections ) then
@@ -525,7 +563,7 @@ local function buildSections(auraType, config)
 				if( extraFilter == "BLIZZARD" and AuraUtil and AuraUtil.AuraUpdateChangedType ) then
 					extraProcessed = auraType == "buffs" and AuraUtil.AuraUpdateChangedType.Buff or AuraUtil.AuraUpdateChangedType.Debuff
 				end
-				table.insert(sections, { filterString = fs, size = extra.size or config.size, auraType = auraType, customFilter = extraCustom, processedAuraType = extraProcessed, sortMethod = extra.sortMethod, maxCount = extra.maxCount, tokens = splitTokens(extraFilter) })
+				table.insert(sections, { filterString = fs, size = extra.size or config.size, auraType = auraType, customFilter = extraCustom, processedAuraType = extraProcessed, sortMethod = extra.sortMethod, maxCount = extra.maxCount, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(extraFilter) })
 			end
 		end
 	end
@@ -591,6 +629,7 @@ local function getContainerSignature(group, config, sections)
 	for _, section in ipairs(sections) do
 		-- Sizes are runtime too, the re-style loop resizes stored buttons so the size slider doesn't recreate containers
 		table.insert(runtime, section.filterString .. "@" .. section.size .. "@" .. (section.sortMethod or "") .. "@" .. (section.maxCount or ""))
+		table.insert(structural, tostring(section.pandemic))
 	end
 	local hideCC = config.disableBlizzardCC
 	if( hideCC == nil ) then hideCC = ShadowUF.db.profile.blizzardcc end
@@ -617,6 +656,10 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 	local canCancel = group.canCancel
 	-- Global opt-out of the dispel tinting, custom borders only (the blizzard style IS the dispel border, cutting it would leave none)
 	local noDispelTint = ShadowUF.db.profile.auraColors.disableDispel
+	local stealableFilter = Enum.CustomAuraButtonDispelTypeStealableFilter
+	-- Stealable is a per aura flag, buffs need one texture for each state so the removable color only lands on what can be purged
+	local splitStealable = auraType == "buffs" and not noDispelTint and not ShadowUF.db.profile.auraColors.disableRemovable and stealableFilter and true or false
+	local pandemicColor = section.pandemic and ShadowUF.db.profile.auraColors.pandemic
 
 	return function(button)
 		-- No API to enumerate a group's frames, keep our own list
@@ -650,14 +693,32 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 			record.border = border
 
 			if( not noDispelTint ) then
-				local dispel = button:CreateTexture(nil, "OVERLAY", nil, 1)
-				dispel:SetPoint("CENTER", button)
-				dispel:SetSize(size + 1, size + 1)
-				dispel:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. borderType)
-				record.dispel = dispel
+				local style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3
 				-- PreserveAsset keeps our border art and only tints it by dispel type
-				pcall(button.SetAuraBorder, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, customDispelColorMap = Auras:GetDispelColorMap() })
+				local function addDispelBorder(colorMap, stealableState)
+					local dispel = button:CreateTexture(nil, "OVERLAY", nil, 1)
+					dispel:SetPoint("CENTER", button)
+					dispel:SetSize(size + 1, size + 1)
+					dispel:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. borderType)
+					pcall(button.SetAuraBorder, button, dispel, { style = style, showWhenHarmful = true, showWhenHelpful = true, stealableFilter = stealableState, customDispelColorMap = colorMap })
+					return dispel
+				end
+
+				if( splitStealable ) then
+					record.dispel = addDispelBorder(Auras:GetRemovableColorMap(), stealableFilter.Stealable)
+					record.dispelAlt = addDispelBorder(Auras:GetDispelColorMap(), stealableFilter.NotStealable)
+				else
+					record.dispel = addDispelBorder(Auras:GetDispelColorMap())
+				end
 			end
+		end
+
+		-- Blizzard shows the region while the aura sits in its pandemic window, refreshing it there carries the remaining time over
+		-- We never read that state, the looping animation only modulates opacity so the peak stays at the configured alpha
+		if( pandemicColor ) then
+			local pandemic = Auras:CreatePandemicOverlay(button)
+			record.pandemic = pandemic
+			pcall(button.AddPandemicRegion, button, pandemic)
 		end
 
 		local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
@@ -855,6 +916,7 @@ local function configureGroupContainer(frame, group, config, extraSections)
 			record.button:SetSize(size, size)
 			if( record.border ) then record.border:SetSize(size + 1, size + 1) end
 			if( record.dispel ) then record.dispel:SetSize(size + 1, size + 1) end
+			if( record.dispelAlt ) then record.dispelAlt:SetSize(size + 1, size + 1) end
 			if( record.stack ) then
 				ShadowUF:SetFontAndShadow(record.stack, "Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", math.floor((size * 0.60) + 0.5), "OUTLINE", 0, 0, 0, 1.0, 0.50, -0.50)
 			end
@@ -1588,16 +1650,15 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 	end
 
 	-- Border tinted by dispel type, neutral when the aura has none or the tinting is off
+	-- This path only runs with real aura data, the secret guard is defensive
 	local button = frame.buttons[frame.totalAuras]
-	local curve = not ShadowUF.db.profile.auraColors.disableDispel and C_UnitAuras.GetAuraDispelTypeColor and C_CurveUtil and Auras:GetDispelColorCurve(type)
+	local colorMap = not ShadowUF.db.profile.auraColors.disableDispel and Auras:GetDispelColorMap()
 	local color
-	if( curve ) then
-		-- Errors while auras are secret (RequiresUnitAuraAccess)
-		local okColor, result = pcall(C_UnitAuras.GetAuraDispelTypeColor, frame.parent.unit, auraInstanceID, curve)
-		color = okColor and result or nil
+	if( colorMap and not issecretvalue(auraType) and auraType ) then
+		color = colorMap[auraType]
 	end
 	if( color ) then
-		button.border:SetVertexColorFromBoolean(true, color, color)
+		button.border:SetVertexColor(color.r, color.g, color.b)
 	elseif( type == "buffs" ) then
 		button.border:SetVertexColor(0.6, 0.6, 0.6)
 	else
@@ -1665,6 +1726,19 @@ local configTestTextures = {
 	debuffs = {"Interface\\Icons\\Ability_DualWield", "Interface\\Icons\\Spell_Shadow_ShadowWordPain", "Interface\\Icons\\Ability_Rogue_Rupture", "Interface\\Icons\\Spell_Fire_Immolation", "Interface\\Icons\\Spell_Shadow_CurseOfSargeras", "Interface\\Icons\\Spell_Nature_CorrosiveBreath"},
 }
 
+-- Placeholder stand-in for the pandemic overlay, live buttons get theirs from Blizzard in makeButtonInitializer
+local function showPandemicPreview(button)
+	local color = ShadowUF.db.profile.auraColors.pandemic
+	if( not color ) then return end
+
+	if( not button.pandemic ) then
+		button.pandemic = Auras:CreatePandemicOverlay(button)
+	end
+
+	button.pandemic:SetColorTexture(color.r or 1, color.g or 1, color.b or 1, color.a or 0.35)
+	button.pandemic:Show()
+end
+
 local function scanConfigMode(parent, frame, type, config, displayConfig, filter)
 	local totalBudget = config.perRow * config.maxRows
 	local isBuff = (type == "buffs")
@@ -1706,7 +1780,8 @@ local function scanConfigMode(parent, frame, type, config, displayConfig, filter
 				local isPlayerAura = i % 2 == 0
 
 				-- Same tinting rules as the live buttons, using the configured palette
-				local colorMap = not ShadowUF.db.profile.auraColors.disableDispel and auraType ~= "" and Auras:GetDispelColorMap()
+				local isStealable = isBuff and i % 4 == 0
+				local colorMap = auraType ~= "" and getBorderColorMap(isStealable)
 				local dispelColor = colorMap and colorMap[auraType]
 				if( dispelColor ) then
 					button.border:SetVertexColor(dispelColor:GetRGB())
@@ -1714,6 +1789,13 @@ local function scanConfigMode(parent, frame, type, config, displayConfig, filter
 					button.border:SetVertexColor(0.6, 0.6, 0.6)
 				else
 					button.border:SetVertexColor(0.8, 0, 0)
+				end
+
+				-- Preview of the pandemic overlay, a third of the icons stand in for auras inside their pandemic window
+				if( section.pandemic and i % 3 == 0 ) then
+					showPandemicPreview(button)
+				elseif( button.pandemic ) then
+					button.pandemic:Hide()
 				end
 
 				-- Show cooldown for test

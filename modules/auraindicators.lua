@@ -151,6 +151,10 @@ end})
 local playerUnits = {player = true, vehicle = true, pet = true}
 local backdropTbl = {bgFile = "Interface\\Addons\\ShadowedUnitFrames\\mediabackdrop", edgeFile = "Interface\\Addons\\ShadowedUnitFrames\\media\\backdrop", tile = true, tileSize = 1, edgeSize = 1}
 
+function Indicators:OnProfileChange()
+	table.wipe(self.auraConfig)
+end
+
 function Indicators:OnEnable(frame)
 	-- Not going to create the indicators we want here, will do that when we do the layout stuff
 	frame.auraIndicators = frame.auraIndicators or CreateFrame("Frame", nil, frame)
@@ -230,6 +234,12 @@ function Indicators:OnLayoutApplied(frame)
 		indicator.border:SetVertexColor(0.6, 0.6, 0.6)
 		indicator.border:Hide()
 
+		-- Indicators survive layout reloads, so a pandemic color change must be pushed onto existing pandemic overlays
+		if( indicator.pandemic ) then
+			local pandemicColor = ShadowUF.db.profile.auraColors.pandemic
+			indicator.pandemic:SetColorTexture(pandemicColor and pandemicColor.r or 1, pandemicColor and pandemicColor.g or 1, pandemicColor and pandemicColor.b or 1, pandemicColor and pandemicColor.a or 0.35)
+		end
+
 		ShadowUF.Layout:AnchorFrame(frame, indicator, indicatorConfig)
 
 		-- Let the auras module quickly access indicators without having to use index
@@ -247,6 +257,23 @@ local filterMap = {}
 local canCure = ShadowUF.Units.canCure
 for _, key in pairs(Indicators.auraFilters) do filterMap[key] = "filter-" .. key end
 
+-- Fallback for out-of-combat rendering, compute the pandemic window manually here.
+-- We can deduce the start time at any point by subtracting the base duration from the extended duration, yielding the constant carryover cap.
+local function getPandemicStart(unit, auraInstanceID, caster, endTime)
+	if( not ShadowUF.db.profile.auras.pandemic or not auraInstanceID or not caster or not playerUnits[caster] ) then return nil end
+
+	local ok, start = pcall(function()
+		local extended = C_UnitAuras.GetRefreshExtendedDuration(unit, auraInstanceID)
+		local base = C_UnitAuras.GetAuraBaseDuration(unit, auraInstanceID)
+		if( issecretvalue(extended) or issecretvalue(base) ) then return nil end
+		if( not extended or not base ) then return nil end
+		local carryover = extended - base
+		if( carryover <= 0 or not endTime or endTime <= 0 ) then return nil end
+		return endTime - carryover
+	end)
+	return ok and start or nil
+end
+
 local function checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, auraInstanceID)
 	local category
 	if( isFriendly and canCure[auraType] and type == "debuffs" ) then
@@ -261,6 +288,7 @@ local function checkFilterAura(frame, type, isFriendly, name, texture, count, au
 	if( not category ) then return end
 
 	local applied = false
+	local pandemicStart = getPandemicStart(frame.unit, auraInstanceID, caster, endTime)
 
 	for key, config in pairs(ShadowUF.db.profile.auraIndicators.indicators) do
 		local indicator = frame.auraIndicators[key]
@@ -277,6 +305,7 @@ local function checkFilterAura(frame, type, isFriendly, name, texture, count, au
 			indicator.colorR = nil
 			indicator.colorG = nil
 			indicator.colorB = nil
+			indicator.pandemicStart = pandemicStart
 
 			applied = true
 		end
@@ -285,7 +314,7 @@ local function checkFilterAura(frame, type, isFriendly, name, texture, count, au
 	return applied
 end
 
-local function checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
+local function checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, auraInstanceID)
 	-- Not relevant
 	if( not ShadowUF.db.profile.auraIndicators.auras[name] and not ShadowUF.db.profile.auraIndicators.auras[tostring(spellID)] ) then return end
 
@@ -329,6 +358,7 @@ local function checkSpecificAura(frame, type, name, texture, count, auraType, du
 	indicator.colorR = color.r
 	indicator.colorG = color.g
 	indicator.colorB = color.b
+	indicator.pandemicStart = getPandemicStart(frame.unit, auraInstanceID, caster, endTime)
 
 	return true
 end
@@ -369,7 +399,7 @@ local function scanAuras(frame, filter, type)
 
 					local result = checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, auraData.auraInstanceID)
 					if( not result ) then
-						checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff)
+						checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, auraData.auraInstanceID)
 					end
 
 					auraList[name] = true
@@ -404,7 +434,7 @@ local function scanConfiguredAuras(frame)
 				if( auraData.name ) then
 					-- The type arg is unused by checkSpecificAura, best-effort only
 					local aType = auraData.isHarmful and "debuffs" or "buffs"
-					checkSpecificAura(frame, aType, auraData.name, auraData.icon, auraData.applications, auraData.dispelName, auraData.duration, auraData.expirationTime, auraData.sourceUnit, auraData.isStealable, auraData.nameplateShowPersonal, auraData.spellId, auraData.canApplyAura, auraData.isBossAura)
+					checkSpecificAura(frame, aType, auraData.name, auraData.icon, auraData.applications, auraData.dispelName, auraData.duration, auraData.expirationTime, auraData.sourceUnit, auraData.isStealable, auraData.nameplateShowPersonal, auraData.spellId, auraData.canApplyAura, auraData.isBossAura, auraData.auraInstanceID)
 					auraList[auraData.name] = true
 					if( auraData.spellId ) then auraList[tostring(auraData.spellId)] = true end
 				end
@@ -556,6 +586,13 @@ local function makeIndicatorSlotStyler(display)
 			pcall(button.SetApplicationCount, button, stack, {})
 		end
 
+		-- Only the player's own auras ever get a pandemic window, so no per-slot gating is needed
+		-- Slot icons live in OVERLAY sublevel 0 (dispel border at 1), the pandemic texture goes above both
+		if( ShadowUF.db.profile.auras.pandemic and ShadowUF.modules.auras.CreatePandemicOverlay ) then
+			local overlay = ShadowUF.modules.auras:CreatePandemicOverlay(button, "OVERLAY", 2)
+			pcall(button.AddPandemicRegion, button, overlay)
+		end
+
 		button:SetMouseMotionEnabled(false)
 	end
 end
@@ -618,7 +655,7 @@ function Indicators:BuildIndicatorSlots(frame)
 		-- Border styling is frozen at slot creation
 		local auras = ShadowUF.modules.auras
 		local colorsKey = auras.GetDispelColorsKey and auras:GetDispelColorsKey() or ""
-		signature = ShadowUF.db.profile.auras.borderType .. "#" .. colorsKey .. "##" .. table.concat(signatureParts, ";")
+		signature = ShadowUF.db.profile.auras.borderType .. "#" .. tostring(ShadowUF.db.profile.auras.pandemic) .. "#" .. colorsKey .. "##" .. table.concat(signatureParts, ";")
 	end
 	if( frame.auraIndicators.slotContainer and frame.auraIndicators.slotSignature == signature ) then
 		pcall(frame.auraIndicators.slotContainer.SetUnit, frame.auraIndicators.slotContainer, frame.unit)
@@ -714,6 +751,35 @@ function Indicators:BuildIndicatorSlots(frame)
 	ensureSlotCombatWatcher()
 end
 
+-- Each pass bumps the token, so a pending arm timer from the previous aura state can never show a stale overlay
+local function updatePandemicOverlay(indicator)
+	indicator.pandemicToken = (indicator.pandemicToken or 0) + 1
+
+	local start = indicator.pandemicStart
+	if( not start ) then
+		if( indicator.pandemic ) then indicator.pandemic:Hide() end
+		return
+	end
+
+	if( not indicator.pandemic ) then
+		-- Icon and border live in OVERLAY 0/1, the pandemic texture goes above both
+		indicator.pandemic = ShadowUF.modules.auras:CreatePandemicOverlay(indicator, "OVERLAY", 2)
+	end
+
+	local delay = start - GetTime()
+	if( delay <= 0 ) then
+		indicator.pandemic:Show()
+	else
+		indicator.pandemic:Hide()
+		local token = indicator.pandemicToken
+		C_Timer.After(delay + 0.05, function()
+			if( indicator.pandemicToken == token and indicator.pandemicStart and indicator:IsShown() ) then
+				indicator.pandemic:Show()
+			end
+		end)
+	end
+end
+
 function Indicators:UpdateIndicators(frame)
 	for key, indicatorConfig in pairs(ShadowUF.db.profile.auraIndicators.indicators) do
 		local indicator = frame.auraIndicators[key]
@@ -751,8 +817,10 @@ function Indicators:UpdateIndicators(frame)
 			end
 
 			indicator:Show()
+			updatePandemicOverlay(indicator)
 		else
 			indicator:Hide()
+			updatePandemicOverlay(indicator)
 		end
 	end
 end
@@ -803,6 +871,7 @@ function Indicators:UpdateAuras(frame)
 		local indicator = frame.auraIndicators[key]
 		if( indicator ) then
 			indicator.priority = -1
+			indicator.pandemicStart = nil
 
 			if( UnitIsEnemy(frame.unit, "player") ) then
 				indicator.enabled = config.hostile
