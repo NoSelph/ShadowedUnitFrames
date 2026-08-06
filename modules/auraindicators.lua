@@ -306,6 +306,7 @@ local function checkFilterAura(frame, type, isFriendly, name, texture, count, au
 			indicator.colorG = nil
 			indicator.colorB = nil
 			indicator.pandemicStart = pandemicStart
+			indicator.dispelName = auraType
 
 			applied = true
 		end
@@ -359,6 +360,7 @@ local function checkSpecificAura(frame, type, name, texture, count, auraType, du
 	indicator.colorG = color.g
 	indicator.colorB = color.b
 	indicator.pandemicStart = getPandemicStart(frame.unit, auraInstanceID, caster, endTime)
+	indicator.dispelName = auraType
 
 	return true
 end
@@ -797,6 +799,20 @@ function Indicators:UpdateIndicators(frame)
 				indicator.texture:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 				indicator:SetBackdropColor(0, 0, 0, 0)
 				if( indicator.border and ShadowUF.db.profile.auras.borderType ~= "" ) then
+					local dispelName = not issecretvalue(indicator.dispelName) and indicator.dispelName or nil
+					if( ShadowUF.db.profile.auras.borderType == "blizzard" ) then
+						if( AuraUtil and AuraUtil.SetAuraBorderColor ) then
+							AuraUtil.SetAuraBorderColor(indicator.border, dispelName)
+						end
+					else
+						local colorMap = not ShadowUF.db.profile.auraColors.disableDispel and ShadowUF.modules.auras:GetDispelColorMap()
+						local color = colorMap and dispelName and colorMap[dispelName]
+						if( color ) then
+							indicator.border:SetVertexColor(color.r, color.g, color.b)
+						else
+							indicator.border:SetVertexColor(0.6, 0.6, 0.6)
+						end
+					end
 					indicator.border:Show()
 				end
 			else
@@ -872,6 +888,7 @@ function Indicators:UpdateAuras(frame)
 		if( indicator ) then
 			indicator.priority = -1
 			indicator.pandemicStart = nil
+			indicator.dispelName = nil
 
 			if( UnitIsEnemy(frame.unit, "player") ) then
 				indicator.enabled = config.hostile
