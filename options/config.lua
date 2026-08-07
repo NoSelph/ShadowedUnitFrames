@@ -1198,6 +1198,20 @@ local function loadGeneralOptions()
 								end,
 								width = "double",
 							},
+							disableCancel = {
+								order = 5.5,
+								type = "toggle",
+								name = L["Disable right-click cancel"],
+								desc = L["Right-clicking your own buffs cancels them; enable this to turn that off."],
+								width = "double",
+								get = function(info)
+									return ShadowUF.db.profile.auras.disableCancel
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.auras.disableCancel = value
+									queueLayoutReload()
+								end,
+							},
 						},
 					},
 					bar = {
@@ -2752,26 +2766,6 @@ local function loadUnitOptions()
 						local auraType = info[#(info) - 2]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.anchorOn)
-					end,
-				},
-				clickThrough = {
-					order = 1.7,
-					type = "toggle",
-					name = L["Click through"],
-					desc = L["Allow clicks to pass through auras to select the unit behind them. Tooltips still work on hover."],
-					get = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return cfg and cfg.clickThrough
-					end,
-					set = function(info, value)
-						local auraType = info[#(info) - 2]
-						setAuraFrameValue(info[2], auraType, frameIndex, "clickThrough", value)
-					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
 					end,
 				},
 				filter = {

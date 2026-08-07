@@ -204,6 +204,17 @@ function ShadowUF:CheckUpgrade()
 	auraColors.pandemic = auraColors.pandemic or {r = 1, g = 1, b = 1, a = 0.35}
 
 	if( revision <= 70 ) then
+		-- Right-click cancel opt-out moved from the per aura frame clickThrough to a global toggle, carry over player buff settings
+		local playerBuffs = self.db.profile.units.player and self.db.profile.units.player.auras and self.db.profile.units.player.auras.buffs
+		if( type(playerBuffs) == "table" ) then
+			for _, frameCfg in pairs(playerBuffs) do
+				if( type(frameCfg) == "table" and frameCfg.clickThrough ) then
+					self.db.profile.auras.disableCancel = true
+					frameCfg.clickThrough = nil
+				end
+			end
+		end
+
 		-- Blizzard filter disabled for buffs, haven't seen anything useful returned
 		for _, unitCfg in pairs(self.db.profile.units) do
 			if( unitCfg.auras and type(unitCfg.auras.buffs) == "table" ) then

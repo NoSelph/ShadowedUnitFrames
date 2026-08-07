@@ -771,7 +771,7 @@ local function configureGroupContainer(frame, group, config, extraSections)
 		end
 	end
 
-	group.canCancel = (frame.unit == "player" and group.type == "buffs" and not config.clickThrough) or nil
+	group.canCancel = (frame.unit == "player" and group.type == "buffs" and not ShadowUF.db.profile.auras.disableCancel) or nil
 	local structural, signature = getContainerSignature(group, config, sections)
 
 	if( group.container and group.containerSignature ~= signature ) then
