@@ -1,4 +1,4 @@
-## Interface: 120000,120001,120005,120007
+## Interface: 120000,120001,120005,120007,120100
 ## Title: Shadowed Unit Frames
 ## Notes: Moooooooooooooooooo
 ## Author: Shadowed

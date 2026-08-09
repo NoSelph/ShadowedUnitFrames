@@ -8801,7 +8801,7 @@ local function loadAuraIndicatorsOptions()
 	local function getEnabledUnits()
 		table.wipe(enabledUnits)
 		for unit, config in pairs(ShadowUF.db.profile.units) do
-			if( config.enabled and config.auraIndicators.enabled ) then
+			if( config.enabled and config.auraIndicators and config.auraIndicators.enabled ) then
 				enabledUnits[unit] = L.units[unit]
 			end
 		end
@@ -9293,9 +9293,11 @@ local function loadAuraIndicatorsOptions()
 			options.args.auraIndicators.args.units.args.global.args.filters.args[type] = globalUnitFilterTable
 		end
 
-		-- Aura status by unit
+		-- Aura status by unit; compound unit tokens have no auraIndicators table (the aura APIs reject them)
 		for unit, config in pairs(ShadowUF.db.profile.units) do
-			options.args.auraIndicators.args.units.args[unit] = unitTable
+			if( config.auraIndicators ) then
+				options.args.auraIndicators.args.units.args[unit] = unitTable
+			end
 		end
 
 		-- Build class status thing

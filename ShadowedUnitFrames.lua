@@ -301,6 +301,13 @@ function ShadowUF:CheckUpgrade()
 			filters.whitelists = nil
 			filters.blacklists = nil
 		end
+
+		-- Aura indicators dropped on compound unit tokens, the aura APIs reject them
+		for unit, unitCfg in pairs(self.db.profile.units) do
+			if( self.fakeUnits[unit] and unit ~= "targettarget" and unit ~= "focustarget" ) then
+				unitCfg.auraIndicators = nil
+			end
+		end
 	end
 	if (revision <= 62 ) then
 		-- evoker setup
@@ -678,7 +685,6 @@ function ShadowUF:LoadUnitDefaults()
 			},
 			indicators = {raidTarget = {enabled = true, size = 0}},
 			highlight = {},
-			auraIndicators = {enabled = false},
 			auras = {
 				buffs = {
 					[1] = {enabled = not aurasBlocked, temporary = (unit == "player"), clickThrough = false, filter = "ALL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
@@ -700,6 +706,10 @@ function ShadowUF:LoadUnitDefaults()
 				bossDebuffs = {enabled = false, size = 32, perRow = 3, maxRows = 1, anchorPoint = "CENTER", x = 0, y = 0, showCooldown = true, showCooldownNumbers = true},
 			},
 		}
+
+		if( not aurasBlocked ) then
+			self.defaults.profile.units[unit].auraIndicators = {enabled = false}
+		end
 
 		if( not self.fakeUnits[unit] ) then
 			self.defaults.profile.units[unit].combatText = {enabled = true, anchorTo = "$parent", anchorPoint = "C", x = 0, y = 0}
