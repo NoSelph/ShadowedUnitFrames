@@ -413,7 +413,7 @@ local function updateButton(id, group, config)
 	button:SetWidth(config.size)
 	button.border:SetHeight(config.size + 1)
 	button.border:SetWidth(config.size + 1)
-	ShadowUF:SetFontAndShadow(button.stack, "Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", math.floor((config.size * 0.60) + 0.5), "OUTLINE", 0, 0, 0, 1.0, 0.50, -0.50)
+	Auras:UpdateStackText(button, config, config.size)
 
 	button.parent = group.parent
 	button:ClearAllPoints()
@@ -443,14 +443,19 @@ function Auras:UpdateCooldownText(button, config)
 
 	local text = button.cooldown.timerText
 	if( text ) then
-		-- Apply Font Settings: per-frame override → global aura font → general font
+		-- Font, outline and shadow are global-only; size falls back per-frame → global aura font → general font
 		local fontDetails = ShadowUF.db.profile.font
-		local font = SML:Fetch("font", (config and config.cooldownFont) or fontDetails.cooldownName or fontDetails.name)
+		local font = SML:Fetch("font", fontDetails.cooldownName or fontDetails.name)
 		local size = (config and config.cooldownFontSize) or fontDetails.cooldownSize or fontDetails.size
-		local outline = (config and config.cooldownFontOutline) or fontDetails.cooldownOutline
+		local outline = fontDetails.cooldownOutline
 		if( outline == nil ) then outline = fontDetails.extra end
 
-		text:SetFont(font, size, outline)
+		if( fontDetails.cooldownShadowEnabled ) then
+			local shadow = fontDetails.cooldownShadowColor
+			ShadowUF:SetFontAndShadow(text, font, size, outline, shadow and shadow.r or 0, shadow and shadow.g or 0, shadow and shadow.b or 0, shadow and shadow.a or 1, fontDetails.cooldownShadowX or 0.5, fontDetails.cooldownShadowY or -0.5)
+		else
+			ShadowUF:SetFontAndShadow(text, font, size, outline)
+		end
 
 		-- Apply Color: per-frame override → global aura font color
 		local color = (config and config.cooldownFontColor) or fontDetails.cooldownColor
@@ -459,6 +464,64 @@ function Auras:UpdateCooldownText(button, config)
 		else
 			text:SetTextColor(1, 1, 1, 1)
 		end
+
+		local anchor = (config and config.timerAnchor) or fontDetails.cooldownAnchor
+		if( anchor ) then
+			local x = (config and config.timerX) or fontDetails.cooldownX or 0
+			local y = (config and config.timerY) or fontDetails.cooldownY or 0
+			text:ClearAllPoints()
+			text:SetPoint(anchor, button.cooldown, anchor, x, y)
+			text.sufAnchored = true
+		elseif( text.sufAnchored ) then
+			text:ClearAllPoints()
+			text:SetPoint("CENTER", button.cooldown, "CENTER", 0, 0)
+			text.sufAnchored = nil
+		end
+	end
+end
+
+-- Stack text styling shared by container records and legacy buttons
+function Auras:UpdateStackText(record, config, buttonSize)
+	local stack = record.stack
+	if( not stack ) then return end
+	local button = record.button or record
+
+	-- Font, outline and shadow are global-only settings
+	local fontDetails = ShadowUF.db.profile.font
+	local fontName = fontDetails.stackName
+	local font = fontName and SML:Fetch("font", fontName) or "Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf"
+	local size = (config and config.stackFontSize) or fontDetails.stackSize or math.floor(((buttonSize or 16) * 0.60) + 0.5)
+	local outline = fontDetails.stackOutline
+	if( outline == nil ) then outline = "OUTLINE" end
+
+	local shadowEnabled = fontDetails.stackShadowEnabled
+	if( shadowEnabled == nil ) then shadowEnabled = true end
+	if( shadowEnabled ) then
+		local shadow = fontDetails.stackShadowColor
+		local shadowX = fontDetails.stackShadowX or 0.50
+		local shadowY = fontDetails.stackShadowY or -0.50
+		ShadowUF:SetFontAndShadow(stack, font, size, outline, shadow and shadow.r or 0, shadow and shadow.g or 0, shadow and shadow.b or 0, shadow and shadow.a or 1.0, shadowX, shadowY)
+	else
+		ShadowUF:SetFontAndShadow(stack, font, size, outline)
+	end
+
+	local color = (config and config.stackFontColor) or fontDetails.stackColor
+	if( color ) then
+		stack:SetTextColor(color.r, color.g, color.b, color.a or 1)
+	else
+		stack:SetTextColor(1, 1, 1, 1)
+	end
+
+	local anchor = (config and config.stackAnchor) or fontDetails.stackAnchor
+	stack:ClearAllPoints()
+	if( anchor ) then
+		-- Point-anchored fontstrings must auto-size, legacy buttons carry an explicit 1x1
+		stack:SetSize(0, 0)
+		local x = (config and config.stackX) or fontDetails.stackX or 0
+		local y = (config and config.stackY) or fontDetails.stackY or 0
+		stack:SetPoint(anchor, button, anchor, x, y)
+	else
+		stack:SetAllPoints(button)
 	end
 end
 
@@ -633,11 +696,14 @@ local function getContainerSignature(group, config, sections)
 	end
 	local hideCC = config.disableBlizzardCC
 	if( hideCC == nil ) then hideCC = ShadowUF.db.profile.blizzardcc end
+	local hideStacks = config.disableStacks
+	if( hideStacks == nil ) then hideStacks = ShadowUF.db.profile.auras.disableStacks end
 	table.insert(structural, tostring(#sections))
 	table.insert(structural, ShadowUF.db.profile.auras.borderType)
 	table.insert(structural, Auras:GetDispelColorsKey())
 	table.insert(structural, tostring(hideCC))
 	table.insert(structural, tostring(ShadowUF.db.profile.auras.disableCooldown))
+	table.insert(structural, tostring(hideStacks))
 	table.insert(structural, tostring(group.canCancel))
 	table.insert(structural, tostring(ShadowUF.db.profile.auraColors.disableDispel))
 	table.insert(structural, tostring(config.temporary and group.parent.unit == "player" and group.type == "buffs"))
@@ -735,13 +801,17 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 		Auras:UpdateCooldownText(record, config)
 
 		local stack = button:CreateFontString(nil, "OVERLAY")
-		ShadowUF:SetFontAndShadow(stack, "Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", math.floor((size * 0.60) + 0.5), "OUTLINE", 0, 0, 0, 1.0, 0.50, -0.50)
-		stack:SetAllPoints(button)
 		stack:SetJustifyV("BOTTOM")
 		stack:SetJustifyH("RIGHT")
 		record.stack = stack
+		Auras:UpdateStackText(record, config, size)
 		-- No formatter option, it errors on secret values
-		pcall(button.SetApplicationCount, button, stack, {})
+		-- Per-frame override falls back to the global toggle, like the countdown one
+		local hideStacks = config.disableStacks
+		if( hideStacks == nil ) then hideStacks = ShadowUF.db.profile.auras.disableStacks end
+		if( not hideStacks ) then
+			pcall(button.SetApplicationCount, button, stack, {})
+		end
 
 		if( canCancel ) then
 			-- Blizzard-side click handler (CancelAuraByInstanceID), no taint
@@ -917,14 +987,12 @@ local function configureGroupContainer(frame, group, config, extraSections)
 			if( record.border ) then record.border:SetSize(size + 1, size + 1) end
 			if( record.dispel ) then record.dispel:SetSize(size + 1, size + 1) end
 			if( record.dispelAlt ) then record.dispelAlt:SetSize(size + 1, size + 1) end
-			if( record.stack ) then
-				ShadowUF:SetFontAndShadow(record.stack, "Interface\\AddOns\\ShadowedUnitFrames\\media\\fonts\\Myriad Condensed Web.ttf", math.floor((size * 0.60) + 0.5), "OUTLINE", 0, 0, 0, 1.0, 0.50, -0.50)
-			end
 		end
 
 		pcall(record.button.SetMouseMotionEnabled, record.button, motionEnabled)
 		pcall(record.button.SetHideTooltipInCombat, record.button, hideAuraTooltips)
 		Auras:UpdateCooldownText(record, config)
+		Auras:UpdateStackText(record, config, size or config.size)
 	end
 
 	-- Containers don't receive OnSizeChanged (aspect), re-run the flow layout to reposition resized buttons
@@ -1596,7 +1664,7 @@ function Auras:ShowBossDebuffsPlaceholders(frame)
 		end
 
 		-- Test stack (some with stacks like scanConfigMode)
-		local testStacks = (i % 3 == 0) and math.random(2, 5) or 0
+		local testStacks = (not ShadowUF.db.profile.auras.disableStacks and i % 3 == 0) and math.random(2, 5) or 0
 		button.stack:SetText(testStacks > 0 and testStacks or "")
 
 		Auras:UpdateCooldownText(button)
@@ -1704,13 +1772,17 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 	
 	-- Stack count
 	if( button.stack ) then
-		-- Errors while auras are secret (RequiresUnitAuraAccess)
-		-- Never boolean-test countText, it can be a secret string (SetText takes secrets, Lua truth tests don't)
-		local okCount, countText = pcall(C_UnitAuras.GetAuraApplicationDisplayCount, frame.parent.unit, auraInstanceID, 2)
-		if( okCount ) then
-			button.stack:SetText(countText)
-		else
+		if( ShadowUF.db.profile.auras.disableStacks ) then
 			button.stack:SetText("")
+		else
+			-- Errors while auras are secret (RequiresUnitAuraAccess)
+			-- Never boolean-test countText, it can be a secret string (SetText takes secrets, Lua truth tests don't)
+			local okCount, countText = pcall(C_UnitAuras.GetAuraApplicationDisplayCount, frame.parent.unit, auraInstanceID, 2)
+			if( okCount ) then
+				button.stack:SetText(countText)
+			else
+				button.stack:SetText("")
+			end
 		end
 		button.stack:Show()
 	end
@@ -1826,7 +1898,7 @@ local function scanConfigMode(parent, frame, type, config, displayConfig, filter
 
 				-- Stack count
 				if( button.stack ) then
-					button.stack:SetText(count > 0 and count or "")
+					button.stack:SetText((not ShadowUF.db.profile.auras.disableStacks and count > 0) and count or "")
 					button.stack:Show()
 				end
 			end
@@ -1908,6 +1980,17 @@ function Auras:Update(frame)
 		if( frame.configMode ) then
 			self:SetContainersEnabled(frame, false)
 		else
+			if( frame.auras.containersToggled == false ) then
+				for _, auraType in ipairs(AURA_TYPES) do
+					for i = 1, 6 do
+						local group = frame.auras[auraType .. i]
+						if( group and group.buttons ) then
+							for j = 1, #group.buttons do group.buttons[j]:Hide() end
+							group.totalAuras = 0
+						end
+					end
+				end
+			end
 			return self:UpdateContainers(frame)
 		end
 	end

@@ -1,4 +1,4 @@
-if( GetLocale() ~= "frFR" ) then return end
+﻿if( GetLocale() ~= "frFR" ) then return end
 local L = {}
 L["%d auras in group"] = "%d auras dans le groupe"
 L["%s (%s): %s/%s (%.2f%% done)"] = "%s (%s) : %s/%s (%.2f%% terminé)"
@@ -968,7 +968,6 @@ L["You can set what unit frame should use what filter group and in what zone typ
 L["You cannot edit this tag because it is one of the default ones included in this mod. This function is here to provide an example for your own custom tags."] = "Vous ne pouvez pas éditer ce tag car il s'agit d'un des tags par défaut de cet addon. Cette fonction est présente afin de fournir un exemple pour vos propres tags."
 L["You cannot name a tag \"%s\", tag names should contain no brackets or parenthesis."] = "Vous ne pouvez pas nommer un tag \"%s\" : les noms de tag ne peuvent contenir de crochets ou de parenthèses."
 L["You do not have any filters of this type added yet, you will have to create one in the management panel before this page is useful."] = "Vous n'avez pas encore ajouté de filtre de ce type, vous devez en créer un dans le panneau de gestion avant que cette page ne soit utile."
-L["You have entered combat, unit frames have been locked. Once you leave combat you will need to unlock them again through /shadowuf."] = "Vous venez d'entrer en combat, les cadres d'unité ont été verrouillées. Une fois que vous êtes sorti de combat, vous devrez les déverrouiller à nouveau via la commande /shadowuf"
 L["You have to set the events to fire, you can only enter letters and underscores, \"FOO_BAR\" for example is valid, \"APPLE_5_ORANGE\" is not because it contains a number."] = "Vous devez définir les événements à déclencher en utilisant uniquement des lettres et des tirets bas. Par exemple, \"FOO_BAR\" est valide, tandis que \"APPLE_5_ORANGE\" ne l'est pas car il contient un nombre."
 L["You must enter a number that is 0 or higher, negative numbers are not allowed."] = "Vous devez entrer un nombre supérieur à 0 : les nombres négatifs ne sont pas autorisés."
 L["You must enter a tag name."] = "Vous devez entrer un nom de tag."
@@ -1058,6 +1057,8 @@ L["Add spell"] = "Ajouter un sort"
 L["Blacklist / Whitelist"] = "Liste noire / Liste blanche"
 L["Apply the blacklist/whitelist from the Aura Filters tab to this frame. This is separate from the Blizzard API filter below."] = "Appliquer la liste noire ou blanche définie dans l'onglet Filtres d'auras à ce cadre. Ce réglage est indépendant du filtre Blizzard ci-dessous."
 L["Whitelists will hide any aura not in the filter group.|nBlacklists will hide auras that are in the filter group.|nOnly Blizzard whitelisted spells (non-secret in combat) can be added to filters."] = "Les listes blanches masquent toute aura absente du filtre.|nLes listes noires masquent les auras présentes dans le filtre.|nSeuls les sorts autorisés par Blizzard (non secrets en combat) peuvent être ajoutés."
+L["You have entered combat, test mode has been disabled."] = "Vous venez d'entrer en combat, le mode test a été désactivé."
+L["You have entered combat, unit frames have been locked."] = "Vous venez d'entrer en combat, les cadres d'unité ont été verrouillés."
 
 local ShadowUF = select(2, ...)
 ShadowUF.L = setmetatable(L, {__index = ShadowUF.L})

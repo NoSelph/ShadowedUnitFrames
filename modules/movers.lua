@@ -6,7 +6,7 @@ local unitConfig = {}
 local attributeBlacklist = {["showplayer"] = true, ["showraid"] = true, ["showparty"] = true, ["showsolo"] = true, ["initial-unitwatch"] = true}
 local playerClass = select(2, UnitClass("player"))
 local noop = function() end
-local OnDragStop, OnDragStart, configEnv
+local OnDragStop, OnDragStart, configEnv, teardownTestFrame
 local testConfigEnv
 local testOriginalEnvs = {}
 ShadowUF:RegisterModule(Movers, "movers")
@@ -353,6 +353,56 @@ local function cancelStages()
 	end
 end
 
+-- The combat auto-lock keeps only the protected teardown inside the regen window, the per-type reloads replay here
+-- Bounded drain no matter how big the setup grows; if combat re-enters mid replay the queue drops and the next config action re-lays out
+local lockReloadWatcher
+local function armLockReloads()
+	if( not lockReloadWatcher ) then
+		lockReloadWatcher = CreateFrame("Frame")
+		lockReloadWatcher:SetScript("OnEvent", function(watcher)
+			watcher:UnregisterEvent("PLAYER_REGEN_ENABLED")
+			for _, unitType in ipairs(ShadowUF.unitList) do
+				queueStage(function() ShadowUF.Layout:Reload(unitType) end)
+			end
+			startStages()
+		end)
+	end
+	lockReloadWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+end
+
+-- Test mode mirrors the unlock auto-lock: protected teardown inside the regen window, reloads replay at regen
+local testLockWatcher
+local function armTestLock()
+	if( not testLockWatcher ) then
+		testLockWatcher = CreateFrame("Frame")
+		testLockWatcher:SetScript("OnEvent", function(watcher)
+			watcher:UnregisterEvent("PLAYER_REGEN_DISABLED")
+			if( not next(Movers.testModeUnits) ) then return end
+
+			local snapshot = {}
+			for unitType in pairs(Movers.testModeUnits) do snapshot[#snapshot + 1] = unitType end
+			for _, unitType in ipairs(snapshot) do
+				Movers:DisableTestMode(unitType, true, true)
+			end
+
+			for _, unitCfg in pairs(ShadowUF.db.profile.units) do
+				if( unitCfg.auras ) then unitCfg.auras.testMode = nil end
+			end
+			local ACR = LibStub("AceConfigRegistry-3.0", true)
+			if( ACR ) then ACR:NotifyChange("ShadowedUF") end
+
+			DEFAULT_CHAT_FRAME:AddMessage(L["You have entered combat, test mode has been disabled."])
+		end)
+	end
+	testLockWatcher:RegisterEvent("PLAYER_REGEN_DISABLED")
+end
+
+local function disarmTestLock()
+	if( testLockWatcher ) then
+		testLockWatcher:UnregisterEvent("PLAYER_REGEN_DISABLED")
+	end
+end
+
 local function setupConfigHeader(header)
 	-- Force show headers hidden by state monitors
 	-- so SecureGroupHeaderTemplate creates children with negative startingIndex
@@ -468,14 +518,15 @@ function Movers:Enable()
 
 	-- Clear any active test modes before entering full config mode
 	if( next(self.testModeUnits) ) then
+		disarmTestLock()
 		for func, env in pairs(testOriginalEnvs) do
 			setfenv(func, env)
 			testOriginalEnvs[func] = nil
 		end
+		-- Full teardown, not just flag clearing: the config setup re-snapshots originalUnit/originalOnUpdate and must not capture faked values
 		for frame in pairs(ShadowUF.Units.frameList) do
 			if( self.testModeUnits[frame.unitType] and frame.configMode ) then
-				frame.configMode = nil
-				frame.unitOwner = nil
+				teardownTestFrame(frame)
 			end
 		end
 		wipe(self.testModeUnits)
@@ -620,7 +671,7 @@ local function setupTestFrame(frame, unitType)
 	end
 end
 
-local function teardownTestFrame(frame)
+teardownTestFrame = function(frame)
 	frame.configMode = nil
 	frame.unitOwner = nil
 	frame.unit = nil
@@ -681,7 +732,7 @@ local function teardownConfigFrame(frame)
 	if( not UnitExists(frame.unit) ) then frame:Hide() end
 end
 
-function Movers:Disable(immediate)
+function Movers:Disable(immediate, deferReloads)
 	if( not self.isEnabled ) then return nil end
 	immediate = immediate or InCombatLockdown()
 
@@ -732,9 +783,13 @@ function Movers:Disable(immediate)
 
 	queueStage(function() ShadowUF.Units:CheckPlayerZone(true) end)
 
-	-- The full Layout:Reload is the heaviest part of locking, one unit type per step
-	for _, unitType in ipairs(ShadowUF.unitList) do
-		queueStage(function() ShadowUF.Layout:Reload(unitType) end)
+	-- Defer heavy Layout, reload until combat ends
+	if( deferReloads ) then
+		armLockReloads()
+	else
+		for _, unitType in ipairs(ShadowUF.unitList) do
+			queueStage(function() ShadowUF.Layout:Reload(unitType) end)
+		end
 	end
 
 	queueStage(function()
@@ -757,6 +812,7 @@ function Movers:Disable(immediate)
 	self.isEnabled = nil
 
 	-- Clear any active test modes since config mode restores everything
+	disarmTestLock()
 	wipe(self.testModeUnits)
 	self.testModeEnvActive = false
 end
@@ -816,6 +872,7 @@ function Movers:EnableTestMode(unitType)
 	if( self.isEnabled ) then return end
 
 	self.testModeUnits[unitType] = true
+	armTestLock()
 	createTestConfigEnv()
 
 	-- setfenv all modules/tags into testConfigEnv (once, shared across test mode units)
@@ -914,11 +971,12 @@ function Movers:EnableTestMode(unitType)
 	startStages()
 end
 
-function Movers:DisableTestMode(unitType, immediate)
+function Movers:DisableTestMode(unitType, immediate, deferReloads)
 	if( self.isEnabled ) then return end
 	immediate = immediate or InCombatLockdown()
 
 	self.testModeUnits[unitType] = nil
+	if( not next(self.testModeUnits) ) then disarmTestLock() end
 
 	-- Restore frames of this unit type, time-boxed per frame
 	local pending
@@ -972,12 +1030,16 @@ function Movers:DisableTestMode(unitType, immediate)
 			unitConfig = {}
 		end)
 
-		-- The full reload is the heaviest part, one unit type per step
-		for _, reloadType in ipairs(ShadowUF.unitList) do
-			queueStage(function()
-				if( next(Movers.testModeUnits) ) then return end
-				ShadowUF.Layout:Reload(reloadType)
-			end)
+		-- The full reload is the heaviest part, one unit type per step; on combat entry it replays at regen instead
+		if( deferReloads ) then
+			armLockReloads()
+		else
+			for _, reloadType in ipairs(ShadowUF.unitList) do
+				queueStage(function()
+					if( next(Movers.testModeUnits) ) then return end
+					ShadowUF.Layout:Reload(reloadType)
+				end)
+			end
 		end
 	end
 
@@ -1095,10 +1157,10 @@ function Movers:CreateInfoFrame()
 	frame:SetScript("OnEvent", function(f)
 		if( not ShadowUF.db.profile.locked and f:IsVisible() ) then
 			ShadowUF.db.profile.locked = true
-			-- Combat is starting, the whole teardown must run inside this event's window
-			Movers:Disable(true)
+			-- Combat is starting, the protected teardown must run inside this event's window, the reloads replay at regen
+			Movers:Disable(true, true)
 
-			DEFAULT_CHAT_FRAME:AddMessage(L["You have entered combat, unit frames have been locked. Once you leave combat you will need to unlock them again through /shadowuf."])
+			DEFAULT_CHAT_FRAME:AddMessage(L["You have entered combat, unit frames have been locked."])
 		end
 	end)
 	frame:SetScript("OnDragStart", function(f)

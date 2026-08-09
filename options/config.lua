@@ -9,6 +9,14 @@ ShadowUF.Config = Config
 local GetSpellName = C_Spell.GetSpellName
 local GetSpellTexture = C_Spell.GetSpellTexture
 
+-- Shared by the aura text position selects (per-frame tab and the General defaults)
+local auraTextAnchorValues = {
+	[""] = L["Default"],
+	["TOPLEFT"] = L["Top Left"], ["TOP"] = L["Top"], ["TOPRIGHT"] = L["Top Right"],
+	["LEFT"] = L["Left"], ["CENTER"] = L["Center"], ["RIGHT"] = L["Right"],
+	["BOTTOMLEFT"] = L["Bottom Left"], ["BOTTOM"] = L["Bottom"], ["BOTTOMRIGHT"] = L["Bottom Right"],
+}
+
 -- Shown by the color pickers when a profile has no stored value yet
 local dispelPaletteDefaults = {
 	Magic = {r = 0.2, g = 0.6, b = 1},
@@ -1100,10 +1108,10 @@ local function loadGeneralOptions()
 						inline = true,
 						name = L["Auras"],
 						args = {
-							fontHeader = {
-								order = 6,
+							timerHeader = {
+								order = 6.5,
 								type = "header",
-								name = L["Aura font"],
+								name = L["Timer font"],
 							},
 							color = {
 								order = 7,
@@ -1138,7 +1146,235 @@ local function loadGeneralOptions()
 								name = L["Outline"],
 								values = {["OUTLINE"] = L["Thin outline"], ["THICKOUTLINE"] = L["Thick outline"], ["MONOCHROMEOUTLINE"] = L["Monochrome Outline"], [""] = L["None"]},
 								arg = "font.cooldownOutline",
-								hidden = hideAdvancedOption,
+							},
+							cooldownShadowEnabled = {
+								order = 11.02,
+								type = "toggle",
+								name = L["Shadow"],
+								get = function(info) return ShadowUF.db.profile.font.cooldownShadowEnabled end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.cooldownShadowEnabled = value
+									queueLayoutReload()
+								end,
+							},
+							cooldownShadowColor = {
+								order = 11.04,
+								type = "color",
+								name = L["Shadow color"],
+								hasAlpha = true,
+								get = function(info)
+									local color = ShadowUF.db.profile.font.cooldownShadowColor
+									if( color ) then return color.r, color.g, color.b, color.a or 1 end
+									return 0, 0, 0, 1
+								end,
+								set = function(info, r, g, b, a)
+									ShadowUF.db.profile.font.cooldownShadowColor = {r = r, g = g, b = b, a = a}
+									queueLayoutReload()
+								end,
+								disabled = function(info) return not ShadowUF.db.profile.font.cooldownShadowEnabled end,
+							},
+							cooldownShadowX = {
+								order = 11.06,
+								type = "range",
+								name = L["Shadow X"],
+								min = -5, max = 5, step = 0.1,
+								get = function(info) return ShadowUF.db.profile.font.cooldownShadowX or 0.5 end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.cooldownShadowX = value
+									queueLayoutReload()
+								end,
+								disabled = function(info) return not ShadowUF.db.profile.font.cooldownShadowEnabled end,
+							},
+							cooldownShadowY = {
+								order = 11.08,
+								type = "range",
+								name = L["Shadow Y"],
+								min = -5, max = 5, step = 0.1,
+								get = function(info) return ShadowUF.db.profile.font.cooldownShadowY or -0.5 end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.cooldownShadowY = value
+									queueLayoutReload()
+								end,
+								disabled = function(info) return not ShadowUF.db.profile.font.cooldownShadowEnabled end,
+							},
+							cooldownAnchor = {
+								order = 11.2,
+								type = "select",
+								name = L["Anchor point"],
+								values = auraTextAnchorValues,
+								get = function(info) return ShadowUF.db.profile.font.cooldownAnchor or "" end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.cooldownAnchor = value ~= "" and value or nil
+									queueLayoutReload()
+								end,
+							},
+							cooldownX = {
+								order = 11.4,
+								type = "range",
+								name = L["X Offset"],
+								min = -100, max = 100, step = 1, softMin = -20, softMax = 20,
+								get = function(info) return ShadowUF.db.profile.font.cooldownX or 0 end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.cooldownX = value ~= 0 and value or nil
+									queueLayoutReload()
+								end,
+							},
+							cooldownY = {
+								order = 11.6,
+								type = "range",
+								name = L["Y Offset"],
+								min = -100, max = 100, step = 1, softMin = -20, softMax = 20,
+								get = function(info) return ShadowUF.db.profile.font.cooldownY or 0 end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.cooldownY = value ~= 0 and value or nil
+									queueLayoutReload()
+								end,
+							},
+							stacksHeader = {
+								order = 12,
+								type = "header",
+								name = L["Stacks font"],
+							},
+							stackName = {
+								order = 12.1,
+								type = "select",
+								name = L["Font"],
+								dialogControl = "LSM30_Font",
+								values = function()
+									local list = {}
+									for _, name in pairs(SML:List("font")) do list[name] = name end
+									return list
+								end,
+								get = function(info) return ShadowUF.db.profile.font.stackName end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.stackName = value
+									queueLayoutReload()
+								end,
+							},
+							stackSize = {
+								order = 12.2,
+								type = "range",
+								name = L["Size"],
+								min = 1, max = 50, step = 1, softMin = 1, softMax = 20,
+								get = function(info) return ShadowUF.db.profile.font.stackSize or 10 end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.stackSize = value
+									queueLayoutReload()
+								end,
+							},
+							stackOutline = {
+								order = 12.3,
+								type = "select",
+								name = L["Outline"],
+								values = {["OUTLINE"] = L["Thin outline"], ["THICKOUTLINE"] = L["Thick outline"], ["MONOCHROMEOUTLINE"] = L["Monochrome Outline"], [""] = L["None"]},
+								get = function(info)
+									local value = ShadowUF.db.profile.font.stackOutline
+									if( value == nil ) then value = "OUTLINE" end
+									return value
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.stackOutline = value
+									queueLayoutReload()
+								end,
+							},
+							stackColor = {
+								order = 12.4,
+								type = "color",
+								name = L["Default color"],
+								hasAlpha = true,
+								get = function(info)
+									local color = ShadowUF.db.profile.font.stackColor
+									if( color ) then return color.r, color.g, color.b, color.a or 1 end
+									return 1, 1, 1, 1
+								end,
+								set = function(info, r, g, b, a)
+									ShadowUF.db.profile.font.stackColor = {r = r, g = g, b = b, a = a}
+									queueLayoutReload()
+								end,
+							},
+							stackShadowEnabled = {
+								order = 12.5,
+								type = "toggle",
+								name = L["Shadow"],
+								get = function(info)
+									local value = ShadowUF.db.profile.font.stackShadowEnabled
+									if( value == nil ) then value = true end
+									return value
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.stackShadowEnabled = value
+									queueLayoutReload()
+								end,
+							},
+							stackShadowColor = {
+								order = 12.6,
+								type = "color",
+								name = L["Shadow color"],
+								hasAlpha = true,
+								get = function(info)
+									local color = ShadowUF.db.profile.font.stackShadowColor
+									if( color ) then return color.r, color.g, color.b, color.a or 1 end
+									return 0, 0, 0, 1
+								end,
+								set = function(info, r, g, b, a)
+									ShadowUF.db.profile.font.stackShadowColor = {r = r, g = g, b = b, a = a}
+									queueLayoutReload()
+								end,
+							},
+							stackShadowX = {
+								order = 12.7,
+								type = "range",
+								name = L["Shadow X"],
+								min = -5, max = 5, step = 0.1,
+								get = function(info) return ShadowUF.db.profile.font.stackShadowX or 0.5 end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.stackShadowX = value
+									queueLayoutReload()
+								end,
+							},
+							stackShadowY = {
+								order = 12.8,
+								type = "range",
+								name = L["Shadow Y"],
+								min = -5, max = 5, step = 0.1,
+								get = function(info) return ShadowUF.db.profile.font.stackShadowY or -0.5 end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.stackShadowY = value
+									queueLayoutReload()
+								end,
+							},
+							stackAnchor = {
+								order = 12.85,
+								type = "select",
+								name = L["Anchor point"],
+								values = auraTextAnchorValues,
+								get = function(info) return ShadowUF.db.profile.font.stackAnchor or "" end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.stackAnchor = value ~= "" and value or nil
+									queueLayoutReload()
+								end,
+							},
+							stackX = {
+								order = 12.9,
+								type = "range",
+								name = L["X Offset"],
+								min = -100, max = 100, step = 1, softMin = -20, softMax = 20,
+								get = function(info) return ShadowUF.db.profile.font.stackX or 0 end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.stackX = value ~= 0 and value or nil
+									queueLayoutReload()
+								end,
+							},
+							stackY = {
+								order = 12.95,
+								type = "range",
+								name = L["Y Offset"],
+								min = -100, max = 100, step = 1, softMin = -20, softMax = 20,
+								get = function(info) return ShadowUF.db.profile.font.stackY or 0 end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.stackY = value ~= 0 and value or nil
+									queueLayoutReload()
+								end,
 							},
 							auraBorder = {
 								order = 1,
@@ -1183,6 +1419,20 @@ local function loadGeneralOptions()
 								desc = L["Disables showing Cooldown Count timers in all Shadowed Unit Frame auras."],
 								arg = "blizzardcc",
 								width = "double",
+							},
+							disableStacks = {
+								order = 4.5,
+								type = "toggle",
+								name = L["Disable stack counts"],
+								desc = L["Hides the stack count text on all Shadowed Unit Frame auras."],
+								width = "double",
+								get = function(info)
+									return ShadowUF.db.profile.auras.disableStacks
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.auras.disableStacks = value
+									queueLayoutReload()
+								end,
 							},
 							auraSpellIDs = {
 								order = 5,
@@ -2664,12 +2914,12 @@ local function loadUnitOptions()
 					name = L["Enable"],
 					width = "half",
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.enabled
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "enabled", value)
 					end,
 				},
@@ -2679,16 +2929,16 @@ local function loadUnitOptions()
 					name = L["Enable temporary enchants"],
 					desc = L["Adds temporary enchants to the buffs for the player."],
 					hidden = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						return auraType ~= "buffs" or info[2] ~= "player"
 					end,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.temporary
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						-- Exclusivity: disable temporary on all other buffs frames
 						if value then
 							for i = 1, 6 do
@@ -2700,7 +2950,7 @@ local function loadUnitOptions()
 						setAuraFrameValue(info[2], auraType, frameIndex, "temporary", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled)
 					end,
@@ -2709,7 +2959,7 @@ local function loadUnitOptions()
 					order = 1.5,
 					type = "toggle",
 					name = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						if auraType == "buffs" then
 							return string.format(L["Anchor to debuffs %d"], frameIndex)
 						else
@@ -2717,7 +2967,7 @@ local function loadUnitOptions()
 						end
 					end,
 					desc = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						if auraType == "buffs" then
 							return L["Anchors this buff frame to the corresponding debuff frame, positioning it after the last visible debuff."]
 						else
@@ -2725,12 +2975,12 @@ local function loadUnitOptions()
 						end
 					end,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.anchorOn
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local otherType = auraType == "buffs" and "debuffs" or "buffs"
 						-- Disable anchorOn on the other type if we're enabling it here
 						if value then
@@ -2739,7 +2989,7 @@ local function loadUnitOptions()
 						setAuraFrameValue(info[2], auraType, frameIndex, "anchorOn", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local otherType = auraType == "buffs" and "debuffs" or "buffs"
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						local otherCfg = getAuraFrameConfig(info[2], otherType, frameIndex)
@@ -2754,16 +3004,16 @@ local function loadUnitOptions()
 					desc = L["Controls how the anchored aura frame is positioned relative to the parent frame."],
 					values = {["COLUMN"] = L["New row"], ["SEQUENTIAL"] = L["Sequential"]},
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.anchorMode or "COLUMN"
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "anchorMode", value)
 					end,
 					hidden = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.anchorOn)
 					end,
@@ -2774,7 +3024,7 @@ local function loadUnitOptions()
 					name = L["Filter"],
 					width = "full",
 					desc = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						local currentFilter = cfg and cfg.filter or "ALL"
 						if( currentFilter:find("^CUSTOM:") ) then
@@ -2784,7 +3034,7 @@ local function loadUnitOptions()
 						return descs[currentFilter] or L["Which auras to show in this frame"]
 					end,
 					values = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local base = filterValues[auraType] or filterValues.buffs
 						local filtered = {}
 						for k, v in pairs(base) do
@@ -2804,12 +3054,12 @@ local function loadUnitOptions()
 						return filtered
 					end,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.filter or "ALL"
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						-- Disable enlarge.PLAYER when switching to PLAYER filter
 						if value == "PLAYER" then
 							local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
@@ -2820,7 +3070,7 @@ local function loadUnitOptions()
 						setAuraFrameValue(info[2], auraType, frameIndex, "filter", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled)
 					end,
@@ -2831,21 +3081,27 @@ local function loadUnitOptions()
 					name = L["Sort method"],
 					desc = L["How auras in this frame are ordered. Sorting is per section."],
 					hidden = hideWithoutContainers,
+					width = "full",
 					values = sortMethodValues,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.sortMethod or ""
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "sortMethod", value ~= "" and value or nil)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled)
 					end,
+				},
+				posHeader = {
+					order = 2.5,
+					type = "header",
+					name = "",
 				},
 				anchorPoint = {
 					order = 3,
@@ -2853,7 +3109,7 @@ local function loadUnitOptions()
 					name = L["Position"],
 					values = function(info) return (info[2] == "player") and playerAuraAnchorList or auraAnchorList end,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						local anchor = cfg and cfg.anchorPoint or "TOPLEFT"
 						-- Update x/y slider ranges based on anchor type
@@ -2867,7 +3123,7 @@ local function loadUnitOptions()
 						return anchor
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local isFree = (value == "FREE")
 						local halfW = isFree and math.floor(GetScreenWidth() / 2) or 100
 						local halfH = isFree and math.floor(GetScreenHeight() / 2) or 100
@@ -2878,7 +3134,7 @@ local function loadUnitOptions()
 						setAuraFrameValue(info[2], auraType, frameIndex, "anchorPoint", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled) or (cfg and cfg.anchorOn)
 					end,
@@ -2890,16 +3146,16 @@ local function loadUnitOptions()
 					desc = L["Direction aura icons fill within a row."],
 					values = growHValues,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.growH or "RIGHT"
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "growH", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled) or (cfg and cfg.anchorOn)
 					end,
@@ -2911,16 +3167,16 @@ local function loadUnitOptions()
 					desc = L["Direction new rows of auras stack."],
 					values = growVValues,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.growV or "BOTTOM"
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "growV", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled) or (cfg and cfg.anchorOn)
 					end,
@@ -2931,16 +3187,16 @@ local function loadUnitOptions()
 					name = L["Icon Size"],
 					min = 8, max = 50, step = 1,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.size or 16
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "size", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled)
 					end,
@@ -2951,16 +3207,16 @@ local function loadUnitOptions()
 					name = L["Per row"],
 					min = 1, max = 20, step = 1,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.perRow or 10
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "perRow", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled)
 					end,
@@ -2971,16 +3227,16 @@ local function loadUnitOptions()
 					name = L["Max rows"],
 					min = 1, max = 10, step = 1,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.maxRows or 4
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "maxRows", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled)
 					end,
@@ -2991,16 +3247,16 @@ local function loadUnitOptions()
 					name = L["X Offset"],
 					min = -1000, max = 1000, step = 1, softMin = -100, softMax = 100,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.x or 0
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "x", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled)
 					end,
@@ -3011,133 +3267,16 @@ local function loadUnitOptions()
 					name = L["Y Offset"],
 					min = -1000, max = 1000, step = 1, softMin = -100, softMax = 100,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.y or 0
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "y", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
-					end,
-				},
-				disableBlizzardCC = {
-					order = 8.1,
-					type = "toggle",
-					name = L["Disable Blizzard Cooldown Count"],
-					desc = L["Disables showing Cooldown Count timers in all Shadowed Unit Frame auras."],
-					get = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						if cfg and cfg.disableBlizzardCC ~= nil then return cfg.disableBlizzardCC end
-						return ShadowUF.db.profile.blizzardcc
-					end,
-					set = function(info, value)
-						local auraType = info[#(info) - 2]
-						setAuraFrameValue(info[2], auraType, frameIndex, "disableBlizzardCC", value)
-					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
-					end,
-				},
-				cooldownFont = {
-					order = 8.2,
-					type = "select",
-					name = L["Font"],
-					dialogControl = "LSM30_Font",
-					values = function()
-						SML = SML or LibStub:GetLibrary("LibSharedMedia-3.0")
-						local list = {}
-						for _, name in pairs(SML:List("font")) do list[name] = name end
-						return list
-					end,
-					get = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return cfg and cfg.cooldownFont or ShadowUF.db.profile.font.cooldownName or ShadowUF.db.profile.font.name
-					end,
-					set = function(info, value)
-						local auraType = info[#(info) - 2]
-						setAuraFrameValue(info[2], auraType, frameIndex, "cooldownFont", value)
-					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
-					end,
-				},
-				cooldownFontSize = {
-					order = 8.3,
-					type = "range",
-					name = L["Size"],
-					min = 1, max = 50, step = 1, softMin = 1, softMax = 20,
-					get = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return cfg and cfg.cooldownFontSize or ShadowUF.db.profile.font.cooldownSize or ShadowUF.db.profile.font.size
-					end,
-					set = function(info, value)
-						local auraType = info[#(info) - 2]
-						setAuraFrameValue(info[2], auraType, frameIndex, "cooldownFontSize", value)
-					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
-					end,
-				},
-				cooldownFontOutline = {
-					order = 8.4,
-					type = "select",
-					name = L["Outline"],
-					values = {["OUTLINE"] = L["Thin outline"], ["THICKOUTLINE"] = L["Thick outline"], ["MONOCHROMEOUTLINE"] = L["Monochrome Outline"], [""] = L["None"]},
-					get = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						if cfg and cfg.cooldownFontOutline then return cfg.cooldownFontOutline end
-						local fontDetails = ShadowUF.db.profile.font
-						return fontDetails.cooldownOutline or fontDetails.extra or "OUTLINE"
-					end,
-					set = function(info, value)
-						local auraType = info[#(info) - 2]
-						setAuraFrameValue(info[2], auraType, frameIndex, "cooldownFontOutline", value)
-					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
-					end,
-				},
-				cooldownFontColor = {
-					order = 8.5,
-					type = "color",
-					name = L["Default color"],
-					hasAlpha = true,
-					get = function(info)
-						local auraType = info[#(info) - 2]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						local color = (cfg and cfg.cooldownFontColor) or ShadowUF.db.profile.font.cooldownColor
-						if color then
-							return color.r, color.g, color.b, color.a or 1
-						end
-						return 1, 1, 1, 1
-					end,
-					set = function(info, r, g, b, a)
-						local auraType = info[#(info) - 2]
-						local config = ShadowUF.db.profile.units[info[2]]
-						if config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex] then
-							config.auras[auraType][frameIndex].cooldownFontColor = {r = r, g = g, b = b, a = a}
-							reloadUnitAuras()
-						end
-					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled)
 					end,
@@ -3149,17 +3288,17 @@ local function loadUnitOptions()
 					desc = L["Scale up auras that were cast by the player to make them more visible."],
 					hidden = function(info)
 						-- Hide when filter is PLAYER since all auras are already player auras
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.filter == "PLAYER"
 					end,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.enlarge and cfg.enlarge.PLAYER
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local config = ShadowUF.db.profile.units[info[2]]
 						if config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex] then
 							config.auras[auraType][frameIndex].enlarge = config.auras[auraType][frameIndex].enlarge or {}
@@ -3168,7 +3307,7 @@ local function loadUnitOptions()
 						end
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled)
 					end,
@@ -3181,21 +3320,21 @@ local function loadUnitOptions()
 					min = 1.0, max = 2.0, step = 0.05,
 					hidden = function(info)
 						-- Hide when filter is PLAYER since all auras are already player auras
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.filter == "PLAYER"
 					end,
 					get = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return cfg and cfg.selfScale or 1.30
 					end,
 					set = function(info, value)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "selfScale", value)
 					end,
 					disabled = function(info)
-						local auraType = info[#(info) - 2]
+						local auraType = info[#(info) - 3]
 						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 						return not (cfg and cfg.enabled) or not (cfg and cfg.enlarge and cfg.enlarge.PLAYER)
 					end,
@@ -3208,7 +3347,7 @@ local function loadUnitOptions()
 			name = "",
 			hidden = function(info)
 				if( hideWithoutContainers() ) then return true end
-				local auraType = info[#(info) - 2]
+				local auraType = info[#(info) - 3]
 				local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 				return not (cfg and cfg.enabled)
 			end,
@@ -3221,7 +3360,7 @@ local function loadUnitOptions()
 			name = L["Sections add extra filters to this frame, shown after the main filter. Auras already shown by a previous section are removed automatically. Each section has its own icon size, sorting and icon cap."],
 			hidden = function(info)
 				if( hideWithoutContainers() ) then return true end
-				local auraType = info[#(info) - 2]
+				local auraType = info[#(info) - 3]
 				local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 				return not (cfg and cfg.enabled)
 			end,
@@ -3234,17 +3373,17 @@ local function loadUnitOptions()
 			desc = L["Adds another filter to this frame, shown after the previous sections. Overlaps are removed automatically."],
 			hidden = function(info)
 				if( hideWithoutContainers() ) then return true end
-				local auraType = info[#(info) - 2]
+				local auraType = info[#(info) - 3]
 				local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 				return cfg and cfg.sections and #cfg.sections >= 5
 			end,
 			disabled = function(info)
-				local auraType = info[#(info) - 2]
+				local auraType = info[#(info) - 3]
 				local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 				return not (cfg and cfg.enabled)
 			end,
 			func = function(info)
-				local auraType = info[#(info) - 2]
+				local auraType = info[#(info) - 3]
 				forEachAuraUnit(info[2], function(config, unit)
 					local cfg = config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex]
 					if( not cfg ) then return end
@@ -3278,7 +3417,7 @@ local function loadUnitOptions()
 
 		for sectionIndex = 1, 5 do
 			local function sectionDisabled(info)
-				local auraType = info[#(info) - 3]
+				local auraType = info[#(info) - 4]
 				local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 				return not (cfg and cfg.enabled)
 			end
@@ -3290,7 +3429,7 @@ local function loadUnitOptions()
 				name = L["Section"] .. " " .. (sectionIndex + 1),
 				hidden = function(info)
 					if( hideWithoutContainers() ) then return true end
-					local auraType = info[#(info) - 2]
+					local auraType = info[#(info) - 3]
 					return not getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
 				end,
 				args = {
@@ -3300,7 +3439,7 @@ local function loadUnitOptions()
 						hidden = false,
 						name = L["Filter"],
 						values = function(info)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							local values = getFilterValues(auraType, info[2], true)
 							-- No duplicate choices, drop the main filter and other sections' filters, keep this section's current value
 							local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
@@ -3320,12 +3459,12 @@ local function loadUnitOptions()
 							return values
 						end,
 						get = function(info)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							local section = getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
 							return section and section.filter or "ALL"
 						end,
 						set = function(info, value)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							setSectionValue(info[2], auraType, frameIndex, sectionIndex, "filter", value)
 						end,
 						disabled = sectionDisabled,
@@ -3337,31 +3476,31 @@ local function loadUnitOptions()
 						name = L["Icon Size"],
 						min = 8, max = 64, step = 1,
 						get = function(info)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							local section = getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
 							if( section and section.size ) then return section.size end
 							local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 							return cfg and cfg.size or 16
 						end,
 						set = function(info, value)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							setSectionValue(info[2], auraType, frameIndex, sectionIndex, "size", value)
 						end,
 						disabled = sectionDisabled,
 					},
 					sortMethod = {
-						order = 3,
+						order = 1.5,
 						type = "select",
 						hidden = false,
 						name = L["Sort method"],
 						values = sortMethodValues,
 						get = function(info)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							local section = getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
 							return section and section.sortMethod or ""
 						end,
 						set = function(info, value)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							setSectionValue(info[2], auraType, frameIndex, sectionIndex, "sortMethod", value ~= "" and value or nil)
 						end,
 						disabled = sectionDisabled,
@@ -3374,12 +3513,12 @@ local function loadUnitOptions()
 						desc = L["0 removes the cap (uses the frame's rows and icons per row)."],
 						min = 0, max = 40, step = 1,
 						get = function(info)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							local section = getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
 							return section and section.maxCount or 0
 						end,
 						set = function(info, value)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							setSectionValue(info[2], auraType, frameIndex, sectionIndex, "maxCount", value > 0 and value or nil)
 						end,
 						disabled = sectionDisabled,
@@ -3391,7 +3530,7 @@ local function loadUnitOptions()
 						width = "half",
 						hidden = function() return sectionIndex == 1 end,
 						func = function(info)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							forEachAuraUnit(info[2], function(config)
 								local cfg = config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex]
 								if( cfg and cfg.sections and cfg.sections[sectionIndex] ) then
@@ -3407,11 +3546,11 @@ local function loadUnitOptions()
 						name = L["Move down"],
 						width = "half",
 						hidden = function(info)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							return not getSectionConfig(info[2], auraType, frameIndex, sectionIndex + 1)
 						end,
 						func = function(info)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							forEachAuraUnit(info[2], function(config)
 								local cfg = config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex]
 								if( cfg and cfg.sections and cfg.sections[sectionIndex + 1] ) then
@@ -3428,7 +3567,7 @@ local function loadUnitOptions()
 						name = L["Delete"],
 						width = "half",
 						func = function(info)
-							local auraType = info[#(info) - 3]
+							local auraType = info[#(info) - 4]
 							forEachAuraUnit(info[2], function(config)
 								local cfg = config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex]
 								if( cfg and cfg.sections ) then
@@ -3442,7 +3581,208 @@ local function loadUnitOptions()
 			}
 		end
 
-		return {type = "group", name = frameName, order = frameIndex, args = frameArgs}
+		local function textFieldGet(info)
+			local auraType = info[#(info) - 3]
+			local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+			return cfg and cfg[info[#(info)]]
+		end
+		local function textFieldSet(info, value)
+			local auraType = info[#(info) - 3]
+			setAuraFrameValue(info[2], auraType, frameIndex, info[#(info)], value)
+		end
+		local function textFieldDisabled(info)
+			local auraType = info[#(info) - 3]
+			local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+			return not (cfg and cfg.enabled)
+		end
+		local function textAnchorGet(info)
+			local globalKey = info[#(info)] == "timerAnchor" and "cooldownAnchor" or "stackAnchor"
+			return textFieldGet(info) or ShadowUF.db.profile.font[globalKey] or ""
+		end
+		local function textAnchorSet(info, value)
+			textFieldSet(info, value ~= "" and value or nil)
+		end
+		local textArgs = {
+				timerHeader = {
+					order = 0.1,
+					type = "header",
+					name = L["Timer"],
+				},
+				disableBlizzardCC = {
+					order = 0.5,
+					type = "toggle",
+					name = L["Disable Blizzard Cooldown Count"],
+					desc = L["Disables showing Cooldown Count timers in all Shadowed Unit Frame auras."],
+					get = function(info)
+						local auraType = info[#(info) - 3]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						if cfg and cfg.disableBlizzardCC ~= nil then return cfg.disableBlizzardCC end
+						return ShadowUF.db.profile.blizzardcc
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 3]
+						setAuraFrameValue(info[2], auraType, frameIndex, "disableBlizzardCC", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 3]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				cooldownFontSize = {
+					order = 2,
+					type = "range",
+					name = L["Size"],
+					min = 1, max = 50, step = 1, softMin = 1, softMax = 20,
+					get = function(info)
+						local auraType = info[#(info) - 3]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.cooldownFontSize or ShadowUF.db.profile.font.cooldownSize or ShadowUF.db.profile.font.size
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 3]
+						setAuraFrameValue(info[2], auraType, frameIndex, "cooldownFontSize", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 3]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				cooldownFontColor = {
+					order = 4,
+					type = "color",
+					name = L["Default color"],
+					hasAlpha = true,
+					get = function(info)
+						local auraType = info[#(info) - 3]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						local color = (cfg and cfg.cooldownFontColor) or ShadowUF.db.profile.font.cooldownColor
+						if color then
+							return color.r, color.g, color.b, color.a or 1
+						end
+						return 1, 1, 1, 1
+					end,
+					set = function(info, r, g, b, a)
+						local auraType = info[#(info) - 3]
+						local config = ShadowUF.db.profile.units[info[2]]
+						if config and config.auras and config.auras[auraType] and config.auras[auraType][frameIndex] then
+							config.auras[auraType][frameIndex].cooldownFontColor = {r = r, g = g, b = b, a = a}
+							reloadUnitAuras()
+						end
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 3]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				timerAnchor = {
+					order = 5,
+					type = "select",
+					name = L["Anchor point"],
+					values = auraTextAnchorValues,
+					get = textAnchorGet,
+					set = textAnchorSet,
+					disabled = textFieldDisabled,
+				},
+				timerX = {
+					order = 6,
+					type = "range",
+					name = L["X Offset"],
+					min = -100, max = 100, step = 1, softMin = -20, softMax = 20,
+					get = function(info) return textFieldGet(info) or ShadowUF.db.profile.font.cooldownX or 0 end,
+					set = textFieldSet,
+					disabled = textFieldDisabled,
+				},
+				timerY = {
+					order = 7,
+					type = "range",
+					name = L["Y Offset"],
+					min = -100, max = 100, step = 1, softMin = -20, softMax = 20,
+					get = function(info) return textFieldGet(info) or ShadowUF.db.profile.font.cooldownY or 0 end,
+					set = textFieldSet,
+					disabled = textFieldDisabled,
+				},
+				stacksHeader = {
+					order = 8,
+					type = "header",
+					name = L["Stacks"],
+				},
+				disableStacks = {
+					order = 8.5,
+					type = "toggle",
+					name = L["Disable stack counts"],
+					desc = L["Hides the stack count text on all Shadowed Unit Frame auras."],
+					width = "full",
+					get = function(info)
+						local value = textFieldGet(info)
+						if( value == nil ) then value = ShadowUF.db.profile.auras.disableStacks end
+						return value
+					end,
+					set = textFieldSet,
+					disabled = textFieldDisabled,
+				},
+				stackFontSize = {
+					order = 10,
+					type = "range",
+					name = L["Size"],
+					min = 1, max = 50, step = 1, softMin = 1, softMax = 20,
+					get = function(info) return textFieldGet(info) or ShadowUF.db.profile.font.stackSize or 10 end,
+					set = textFieldSet,
+					disabled = textFieldDisabled,
+				},
+				stackFontColor = {
+					order = 12,
+					type = "color",
+					name = L["Default color"],
+					hasAlpha = true,
+					get = function(info)
+						local auraType = info[#(info) - 3]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						local color = (cfg and cfg.stackFontColor) or ShadowUF.db.profile.font.stackColor
+						if( color ) then return color.r, color.g, color.b, color.a or 1 end
+						return 1, 1, 1, 1
+					end,
+					set = function(info, r, g, b, a)
+						local auraType = info[#(info) - 3]
+						setAuraFrameValue(info[2], auraType, frameIndex, "stackFontColor", {r = r, g = g, b = b, a = a})
+					end,
+					disabled = textFieldDisabled,
+				},
+				stackAnchor = {
+					order = 17,
+					type = "select",
+					name = L["Anchor point"],
+					values = auraTextAnchorValues,
+					get = textAnchorGet,
+					set = textAnchorSet,
+					disabled = textFieldDisabled,
+				},
+				stackX = {
+					order = 18,
+					type = "range",
+					name = L["X Offset"],
+					min = -100, max = 100, step = 1, softMin = -20, softMax = 20,
+					get = function(info) return textFieldGet(info) or ShadowUF.db.profile.font.stackX or 0 end,
+					set = textFieldSet,
+					disabled = textFieldDisabled,
+				},
+				stackY = {
+					order = 19,
+					type = "range",
+					name = L["Y Offset"],
+					min = -100, max = 100, step = 1, softMin = -20, softMax = 20,
+					get = function(info) return textFieldGet(info) or ShadowUF.db.profile.font.stackY or 0 end,
+					set = textFieldSet,
+					disabled = textFieldDisabled,
+				},
+		}
+
+		return {type = "group", name = frameName, order = frameIndex, childGroups = "tab", args = {
+			general = {order = 1, type = "group", name = L["General"], args = frameArgs},
+			text = {order = 2, type = "group", name = L["Text"], args = textArgs},
+		}}
 	end
 
 	Config.auraTable = {

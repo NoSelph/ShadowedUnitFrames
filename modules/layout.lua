@@ -445,24 +445,34 @@ function Layout:SetupBars(frame, config)
 	end
 end
 
+-- Font objects are shared per unique style and never mutated afterwards, lookup instead of a SetFont relayout if needed.
+local fontObjects = {}
 function ShadowUF:SetFontAndShadow(fs, font, size, flags, sr, sg, sb, sa, sx, sy)
-	local fo = fs.sufFontObject
+	local key
+	if( sr ) then
+		key = string.format("%s@%s@%s@%.2f:%.2f:%.2f:%.2f@%.2f:%.2f", font, size, flags or "", sr, sg or 0, sb or 0, sa or 1, sx or 0, sy or 0)
+	else
+		key = string.format("%s@%s@%s", font, size, flags or "")
+	end
+
+	local fo = fontObjects[key]
 	if( not fo ) then
 		ShadowUF.fontObjCount = (ShadowUF.fontObjCount or 0) + 1
 		fo = CreateFont("SUFFontObject" .. ShadowUF.fontObjCount)
-		fs.sufFontObject = fo
+		if( sr ) then
+			fo:SetShadowColor(sr, sg, sb, sa or 1)
+			fo:SetShadowOffset(sx or 0, sy or 0)
+		else
+			fo:SetShadowColor(0, 0, 0, 0)
+			fo:SetShadowOffset(0, 0)
+		end
+		fo:SetFont(font, size, flags or "")
+		fontObjects[key] = fo
 	end
 
-	if( sr ) then
-		fo:SetShadowColor(sr, sg, sb, sa or 1)
-		fo:SetShadowOffset(sx or 0, sy or 0)
-	else
-		fo:SetShadowColor(0, 0, 0, 0)
-		fo:SetShadowOffset(0, 0)
+	if( fs:GetFontObject() ~= fo ) then
+		fs:SetFontObject(fo)
 	end
-
-	fo:SetFont(font, size, flags or "")
-	fs:SetFontObject(fo)
 end
 
 -- Setup text
