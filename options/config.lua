@@ -8975,6 +8975,19 @@ local function loadAuraIndicatorsOptions()
 									addAura.pick = nil
 								end,
 							},
+							found = {
+								order = 0.6,
+								type = "description",
+								fontSize = "medium",
+								name = function(info)
+									local spellID = tonumber(addAura.spell)
+									if( not spellID ) then return "" end
+									local icon = GetSpellTexture(spellID)
+									local iconStr = icon and string.format("|T%s:24:24:0:0|t ", icon) or ""
+									return string.format("%s%s (#%d)", iconStr, GetSpellName(spellID) or L["Unknown"], spellID)
+								end,
+								hidden = function(info) return not addAura.spell end,
+							},
 							group = {
 								order = 0.75,
 								type = "select",
@@ -8995,19 +9008,32 @@ local function loadAuraIndicatorsOptions()
 									return vals
 								end,
 							},
+							customGroup = {
+								order = 0.8,
+								type = "input",
+								name = L["New aura group"],
+								desc = L["Allows you to enter a new aura group."],
+							},
 							create = {
 								order = 1,
 								type = "execute",
 								name = L["Add Aura"],
-								disabled = function(info) return not (addAura.spell and addAura.group) end,
+								disabled = function(info)
+									local customGroup = addAura.customGroup and string.trim(addAura.customGroup) or ""
+									return not (addAura.spell and (addAura.group or customGroup ~= ""))
+								end,
 								func = function(info)
 									local spellID = tonumber(addAura.spell)
-									addIndicatorAura(addAura.spell, addAura.group)
+									-- A typed group wins over the dropdown, same as the War Within behavior
+									local group = addAura.customGroup and string.trim(addAura.customGroup) or ""
+									if( group == "" ) then group = addAura.group end
+									addIndicatorAura(addAura.spell, group)
 									ShadowUF:Print(string.format(L["Added %s (#%d)."], spellID and GetSpellName(spellID) or L["Unknown"], spellID or 0))
 									addAura.spell = nil
 									addAura.pick = nil
 									addAura.customText = nil
 									addAura.group = nil
+									addAura.customGroup = nil
 								end,
 							},
 						},
