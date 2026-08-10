@@ -3,6 +3,8 @@ ShadowUF:RegisterModule(HealAbsorb, "healAbsorb", ShadowUF.L["Healing absorb"])
 
 function HealAbsorb:OnEnable(frame)
 	frame.healAbsorb = frame.healAbsorb or ShadowUF.Units:CreateBar(frame)
+	-- First enable can precede any layout pass, the first PositionBar still has to anchor
+	frame.healAbsorb.anchorsDirty = true
 
 	-- Ensure shared calculator exists
 	if( not frame.healCalc ) then

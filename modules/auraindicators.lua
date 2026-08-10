@@ -366,50 +366,76 @@ local function checkSpecificAura(frame, type, name, texture, count, auraType, du
 end
 
 local auraList = {}
+
+local function aurasAreSecret()
+	local auras = ShadowUF.modules.auras
+	return auras and auras.AurasAreSecret and auras.AurasAreSecret() or false
+end
+
+-- Both processors run under their caller's pcall, a secret aura errors on the auraData.name test and gets skipped while whitelisted spells pass through
+-- a skipped aura also stays out of auraList, the missing-aura pass depends on that
+local function processConfiguredAura(frame, auraData)
+	if( auraData.name ) then
+		-- The type arg is unused by checkSpecificAura, best-effort only
+		local aType = auraData.isHarmful and "debuffs" or "buffs"
+		checkSpecificAura(frame, aType, auraData.name, auraData.icon, auraData.applications, auraData.dispelName, auraData.duration, auraData.expirationTime, auraData.sourceUnit, auraData.isStealable, auraData.nameplateShowPersonal, auraData.spellId, auraData.canApplyAura, auraData.isBossAura, auraData.auraInstanceID)
+		auraList[auraData.name] = true
+		if( auraData.spellId ) then auraList[tostring(auraData.spellId)] = true end
+	end
+end
+
+local function processSlotAura(frame, type, isFriendly, auraData)
+	if( auraData.name ) then
+		local name = auraData.name
+		local texture = auraData.icon
+		local count = auraData.applications
+		local auraType = auraData.dispelName
+		local duration = auraData.duration
+		local endTime = auraData.expirationTime
+		local caster = auraData.sourceUnit
+		local isRemovable = auraData.isStealable
+		local nameplateShowPersonal = auraData.nameplateShowPersonal
+		local spellID = auraData.spellId
+		local canApplyAura = auraData.canApplyAura
+		local isBossDebuff = auraData.isBossAura
+
+		local result = checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, auraData.auraInstanceID)
+		if( not result ) then
+			checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, auraData.auraInstanceID)
+		end
+
+		auraList[name] = true
+		if spellID then auraList[tostring(spellID)] = true end
+	end
+end
+
+-- GetAuraSlots returns (continuationToken, slot1, ...) forwarded straight into the varargs, iteration starts at 2 to skip the token
+local function scanAuraSlots(frame, type, isFriendly, unit, ...)
+	for i = 2, select("#", ...) do
+		local index = select(i, ...)
+		-- Slot-based access errors while auras are secret, skip silently
+		local okData, auraData = pcall(C_UnitAuras.GetAuraDataBySlot, unit, index)
+		if( okData and auraData ) then
+			pcall(processSlotAura, frame, type, isFriendly, auraData)
+		end
+	end
+end
+
+local function fetchAuraSlots(frame, type, isFriendly, filter)
+	return scanAuraSlots(frame, type, isFriendly, frame.unit, C_UnitAuras.GetAuraSlots(frame.unit, filter))
+end
+
 local function scanAuras(frame, filter, type)
+	-- Slot iteration errors for every unit while auras are secret, the slot containers own the display there
+	if( aurasAreSecret() ) then return end
+
 	-- UnitIsFriend=true during duels, UnitIsEnemy=false for neutrals
 	-- Combine both: true only for actual friendlies (not neutrals, not duel targets)
 	local isEnemy = UnitIsEnemy(frame.unit, "player")
 	local isFriendly = UnitIsFriend(frame.unit, "player") and not isEnemy
 
-	-- 12.0: pcall for compound unit tokens (same pattern as auras.lua)
-	local ok, slots = pcall(function() return {C_UnitAuras.GetAuraSlots(frame.unit, filter)} end)
-	if( not ok ) then return end
-
-	for i = 2, #slots do
-		local index = slots[i]
-		-- Slot-based access errors while auras are secret, skip silently
-		local okData, auraData = pcall(C_UnitAuras.GetAuraDataBySlot, frame.unit, index)
-		if( okData and auraData ) then
-			-- 12.0: pcall to silently skip secret auras in combat.
-			-- Whitelisted spells (non-secret) pass through; secret auras error
-			-- on boolean tests (e.g. "if auraData.name then") and are caught here.
-			pcall(function()
-				if( auraData.name ) then
-					local name = auraData.name
-					local texture = auraData.icon
-					local count = auraData.applications
-					local auraType = auraData.dispelName
-					local duration = auraData.duration
-					local endTime = auraData.expirationTime
-					local caster = auraData.sourceUnit
-					local isRemovable = auraData.isStealable
-					local nameplateShowPersonal = auraData.nameplateShowPersonal
-					local spellID = auraData.spellId
-					local canApplyAura = auraData.canApplyAura
-					local isBossDebuff = auraData.isBossAura
-
-					local result = checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, auraData.auraInstanceID)
-					if( not result ) then
-						checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, auraData.auraInstanceID)
-					end
-
-					auraList[name] = true
-					if spellID then auraList[tostring(spellID)] = true end
-				end
-			end)
-		end
-	end
+	-- pcall for compound unit tokens (same pattern as auras.lua)
+	pcall(fetchAuraSlots, frame, type, isFriendly, filter)
 end
 
 --No more slot iteration in combat, so each configured indicator aura is fetched directly by spell ID or name instead
@@ -432,15 +458,7 @@ local function scanConfiguredAuras(frame)
 
 		if( okData and auraData ) then
 			-- Whitelisted spells return real data, pcall covers stray secrets
-			pcall(function()
-				if( auraData.name ) then
-					-- The type arg is unused by checkSpecificAura, best-effort only
-					local aType = auraData.isHarmful and "debuffs" or "buffs"
-					checkSpecificAura(frame, aType, auraData.name, auraData.icon, auraData.applications, auraData.dispelName, auraData.duration, auraData.expirationTime, auraData.sourceUnit, auraData.isStealable, auraData.nameplateShowPersonal, auraData.spellId, auraData.canApplyAura, auraData.isBossAura, auraData.auraInstanceID)
-					auraList[auraData.name] = true
-					if( auraData.spellId ) then auraList[tostring(auraData.spellId)] = true end
-				end
-			end)
+			pcall(processConfiguredAura, frame, auraData)
 		end
 	end
 end
@@ -453,11 +471,6 @@ end
 local slotContainerFrames = {}
 local pendingSlotBuilds = {}
 local slotCombatWatcher
-
-local function aurasAreSecret()
-	local auras = ShadowUF.modules.auras
-	return auras and auras.AurasAreSecret and auras.AurasAreSecret() or false
-end
 
 local function updateSlotVisibility(frame)
 	local container = frame.auraIndicators and frame.auraIndicators.slotContainer

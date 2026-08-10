@@ -99,7 +99,8 @@ function Tags:UpdatePowerType(frame)
 	if( not powerMap[powerType] ) then powerType = powerMap[powerID] or "ENERGY" end
 
 	for _, fontString in pairs(frame.fontStrings) do
-		if( fontString.UpdateTags ) then
+		-- Only power-filtered fontstrings read the cached powerType, the rest already render through their own event and update func registrations
+		if( fontString.UpdateTags and fontString.powerFilters ) then
 			fontString.powerType = powerType
 			fontString:UpdateTags()
 		end
@@ -676,9 +677,11 @@ Tags.defaultTags = {
 		if( not UnitIsConnected(unitOwner) ) then return end
 
 		local afkStatus = ShadowUF.Tags.afkStatus
-		local status = ShadowUF:SafeMath(function()
-			return UnitIsAFK(unitOwner) and ShadowUF.L["AFK:%s"] or UnitIsDND(unitOwner) and ShadowUF.L["DND:%s"]
-		end)
+		local afk = UnitIsAFK(unitOwner)
+		if( issecretvalue(afk) ) then afk = nil end
+		local dnd = UnitIsDND(unitOwner)
+		if( issecretvalue(dnd) ) then dnd = nil end
+		local status = afk and ShadowUF.L["AFK:%s"] or dnd and ShadowUF.L["DND:%s"]
 		
 		if( status ) then
 			afkStatus[unitOwner] = afkStatus[unitOwner] or GetTime()
@@ -695,9 +698,11 @@ Tags.defaultTags = {
 		return string.format(ShadowUF.L["PVP:%s"], ShadowUF:FormatShortTime(GetPVPTimer() / 1000))
 	end]],
 	["afk"] = [[function(unit, unitOwner, fontString)
-		return ShadowUF:SafeMath(function()
-			return UnitIsAFK(unitOwner) and ShadowUF.L["AFK"] or UnitIsDND(unitOwner) and ShadowUF.L["DND"]
-		end)
+		local afk = UnitIsAFK(unitOwner)
+		if( issecretvalue(afk) ) then afk = nil end
+		local dnd = UnitIsDND(unitOwner)
+		if( issecretvalue(dnd) ) then dnd = nil end
+		return afk and ShadowUF.L["AFK"] or dnd and ShadowUF.L["DND"]
 	end]],
 	["close"] = [[function(unit, unitOwner) return "|r" end]],
 	["smartrace"] = [[function(unit, unitOwner)
@@ -755,8 +760,8 @@ Tags.defaultTags = {
 		return string.format("%s%s|r", color, name)
 	end]],
 	["curpp"] = [[function(unit, unitOwner)
-		-- Check for secret values in comparison
-		if( ShadowUF:SafeMath(function() return UnitPowerMax(unit) <= 0 end) ) then
+		local maxPower = UnitPowerMax(unit)
+		if( not issecretvalue(maxPower) and maxPower <= 0 ) then
 			return ShadowUF:SafeFormatLargeNumber(UnitPower(unit))
 		elseif( UnitIsDeadOrGhost(unit) ) then
 			return 0
@@ -771,8 +776,6 @@ Tags.defaultTags = {
 			return ShadowUF.L["Ghost"]
 		elseif( not UnitIsConnected(unit) ) then
 			return ShadowUF.L["Offline"]
-		elseif( ShadowUF:SafeMath(function() return UnitHealthMax(unit) <= 0 end) ) then
-			return string.format("%s/%s", ShadowUF:SafeFormatLargeNumber(UnitHealth(unit)), ShadowUF:SafeFormatLargeNumber(UnitHealthMax(unit)))
 		end
 		
 		return string.format("%s/%s", ShadowUF:SafeFormatLargeNumber(UnitHealth(unit)), ShadowUF:SafeFormatLargeNumber(UnitHealthMax(unit)))
@@ -812,7 +815,8 @@ Tags.defaultTags = {
 	end]],
 	["absmaxhp"] = [[function(unit, unitOwner) return UnitHealthMax(unit) end]],
 	["abscurpp"] = [[function(unit, unitOwner)
-		if( ShadowUF:SafeMath(function() return UnitPowerMax(unit) <= 0 end) ) then
+		local maxPower = UnitPowerMax(unit)
+		if( not issecretvalue(maxPower) and maxPower <= 0 ) then
 			return nil
 		elseif( UnitIsDeadOrGhost(unit) ) then
 			return 0
@@ -830,7 +834,7 @@ Tags.defaultTags = {
 		local power = UnitPower(unit)
 		if( UnitIsDeadOrGhost(unit) ) then
 			return string.format("0/%s", maxPower)
-		elseif( ShadowUF:SafeMath(function() return maxPower <= 0 end) ) then
+		elseif( not issecretvalue(maxPower) and maxPower <= 0 ) then
 			return nil
 		end
 
@@ -841,8 +845,6 @@ Tags.defaultTags = {
 		local power = UnitPower(unit)
 		if( UnitIsDeadOrGhost(unit) ) then
 			return string.format("0/%s", ShadowUF:SafeFormatLargeNumber(maxPower))
-		elseif( ShadowUF:SafeMath(function() return maxPower <= 0 end) ) then
-			return string.format("%s/%s", ShadowUF:SafeFormatLargeNumber(power), ShadowUF:SafeFormatLargeNumber(maxPower))
 		end
 
 		return string.format("%s/%s", ShadowUF:SafeFormatLargeNumber(power), ShadowUF:SafeFormatLargeNumber(maxPower))
@@ -852,7 +854,7 @@ Tags.defaultTags = {
 		local power = UnitPower(unit)
 		if( UnitIsDeadOrGhost(unit) ) then
 			return string.format("0/%s", maxPower)
-		elseif( ShadowUF:SafeMath(function() return maxPower <= 0 end) ) then
+		elseif( not issecretvalue(maxPower) and maxPower <= 0 ) then
 			return nil
 		end
 
@@ -891,7 +893,7 @@ Tags.defaultTags = {
 	["maxhp"] = [[function(unit, unitOwner) return ShadowUF:SafeFormatLargeNumber(UnitHealthMax(unit)) end]],
 	["maxpp"] = [[function(unit, unitOwner)
 		local power = UnitPowerMax(unit)
-		if( ShadowUF:SafeMath(function() return power <= 0 end) ) then
+		if( not issecretvalue(power) and power <= 0 ) then
 			return ShadowUF:SafeFormatLargeNumber(power)
 		elseif( UnitIsDeadOrGhost(unit) ) then
 			return 0

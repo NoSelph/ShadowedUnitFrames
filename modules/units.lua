@@ -37,6 +37,8 @@ RegisterStateDriver(petBattleFrame, "petbattle", "[petbattle] active; none")
 -- Frame shown, do a full update
 local function FullUpdate(self)
 	if( not self.unit or (not self.configMode and not UnitExists(self.unit)) ) then return end
+	-- An early-return must not mark the tick as updated or a same-tick unit reassignment would lose its gated update
+	self.lastFullUpdateTime = GetTime()
 	for i=1, #(self.fullUpdates), 2 do
 		local handler = self.fullUpdates[i]
 		handler[self.fullUpdates[i + 1]](handler, self)
@@ -77,7 +79,7 @@ local function RegisterNormalEvent(self, event, handler, func, unitOverride)
 		event = "UNIT_HEALTH"
 	end
 
-	if( unitEvents[event] and event ~= "UNIT_AURA" and not ShadowUF.fakeUnits[self.unitRealType] ) then
+	if( unitEvents[event] and not ShadowUF.fakeUnits[self.unitRealType] ) then
 		self:BlizzRegisterUnitEvent(event, unitOverride or self.unitOwner, self.vehicleUnit)
 		if unitOverride then
 			self.unitEventOverrides = self.unitEventOverrides or {}
@@ -480,6 +482,16 @@ function Units:CheckGroupedUnitStatus(frame)
 		frame:FullUpdate()
 	elseif( UnitExists(frame.unit) ) then
 		frame.unitGUID = SafeUnitGUID(frame.unit)
+		-- GROUP_ROSTER_UPDATE and PARTY_MEMBER_ENABLE/DISABLE burst-fire within one tick and game state is frozen during dispatch, one full update per tick is enough
+		if( frame.lastFullUpdateTime ~= GetTime() ) then
+			frame:FullUpdate()
+		end
+	end
+end
+
+-- INSTANCE_ENCOUNTER_ENGAGE_UNIT and UNIT_TARGETABLE_CHANGED burst-fire within one tick, one full update per tick is enough
+function Units:CheckEngagedUpdate(frame)
+	if( frame.lastFullUpdateTime ~= GetTime() ) then
 		frame:FullUpdate()
 	end
 end
@@ -627,13 +639,13 @@ OnAttributeChanged = function(self, name, unit)
 	elseif( self.unit == "target" ) then
 		self.isUnitVolatile = true
 		self:RegisterNormalEvent("PLAYER_TARGET_CHANGED", Units, "CheckUnitStatus")
-		self:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", self, "FullUpdate")
+		self:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", Units, "CheckEngagedUpdate")
 
 	-- Automatically do a full update on focus change
 	elseif( self.unit == "focus" ) then
 		self.isUnitVolatile = true
 		self:RegisterNormalEvent("PLAYER_FOCUS_CHANGED", Units, "CheckUnitStatus")
-		self:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", self, "FullUpdate")
+		self:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", Units, "CheckEngagedUpdate")
 
 	elseif( self.unit == "player" ) then
 		-- this should not get called in combat, but just in case make sure we are not actually in combat
@@ -645,12 +657,12 @@ OnAttributeChanged = function(self, name, unit)
 		self:RegisterNormalEvent("PLAYER_ALIVE", self, "FullUpdate")
 
 		-- full update when the player targetable changes, ie. during cutscenes or transports
-		self:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", self, "FullUpdate")
+		self:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", Units, "CheckEngagedUpdate")
 
 	-- Update boss
 	elseif( self.unitType == "boss" ) then
-		self:RegisterNormalEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT", self, "FullUpdate")
-		self:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", self, "FullUpdate")
+		self:RegisterNormalEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT", Units, "CheckEngagedUpdate")
+		self:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", Units, "CheckEngagedUpdate")
 		self:RegisterUnitEvent("UNIT_NAME_UPDATE", Units, "CheckUnitStatus")
 
 	-- Update arena
@@ -1798,7 +1810,7 @@ centralFrame:SetScript("OnEvent", function(self, event, unit, ...)
 
 	elseif( event == "PLAYER_LOGIN" ) then
 		checkCurableSpells()
-		self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+		self:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player", nil)
 		self:RegisterEvent("TRAIT_CONFIG_UPDATED")
 		if( playerClass == "WARLOCK" ) then
 			self:RegisterUnitEvent("UNIT_PET", "player", nil)

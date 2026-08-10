@@ -29,6 +29,8 @@ end
 
 function IncHeal:OnEnable(frame)
 	frame.incHeal = frame.incHeal or ShadowUF.Units:CreateBar(frame)
+	-- First enable can precede any layout pass, the first PositionBar still has to anchor
+	frame.incHeal.anchorsDirty = true
 
 	-- Create the shared calculator once per frame
 	if( not frame.healCalc ) then
@@ -104,6 +106,8 @@ end
 
 function IncHeal:OnLayoutApplied(frame)
 	local bar = frame[self.frameKey]
+	-- Set before the visibility early-return so a later visibility flip still re-anchors, incAbsorb/healAbsorb inherit this and key off their own frameKey
+	if( bar ) then bar.anchorsDirty = true end
 	if( not frame.visibility[self.frameKey] or not frame.visibility.healthBar ) then return end
 
 	-- Reset state
@@ -199,27 +203,33 @@ end
 
 -- Overlay mode: reverse fill overlay on the health texture
 function IncHeal:PositionBarOverlayMode(frame, bar, incAmount, maxHealth)
-	-- Hide cropper and overflow if they exist
-	if( bar.cropper ) then bar.cropper:Hide() end
-	if( frame[self.frameKey .. "Overflow"] ) then frame[self.frameKey .. "Overflow"]:Hide() end
-	if( frame[self.frameKey .. "OverflowClip"] ) then frame[self.frameKey .. "OverflowClip"]:Hide() end
-	local healthTexture = frame.healthBar:GetStatusBarTexture()
-	if( not healthTexture ) then bar:Hide(); return end
+	-- anchors sit on the health texture object and track the fill on their own
+	if( bar.anchorsDirty ) then
+		-- Hide cropper and overflow if they exist
+		if( bar.cropper ) then bar.cropper:Hide() end
+		if( frame[self.frameKey .. "Overflow"] ) then frame[self.frameKey .. "Overflow"]:Hide() end
+		if( frame[self.frameKey .. "OverflowClip"] ) then frame[self.frameKey .. "OverflowClip"]:Hide() end
+		local healthTexture = frame.healthBar:GetStatusBarTexture()
+		-- Keep anchorsDirty set so the next update retries the anchor pass
+		if( not healthTexture ) then bar:Hide(); return end
 
-	bar:SetParent(frame.healthBar)
-	bar:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
-	bar:ClearAllPoints()
-	bar:SetReverseFill(true)
+		bar:SetParent(frame.healthBar)
+		bar:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
+		bar:ClearAllPoints()
+		bar:SetReverseFill(true)
 
-	local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
-	local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
+		local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
+		local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
 
-	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
-		bar:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", 0, -startInset)
-		bar:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", 0, endInset)
-	else
-		bar:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", startInset, 0)
-		bar:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", -endInset, 0)
+		if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+			bar:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", 0, -startInset)
+			bar:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", 0, endInset)
+		else
+			bar:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", startInset, 0)
+			bar:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", -endInset, 0)
+		end
+
+		bar.anchorsDirty = nil
 	end
 
 	bar:SetMinMaxValues(0, maxHealth)
@@ -228,128 +238,141 @@ end
 
 -- Health bar with overflow: forward fill for missing health, reverse overlay for overflow
 function IncHeal:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth)
-	local healthTexture = frame.healthBar:GetStatusBarTexture()
-	if( not healthTexture ) then bar:Hide(); return end
+	if( bar.anchorsDirty ) then
+		local healthTexture = frame.healthBar:GetStatusBarTexture()
+		-- Keep anchorsDirty set so the next update retries the anchor pass
+		if( not healthTexture ) then bar:Hide(); return end
 
-	local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
-	local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
+		local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
+		local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
 
-	-- === FORWARD BAR (standard healthBar cap=1.0) ===
-	bar:SetParent(frame.healthBar)
-	bar:SetReverseFill(frame.healthBar:GetReverseFill())
+		-- === FORWARD BAR (standard healthBar cap=1.0) ===
+		bar:SetParent(frame.healthBar)
+		bar:SetReverseFill(frame.healthBar:GetReverseFill())
 
-	-- Create cropper if needed (caps forward fill to frame bounds)
-	local cropper = ensureCropper(bar, frame.healthBar)
-	cropper:Show()
-	cropper:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
-	cropper:ClearAllPoints()
+		-- Create cropper if needed (caps forward fill to frame bounds)
+		local cropper = ensureCropper(bar, frame.healthBar)
+		cropper:Show()
+		cropper:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
+		cropper:ClearAllPoints()
 
-	local reverseFill = frame.healthBar:GetReverseFill()
+		local reverseFill = frame.healthBar:GetReverseFill()
 
-	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
-		if( reverseFill ) then
-			cropper:SetPoint("RIGHT", healthTexture, "LEFT", 0, 0)
-			cropper:SetPoint("LEFT", frame.healthBar, "LEFT", 0, 0)
+		if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+			if( reverseFill ) then
+				cropper:SetPoint("RIGHT", healthTexture, "LEFT", 0, 0)
+				cropper:SetPoint("LEFT", frame.healthBar, "LEFT", 0, 0)
+			else
+				cropper:SetPoint("LEFT", healthTexture, "RIGHT", 0, 0)
+				cropper:SetPoint("RIGHT", frame.healthBar, "RIGHT", 0, 0)
+			end
+			cropper:SetHeight(frame.healthBar:GetHeight() * (cfg.barSize or 1.0))
+			cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, -startInset)
 		else
-			cropper:SetPoint("LEFT", healthTexture, "RIGHT", 0, 0)
-			cropper:SetPoint("RIGHT", frame.healthBar, "RIGHT", 0, 0)
+			if( reverseFill ) then
+				cropper:SetPoint("BOTTOM", healthTexture, "TOP", 0, 0)
+				cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, 0)
+			else
+				cropper:SetPoint("TOP", healthTexture, "BOTTOM", 0, 0)
+				cropper:SetPoint("BOTTOM", frame.healthBar, "BOTTOM", 0, 0)
+			end
+			cropper:SetWidth(frame.healthBar:GetWidth() * (cfg.barSize or 1.0))
+			cropper:SetPoint("LEFT", frame.healthBar, "LEFT", startInset, 0)
 		end
-		cropper:SetHeight(frame.healthBar:GetHeight() * (cfg.barSize or 1.0))
-		cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, -startInset)
-	else
-		if( reverseFill ) then
-			cropper:SetPoint("BOTTOM", healthTexture, "TOP", 0, 0)
-			cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, 0)
-		else
-			cropper:SetPoint("TOP", healthTexture, "BOTTOM", 0, 0)
-			cropper:SetPoint("BOTTOM", frame.healthBar, "BOTTOM", 0, 0)
-		end
-		cropper:SetWidth(frame.healthBar:GetWidth() * (cfg.barSize or 1.0))
-		cropper:SetPoint("LEFT", frame.healthBar, "LEFT", startInset, 0)
-	end
 
-	-- Bar fills inside cropper (forward direction, capped at frame edge)
-	bar:SetParent(cropper)
-	bar:ClearAllPoints()
-	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
-		bar:SetWidth(frame.healthBar:GetWidth())
-		if( reverseFill ) then
-			bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
-		else
-			bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
-		end
-		bar:SetPoint("TOP", cropper, "TOP", 0, 0)
-		bar:SetPoint("BOTTOM", cropper, "BOTTOM", 0, 0)
-	else
-		bar:SetHeight(frame.healthBar:GetHeight())
-		if( reverseFill ) then
+		-- Bar fills inside cropper (forward direction, capped at frame edge)
+		bar:SetParent(cropper)
+		bar:ClearAllPoints()
+		if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+			bar:SetWidth(frame.healthBar:GetWidth())
+			if( reverseFill ) then
+				bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
+			else
+				bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
+			end
+			bar:SetPoint("TOP", cropper, "TOP", 0, 0)
 			bar:SetPoint("BOTTOM", cropper, "BOTTOM", 0, 0)
 		else
-			bar:SetPoint("TOP", cropper, "TOP", 0, 0)
+			bar:SetHeight(frame.healthBar:GetHeight())
+			if( reverseFill ) then
+				bar:SetPoint("BOTTOM", cropper, "BOTTOM", 0, 0)
+			else
+				bar:SetPoint("TOP", cropper, "TOP", 0, 0)
+			end
+			bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
+			bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
 		end
-		bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
-		bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
+
+		-- === OVERFLOW BAR geometry (reverse fill clipped to health texture zone) ===
+		local overflowBar = frame[self.frameKey .. "Overflow"]
+		local clipFrame = frame[self.frameKey .. "OverflowClip"]
+		if( overflowBar and clipFrame ) then
+			-- ClipFrame covers only the health texture zone
+			clipFrame:ClearAllPoints()
+			if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+				clipFrame:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", 0, -startInset)
+				clipFrame:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", 0, endInset)
+			else
+				clipFrame:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", startInset, 0)
+				clipFrame:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", -endInset, 0)
+			end
+			clipFrame:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
+			clipFrame:Show()
+
+			-- Overflow bar: clipped to health zone (static setup done in OnLayoutApplied)
+			overflowBar:SetParent(clipFrame)
+			overflowBar:ClearAllPoints()
+			if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+				overflowBar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 0, -startInset)
+				overflowBar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, endInset)
+			else
+				overflowBar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", startInset, 0)
+				overflowBar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", -endInset, 0)
+			end
+		end
+
+		bar.anchorsDirty = nil
 	end
 
+	-- SetMinMaxValues/SetValue accept secrets natively
 	bar:SetMinMaxValues(0, maxHealth)
 	bar:SetValue(incAmount)
 
-	-- === OVERFLOW BAR (reverse fill clipped to health texture zone) ===
-	local overflowKey = self.frameKey .. "Overflow"
-	local overflowBar = frame[overflowKey]
-	local clipKey = self.frameKey .. "OverflowClip"
-	local clipFrame = frame[clipKey]
-
+	local overflowBar = frame[self.frameKey .. "Overflow"]
+	local clipFrame = frame[self.frameKey .. "OverflowClip"]
 	if( not overflowBar or not clipFrame ) then return end
 
-	-- ClipFrame covers only the health texture zone
-	clipFrame:ClearAllPoints()
-	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
-		clipFrame:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", 0, -startInset)
-		clipFrame:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", 0, endInset)
-	else
-		clipFrame:SetPoint("TOPLEFT", healthTexture, "TOPLEFT", startInset, 0)
-		clipFrame:SetPoint("BOTTOMRIGHT", healthTexture, "BOTTOMRIGHT", -endInset, 0)
-	end
-	clipFrame:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
-	clipFrame:Show()
-
-	-- Overflow bar: clipped to health zone (static setup done in OnLayoutApplied)
-	overflowBar:SetParent(clipFrame)
-	overflowBar:ClearAllPoints()
-	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
-		overflowBar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 0, -startInset)
-		overflowBar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, endInset)
-	else
-		overflowBar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", startInset, 0)
-		overflowBar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", -endInset, 0)
-	end
 	overflowBar:SetMinMaxValues(0, maxHealth)
 	overflowBar:SetValue(incAmount)
+	-- the sub-1 hide path hides only the overflow bar, it must be re-shown here without a layout pass
 	overflowBar:Show()
 end
 
 -- Frame anchor mode: fill from chosen frame edge, real values
 function IncHeal:PositionBarFrameMode(frame, bar, incAmount, maxHealth)
-	-- Hide cropper and overflow if they exist
-	if( bar.cropper ) then bar.cropper:Hide() end
-	if( frame[self.frameKey .. "Overflow"] ) then frame[self.frameKey .. "Overflow"]:Hide() end
-	if( frame[self.frameKey .. "OverflowClip"] ) then frame[self.frameKey .. "OverflowClip"]:Hide() end
+	if( bar.anchorsDirty ) then
+		-- Hide cropper and overflow if they exist
+		if( bar.cropper ) then bar.cropper:Hide() end
+		if( frame[self.frameKey .. "Overflow"] ) then frame[self.frameKey .. "Overflow"]:Hide() end
+		if( frame[self.frameKey .. "OverflowClip"] ) then frame[self.frameKey .. "OverflowClip"]:Hide() end
 
-	bar:SetParent(frame.healthBar)
-	bar:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
-	bar:ClearAllPoints()
+		bar:SetParent(frame.healthBar)
+		bar:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
+		bar:ClearAllPoints()
 
-	local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
-	bar:SetReverseFill((cfg.frameEdge or "END") == "END")
-	local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
+		local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
+		bar:SetReverseFill((cfg.frameEdge or "END") == "END")
+		local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
 
-	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
-		bar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 0, -startInset)
-		bar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, endInset)
-	else
-		bar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", startInset, 0)
-		bar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", -endInset, 0)
+		if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+			bar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", 0, -startInset)
+			bar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", 0, endInset)
+		else
+			bar:SetPoint("TOPLEFT", frame.healthBar, "TOPLEFT", startInset, 0)
+			bar:SetPoint("BOTTOMRIGHT", frame.healthBar, "BOTTOMRIGHT", -endInset, 0)
+		end
+
+		bar.anchorsDirty = nil
 	end
 
 	-- Real values — secrets accepted natively by SetMinMaxValues/SetValue
@@ -359,87 +382,92 @@ end
 
 -- Health bar anchor mode: forward fill from health edge with cropper cap
 function IncHeal:PositionBarHealthMode(frame, bar, incAmount, maxHealth)
-	bar:ClearAllPoints()
-	bar:SetReverseFill(frame.healthBar:GetReverseFill())
+	if( bar.anchorsDirty ) then
+		bar:ClearAllPoints()
+		bar:SetReverseFill(frame.healthBar:GetReverseFill())
 
-	-- Hide overflow elements if they exist
-	if( frame[self.frameKey .. "Overflow"] ) then frame[self.frameKey .. "Overflow"]:Hide() end
-	if( frame[self.frameKey .. "OverflowClip"] ) then frame[self.frameKey .. "OverflowClip"]:Hide() end
+		-- Hide overflow elements if they exist
+		if( frame[self.frameKey .. "Overflow"] ) then frame[self.frameKey .. "Overflow"]:Hide() end
+		if( frame[self.frameKey .. "OverflowClip"] ) then frame[self.frameKey .. "OverflowClip"]:Hide() end
 
-	local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
-	local cap = cfg.cap or 1.30
-	local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
-	local healthTexture = frame.healthBar:GetStatusBarTexture()
-	if( not healthTexture ) then
-		bar:Hide()
-		return
-	end
-
-	local cropper = ensureCropper(bar, frame.healthBar)
-	cropper:Show()
-	cropper:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
-	cropper:ClearAllPoints()
-
-	local reverseFill = frame.healthBar:GetReverseFill()
-	local frameSize = 0
-
-	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
-		frameSize = frame.healthBar:GetWidth()
-		if( reverseFill ) then
-			cropper:SetPoint("RIGHT", healthTexture, "LEFT", 0, 0)
-		else
-			cropper:SetPoint("LEFT", healthTexture, "RIGHT", 0, 0)
+		local cfg = ShadowUF.db.profile.units[frame.unitType][self.frameKey]
+		local cap = cfg.cap or 1.30
+		local startInset, endInset = getCrossAxisInsets(frame, cfg.barSize, cfg.barAlign)
+		local healthTexture = frame.healthBar:GetStatusBarTexture()
+		-- Keep anchorsDirty set so the next update retries the anchor pass
+		if( not healthTexture ) then
+			bar:Hide()
+			return
 		end
 
-		local maxOffset = frameSize * (cap - 1)
-		if( reverseFill ) then
-			cropper:SetPoint("LEFT", frame.healthBar, "LEFT", -maxOffset, 0)
+		local cropper = ensureCropper(bar, frame.healthBar)
+		cropper:Show()
+		cropper:SetFrameLevel(frame.topFrameLevel + 5 - self.frameLevelMod)
+		cropper:ClearAllPoints()
+
+		local reverseFill = frame.healthBar:GetReverseFill()
+		local frameSize = 0
+
+		if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+			frameSize = frame.healthBar:GetWidth()
+			if( reverseFill ) then
+				cropper:SetPoint("RIGHT", healthTexture, "LEFT", 0, 0)
+			else
+				cropper:SetPoint("LEFT", healthTexture, "RIGHT", 0, 0)
+			end
+
+			local maxOffset = frameSize * (cap - 1)
+			if( reverseFill ) then
+				cropper:SetPoint("LEFT", frame.healthBar, "LEFT", -maxOffset, 0)
+			else
+				cropper:SetPoint("RIGHT", frame.healthBar, "RIGHT", maxOffset, 0)
+			end
+
+			cropper:SetHeight(frame.healthBar:GetHeight() * (cfg.barSize or 1.0))
+			cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, -startInset)
 		else
-			cropper:SetPoint("RIGHT", frame.healthBar, "RIGHT", maxOffset, 0)
+			frameSize = frame.healthBar:GetHeight()
+			if( reverseFill ) then
+				cropper:SetPoint("BOTTOM", healthTexture, "TOP", 0, 0)
+			else
+				cropper:SetPoint("TOP", healthTexture, "BOTTOM", 0, 0)
+			end
+
+			local maxOffset = frameSize * (cap - 1)
+			if( reverseFill ) then
+				cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, maxOffset)
+			else
+				cropper:SetPoint("BOTTOM", frame.healthBar, "BOTTOM", 0, -maxOffset)
+			end
+
+			cropper:SetWidth(frame.healthBar:GetWidth() * (cfg.barSize or 1.0))
+			cropper:SetPoint("LEFT", frame.healthBar, "LEFT", startInset, 0)
 		end
 
-		cropper:SetHeight(frame.healthBar:GetHeight() * (cfg.barSize or 1.0))
-		cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, -startInset)
-	else
-		frameSize = frame.healthBar:GetHeight()
-		if( reverseFill ) then
-			cropper:SetPoint("BOTTOM", healthTexture, "TOP", 0, 0)
-		else
-			cropper:SetPoint("TOP", healthTexture, "BOTTOM", 0, 0)
-		end
+		bar:SetParent(cropper)
+		bar:ClearAllPoints()
 
-		local maxOffset = frameSize * (cap - 1)
-		if( reverseFill ) then
-			cropper:SetPoint("TOP", frame.healthBar, "TOP", 0, maxOffset)
-		else
-			cropper:SetPoint("BOTTOM", frame.healthBar, "BOTTOM", 0, -maxOffset)
-		end
-
-		cropper:SetWidth(frame.healthBar:GetWidth() * (cfg.barSize or 1.0))
-		cropper:SetPoint("LEFT", frame.healthBar, "LEFT", startInset, 0)
-	end
-
-	bar:SetParent(cropper)
-	bar:ClearAllPoints()
-
-	if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
-		bar:SetWidth(frameSize)
-		if( reverseFill ) then
-			bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
-		else
-			bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
-		end
-		bar:SetPoint("TOP", cropper, "TOP", 0, 0)
-		bar:SetPoint("BOTTOM", cropper, "BOTTOM", 0, 0)
-	else
-		bar:SetHeight(frameSize)
-		if( reverseFill ) then
+		if( frame.healthBar:GetOrientation() == "HORIZONTAL" ) then
+			bar:SetWidth(frameSize)
+			if( reverseFill ) then
+				bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
+			else
+				bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
+			end
+			bar:SetPoint("TOP", cropper, "TOP", 0, 0)
 			bar:SetPoint("BOTTOM", cropper, "BOTTOM", 0, 0)
 		else
-			bar:SetPoint("TOP", cropper, "TOP", 0, 0)
+			bar:SetHeight(frameSize)
+			if( reverseFill ) then
+				bar:SetPoint("BOTTOM", cropper, "BOTTOM", 0, 0)
+			else
+				bar:SetPoint("TOP", cropper, "TOP", 0, 0)
+			end
+			bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
+			bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
 		end
-		bar:SetPoint("LEFT", cropper, "LEFT", 0, 0)
-		bar:SetPoint("RIGHT", cropper, "RIGHT", 0, 0)
+
+		bar.anchorsDirty = nil
 	end
 
 	-- SetMinMaxValues/SetValue accept secrets natively (AllowedWhenTainted)
