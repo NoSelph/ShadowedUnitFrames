@@ -278,8 +278,9 @@ local function checkFilterAura(frame, type, isFriendly, name, texture, count, au
 	local category
 	if( isFriendly and canCure[auraType] and type == "debuffs" ) then
 		category = "curable"
-	elseif( not isFriendly and type == "buffs" and auraInstanceID ) then
+	elseif( not isFriendly and type == "buffs" and auraInstanceID and frame.auraIndicators.slotsAssist == "attack" ) then
 		-- Purgeable/soothable buffs on the hostile side, same token as the combat slot
+		-- slotsAssist is stamped at the top of every UpdateAuras; units we can't harm (cross-faction warmode off) never take this branch
 		local ok, filteredOut = pcall(C_UnitAuras.IsAuraFilteredOutByInstanceID, frame.unit, auraInstanceID, "HELPFUL|RAID_PLAYER_DISPELLABLE")
 		if( ok and not issecretvalue(filteredOut) and not filteredOut ) then
 			category = "curable"
@@ -535,15 +536,6 @@ end
 -- Swapped in place of a slot's candidate filters to mute it, an empty include set can never match an aura and dispel type candidates ignore the identity gate.
 -- A HARMFUL|HELPFUL filter string matches everything rather than nothing, so muting must go through candidate filters.
 local MUTE_CANDIDATES = { includeDispelTypes = {} }
-
--- UnitCanAssist can return secret booleans on restricted maps like UnitIsUnit does, the reaction pair never does
-local function resolveAssist(unit)
-	local ok, assist = pcall(UnitCanAssist, "player", unit)
-	if( ok and not issecretvalue(assist) ) then
-		return assist and true or false
-	end
-	return (UnitIsFriend(unit, "player") and not UnitIsEnemy(unit, "player")) and true or false
-end
 
 -- Slot button styling; anchoring happens here too since the button is forbidden after creation whenever auras are secret (M+ reload included)
 local function makeIndicatorSlotStyler(display)
@@ -860,14 +852,21 @@ function Indicators:UpdateAuras(frame)
 	if( slotContainer ) then
 		pcall(slotContainer.SetUnit, slotContainer, frame.unit)
 
-		-- Assist mirrors the exact boundary of Blizzard's candidate filter fail-open, so each slot only stays active on the side where its spell ID filter is enforced
+		-- Each slot only stays active on the side where its spell ID filter is enforced; units that can neither be helped nor harmed (cross-faction warmode off) mute both sides
 		if( frame.unit and not frame.configMode and frame.auraIndicators.slotRecords ) then
-			local assist = resolveAssist(frame.unit)
-			if( frame.auraIndicators.slotsAssist ~= assist ) then
-				frame.auraIndicators.slotsAssist = assist
+			local state = ShadowUF.GetUnitReactionState(frame.unit)
+			if( frame.auraIndicators.slotsAssist ~= state ) then
+				frame.auraIndicators.slotsAssist = state
 				for key, record in pairs(frame.auraIndicators.slotRecords) do
-					local active = not record.activeWhen or (record.activeWhen == "assist") == assist
-					pcall(slotContainer.SetAuraSlotCandidateFilters, slotContainer, key, active and record.candidates or MUTE_CANDIDATES)
+					local active = not record.activeWhen
+						or (record.activeWhen == "assist" and state == "assist")
+						or (record.activeWhen == "noassist" and state == "attack")
+					-- Category slots have no candidates, nil is a real value here (clears, the filter string alone matches) and must not fall through to the mute
+					if( active ) then
+						pcall(slotContainer.SetAuraSlotCandidateFilters, slotContainer, key, record.candidates)
+					else
+						pcall(slotContainer.SetAuraSlotCandidateFilters, slotContainer, key, MUTE_CANDIDATES)
+					end
 				end
 			end
 		end
@@ -926,7 +925,7 @@ function Indicators:UpdateAuras(frame)
 
 	-- Check for any indicators that are triggered due to something missing
 	-- No point flagging a missing buff on a unit we can't even buff (RP NPCs, hostiles)
-	if( not resolveAssist(frame.unit) ) then
+	if( ShadowUF.GetUnitReactionState(frame.unit) ~= "assist" ) then
 		self:UpdateIndicators(frame)
 		return
 	end

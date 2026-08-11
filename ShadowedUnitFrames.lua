@@ -153,6 +153,25 @@ function ShadowUF.IsUnitIdentitySecret(unit)
 	return ok and secret or false
 end
 
+-- Reaction tri-state for the dispel displays, "assist" = can be helped, "attack" = can be harmed, "none" = neither (cross-faction with warmode off, friendly neutrals)
+-- UnitCanAssist/UnitCanAttack are authoritative but can return secret booleans on restricted maps, the reaction pair never does and covers duels (friend AND enemy) as hostile
+function ShadowUF.GetUnitReactionState(unit)
+	local ok, value = pcall(UnitCanAssist, "player", unit)
+	if( ok and not issecretvalue(value) ) then
+		if( value ) then return "assist" end
+		local okAttack, attack = pcall(UnitCanAttack, "player", unit)
+		if( okAttack and not issecretvalue(attack) ) then
+			return attack and "attack" or "none"
+		end
+	end
+
+	local okFriend, friend = pcall(UnitIsFriend, unit, "player")
+	local okEnemy, enemy = pcall(UnitIsEnemy, unit, "player")
+	local isEnemy = okEnemy and enemy and true or false
+	if( okFriend and friend and not isEnemy ) then return "assist" end
+	return isEnemy and "attack" or "none"
+end
+
 function ShadowUF:CheckBuild()
 	local build = select(4, GetBuildInfo())
 	if( self.db.profile.wowBuild == build ) then return end
@@ -210,7 +229,19 @@ function ShadowUF:CheckUpgrade()
 			for _, frameCfg in pairs(playerBuffs) do
 				if( type(frameCfg) == "table" and frameCfg.clickThrough ) then
 					self.db.profile.auras.disableCancel = true
-					frameCfg.clickThrough = nil
+				end
+			end
+		end
+		for _, unitCfg in pairs(self.db.profile.units) do
+			if( unitCfg.auras ) then
+				for _, auraType in pairs({"buffs", "debuffs"}) do
+					if( type(unitCfg.auras[auraType]) == "table" ) then
+						for _, frameCfg in pairs(unitCfg.auras[auraType]) do
+							if( type(frameCfg) == "table" ) then
+								frameCfg.clickThrough = nil
+							end
+						end
+					end
 				end
 			end
 		end
@@ -233,16 +264,46 @@ function ShadowUF:CheckUpgrade()
 			end
 		end
 
-		-- PLAYER|RAID switched to PLAYER|RAID_IN_COMBAT
+		-- Removed debuff filters, a remap that would duplicate an existing filter disables the frame (or drops the section) instead
+		local removedDebuffFilters = {["BLIZZARD"] = "ALL", ["RAID_IN_COMBAT"] = "ALL", ["PLAYER|RAID_IN_COMBAT"] = "PLAYER", ["PLAYER|RAID"] = "PLAYER"}
 		for _, unitCfg in pairs(self.db.profile.units) do
 			if( unitCfg.auras and type(unitCfg.auras.debuffs) == "table" ) then
+				local usedFilters = {}
+				for _, frameCfg in pairs(unitCfg.auras.debuffs) do
+					if( type(frameCfg) == "table" and frameCfg.enabled and not removedDebuffFilters[frameCfg.filter] ) then
+						usedFilters[frameCfg.filter or "ALL"] = true
+					end
+				end
+
 				for _, frameCfg in pairs(unitCfg.auras.debuffs) do
 					if( type(frameCfg) == "table" ) then
-						if( frameCfg.filter == "PLAYER|RAID" ) then frameCfg.filter = "PLAYER|RAID_IN_COMBAT" end
+						local mapped = removedDebuffFilters[frameCfg.filter]
+						if( mapped ) then
+							frameCfg.filter = mapped
+							if( frameCfg.enabled and usedFilters[mapped] ) then
+								frameCfg.enabled = false
+							elseif( frameCfg.enabled ) then
+								usedFilters[mapped] = true
+							end
+						end
+
 						if( type(frameCfg.sections) == "table" ) then
+							local own = frameCfg.filter or "ALL"
+							local sectionFilters = {}
 							for _, section in pairs(frameCfg.sections) do
-								if( type(section) == "table" and section.filter == "PLAYER|RAID" ) then
-									section.filter = "PLAYER|RAID_IN_COMBAT"
+								if( type(section) == "table" and section.filter and not removedDebuffFilters[section.filter] ) then
+									sectionFilters[section.filter] = true
+								end
+							end
+							for index, section in pairs(frameCfg.sections) do
+								local sectionMapped = type(section) == "table" and removedDebuffFilters[section.filter]
+								if( sectionMapped ) then
+									if( sectionMapped == own or sectionFilters[sectionMapped] ) then
+										frameCfg.sections[index] = nil
+									else
+										section.filter = sectionMapped
+										sectionFilters[sectionMapped] = true
+									end
 								end
 							end
 						end
@@ -687,20 +748,20 @@ function ShadowUF:LoadUnitDefaults()
 			highlight = {},
 			auras = {
 				buffs = {
-					[1] = {enabled = not aurasBlocked, temporary = (unit == "player"), clickThrough = false, filter = "ALL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[2] = {enabled = false, clickThrough = false, filter = "PLAYER", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[3] = {enabled = false, clickThrough = false, filter = "RAID", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[4] = {enabled = false, clickThrough = false, filter = "BIG_DEFENSIVE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[5] = {enabled = false, clickThrough = false, filter = "EXTERNAL_DEFENSIVE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-					[6] = {enabled = false, clickThrough = false, filter = "IMPORTANT", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[1] = {enabled = not aurasBlocked, temporary = (unit == "player"), filter = "ALL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[2] = {enabled = false, filter = "PLAYER", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[3] = {enabled = false, filter = "RAID", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[4] = {enabled = false, filter = "BIG_DEFENSIVE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[5] = {enabled = false, filter = "EXTERNAL_DEFENSIVE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+					[6] = {enabled = false, filter = "IMPORTANT", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "TOPLEFT", growH = "RIGHT", growV = "BOTTOM", x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 				},
 				debuffs = {
-					[1] = {enabled = not aurasBlocked, clickThrough = false, filter = "ALL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[2] = {enabled = false, clickThrough = false, filter = "PLAYER", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[3] = {enabled = false, clickThrough = false, filter = "RAID_PLAYER_DISPELLABLE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[4] = {enabled = false, clickThrough = false, filter = "RAID", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[5] = {enabled = false, clickThrough = false, filter = "CROWD_CONTROL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[6] = {enabled = false, clickThrough = false, filter = "IMPORTANT", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[1] = {enabled = not aurasBlocked, filter = "ALL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[2] = {enabled = false, filter = "PLAYER", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[3] = {enabled = false, filter = "RAID_PLAYER_DISPELLABLE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[4] = {enabled = false, filter = "RAID", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[5] = {enabled = false, filter = "CROWD_CONTROL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[6] = {enabled = false, filter = "IMPORTANT", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
 				},
 				-- Boss debuffs (Private Auras) - player only
 				bossDebuffs = {enabled = false, size = 32, perRow = 3, maxRows = 1, anchorPoint = "CENTER", x = 0, y = 0, showCooldown = true, showCooldownNumbers = true},

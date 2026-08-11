@@ -2736,6 +2736,25 @@ local function loadUnitOptions()
 		end
 	end
 
+	-- Filter edits are runtime-mutable on the containers (the refresh fast path pushes them in place, combat included)
+	-- Dispatching the aura refresh directly skips the geometry pass and the announced rebuild, the refresh's own gates queue a silent regen reconcile for whatever is frozen structurally
+	local function reloadUnitAurasFilters(unit)
+		local auras = ShadowUF.modules.auras
+		if( not (auras and auras.OnLayoutApplied) ) then
+			reloadUnitAuras(unit)
+			return
+		end
+
+		for frame in pairs(ShadowUF.Units.frameList) do
+			if( frame.visibility and frame.visibility.auras and (not unit or unit == "global" or frame.unitType == unit) ) then
+				local unitConfig = ShadowUF.db.profile.units[frame.unitType]
+				if( unitConfig ) then
+					auras:OnLayoutApplied(frame, unitConfig)
+				end
+			end
+		end
+	end
+
 	local aurasDisabled = function(info) return not getVariable(info[2], "auras", info[#(info) - 2], "enabled") end
 
 	-- 12.0: New multi-frame aura configuration
@@ -2760,13 +2779,10 @@ local function loadUnitOptions()
 			["ALL"] = L["Shows all debuffs on the unit without any filtering."],
 			["PLAYER"] = L["Only shows debuffs you applied yourself."],
 			["RAID"] = L["Only shows debuffs that you can dispel."],
-			["PLAYER|RAID_IN_COMBAT"] = L["Your debuffs flagged to show on raid frames in combat."],
 			["RAID_PLAYER_DISPELLABLE"] = L["Only shows debuffs that someone in your group can dispel (you, when solo)."],
 			["DISPELLABLE"] = L["Only shows auras that have a dispel type, whether or not anyone in your group can dispel them."],
 			["CROWD_CONTROL"] = L["Only shows crowd control effects (Stun, Root, Silence, Fear, Polymorph, Cyclone, etc.)."],
-			["RAID_IN_COMBAT"] = L["Debuffs flagged by Blizzard to show on raid frames in combat."],
 			["IMPORTANT"] = L["Only shows debuffs marked as important by Blizzard. Server-maintained list."],
-			["BLIZZARD"] = L["Shows the same auras that Blizzard's default unit frames display. Reads filtered data directly from Blizzard frames."],
 		}
 	}
 
@@ -2790,18 +2806,12 @@ local function loadUnitOptions()
 			["ALL"] = L["All Auras"],
 			["PLAYER"] = L["My Auras"],
 			["RAID"] = L["Dispellable by me"],
-			["PLAYER|RAID_IN_COMBAT"] = L["My raid frames debuffs"],
 			["RAID_PLAYER_DISPELLABLE"] = L["Dispellable by group"],
 			["DISPELLABLE"] = L["Any dispellable"],
 			["CROWD_CONTROL"] = L["Crowd control effects"],
-			["RAID_IN_COMBAT"] = L["Raid frames debuffs"],
 			["IMPORTANT"] = L["Important auras"],
-			["BLIZZARD"] = L["Blizzard frames"],
 		}
 	}
-
-	-- Unit types that have a Blizzard frame source for the Blizzard filter
-	local blizzardFilterUnits = {target = true, focus = true}
 
 	-- Helper to get frame config (auras.buffs[1], auras.debuffs[2], etc.)
 	-- Global page reads use the globalConfig mirror, writes fan out to every unit ticked in modifyUnits plus the mirror (setDirectUnit model)
@@ -2834,7 +2844,11 @@ local function loadUnitOptions()
 				config.auras[auraType][frameIndex][key] = value
 			end
 		end)
-		reloadUnitAuras(unit)
+		if( key == "filter" ) then
+			reloadUnitAurasFilters(unit)
+		else
+			reloadUnitAuras(unit)
+		end
 	end
 
 	-- Container-only options (sections, sorting)
@@ -2871,9 +2885,7 @@ local function loadUnitOptions()
 	local function getFilterValues(auraType, unit, includeOnly)
 		local values = {}
 		for key, label in pairs(filterValues[auraType] or filterValues.buffs) do
-			if( key ~= "BLIZZARD" or blizzardFilterUnits[unit] ) then
-				values[key] = label
-			end
+			values[key] = label
 		end
 		return appendCustomFilterValues(values, unit, auraType, includeOnly)
 	end
@@ -2892,7 +2904,11 @@ local function loadUnitOptions()
 				cfg.sections[sectionIndex][key] = value
 			end
 		end)
-		reloadUnitAuras(unit)
+		if( key == "filter" ) then
+			reloadUnitAurasFilters(unit)
+		else
+			reloadUnitAuras(unit)
+		end
 	end
 
 	-- Create options for a single aura frame slot
@@ -3038,7 +3054,7 @@ local function loadUnitOptions()
 						local base = filterValues[auraType] or filterValues.buffs
 						local filtered = {}
 						for k, v in pairs(base) do
-							if( k ~= "BLIZZARD" or blizzardFilterUnits[info[2]] ) then filtered[k] = v end
+							filtered[k] = v
 						end
 						filtered = appendCustomFilterValues(filtered, info[2], auraType)
 						-- No duplicate choices, drop filters already used by the sections and keep the current value

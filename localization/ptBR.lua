@@ -9,6 +9,23 @@ L["%s aura groups disabled"] = [=[%s aura grupos desativados
 ]=]
 L["%s frames"] = "%s moldura"
 L["%s member"] = "%s membro"
+L["Aura borders keep their neutral color instead of being tinted by dispel type. Has no effect with the Blizzard border style."] = "As bordas das auras mantêm sua cor neutra em vez de serem coloridas por tipo de dissipação. Sem efeito com o estilo de borda da Blizzard."
+L["Border coloring of stealable buffs. Replaces the dispel type color on those auras."] = "Cor da borda dos buffs roubáveis. Substitui a cor do tipo de dissipação nessas auras."
+L["Color and opacity of the overlay pulsing on your own auras inside their pandemic window. Enabled in the general aura settings."] = "Cor e opacidade da sobreposição que pulsa nas suas próprias auras dentro da janela de pandemia. Ativada nas configurações gerais de auras."
+L["Disable dispel type borders"] = "Desativar bordas por tipo de dissipação"
+L["Disable right-click cancel"] = "Desativar cancelamento com clique direito"
+L["Disable stack counts"] = "Desativar contador de pilhas"
+L["Disable stealable coloring"] = "Desativar cor de buffs roubáveis"
+L["Hides the stack count text on all Shadowed Unit Frame auras."] = "Oculta o texto de pilhas em todas as auras do Shadowed Unit Frames."
+L["Pandemic overlay"] = "Sobreposição de pandemia"
+L["Pulses an overlay on your own auras inside their pandemic window, where refreshing them carries the remaining time over. Color and opacity are set in the Colors tab."] = "Pulsa uma sobreposição nas suas próprias auras dentro da janela de pandemia, em que renová-las transfere o tempo restante. Cor e opacidade são definidas na aba Cores."
+L["Right-clicking your own buffs cancels them; enable this to turn that off."] = "Clicar com o botão direito nos seus próprios buffs os cancela; ative isto para impedir esse comportamento."
+L["Stacks"] = "Pilhas"
+L["Stacks font"] = "Fonte das pilhas"
+L["Stealable"] = "Roubável"
+L["Stealable buffs are tinted by dispel type like the others."] = "Buffs roubáveis são coloridos por tipo de dissipação como os demais."
+L["Timer"] = "Temporizador"
+L["Timer font"] = "Fonte do temporizador"
 L["|cff20ff20%s|r units enabled"] = [=[|cff20ff20%s|r unidades habilitadas
 
 ]=]
@@ -182,13 +199,11 @@ L["Aura groups"] = [=[Grupos de Aura
 L["Aura Groups"] = [=[Grupos Aura
 
 ]=]
-L["Aura font"] = "Fonte da aura"
 L["Aura Indicators"] = "Indicadores de Aura"
 L["Aura indicators"] = [=[indicadores Aura
 
 ]=]
 L["Aura name or spell ID"] = "Nome da aura ou ID do feitiço"
-L["Aura types to filter"] = "Tipos de filtros de aura"
 L["Auras"] = "Auras"
 L["Auras matching a criteria will automatically show up in the indicator when enabled."] = [=[As Auras correspondentes a um critério aparecerão automaticamente no indicador quando ativadas.
 
@@ -231,22 +246,14 @@ L["BG Target"] = "BG Alvo"
 L["BG ToT"] = [=[BG ToT
 
 ]=]
-L["Blacklist"] = "Lista negra"
-L["Blacklist filters"] = "Filtros de lista negra"
 L["Blacklists"] = "Lista negra"
 L["Blizzard"] = "Blizzard"
 L["Border"] = "Borda"
 L["Border alpha"] = "Alpha da aresta"
 L["Border color"] = "Cor da borda"
-L["Border coloring of stealable, curable and dispellable auras."] = [=[Coloração de bordas de auras furtáveis, curáveis e dissipáveis.
-
-]=]
 L["Border highlighting"] = "Border highlighting"
 L["Border thickness"] = "Grossura da borda"
 L["Boss"] = "Chefe"
-L["Boss Auras"] = [=[Chefe Auras
-
-]=]
 L["Boss Debuffs"] = [=[Debuffs Chefe
 
 ]=]
@@ -335,8 +342,6 @@ L["Class/misc bars"] = [=[Barras de classe/misc
 L["Classes"] = "Classes"
 L["Classification"] = "Classificação"
 L["Classifications"] = "Classficações"
-L["Click through"] = "Clicar através"
-L["Allow clicks to pass through auras to select the unit behind them. Tooltips still work on hover."] = "Permite clicar através das auras para selecionar a unidade por trás delas. As dicas ao passar o mouse continuam funcionando."
 L["Close color"] = [=[Fechar cor
 
 ]=]
@@ -410,7 +415,6 @@ L["Configuration to specific unit frames."] = [=[Configuração para quadros de 
 
 ]=]
 L["Cooldown rings for"] = "Anéis de resfriamento para"
-L["Create"] = "Criar"
 L["Creature type"] = "Tipo de criatura"
 L["Creature type, returns Felguard if the unit is a Felguard, Wolf if it's a Wolf and so on."] = [=[Tipo de criatura, retorna Felguard se a unidade é um Felguard, Wolf se é um Wolf e assim por diante.
 
@@ -658,16 +662,6 @@ L["Failed to save tag, error:|n %s"] = [=[Falha ao salvar a tag, erro:|n %s
 ]=]
 L["Female"] = "Fêmea"
 L["Bar anchor"] = "Âncora da barra"
-L["Filter type"] = "Tipo de filtro"
-L["Filtering both buffs and debuffs"] = [=[Filtrando buffs e debuffs
-
-]=]
-L["Filtering buffs only"] = [=[Apenas buffs de filtragem
-
-]=]
-L["Filtering debuffs only"] = [=[Filtrando apenas debuffs
-
-]=]
 L["Filters"] = "Filtros"
 L["Finished cast"] = "Lançamento finalizado"
 L["Flags the tag for frequent updating, it will update the tag on a timer regardless of any events firing."] = [=[Sinaliza a tag para atualização frequente, ela atualizará a tag em um temporizador, independentemente de qualquer disparo de eventos.
@@ -1052,10 +1046,6 @@ L["Main Tank's are set through the Raid frames, or through selecting the Tank ro
 ]=]
 L["Male"] = "Masculino"
 L["Mana"] = "Mana"
-L["Manage Aura Filters"] = [=[Gerenciar filtros Aura
-
-]=]
-L["Management"] = "Gerenciamento"
 L["Manual position"] = "Posição Manual"
 L["Master Looter"] = [=[Mestre Looter
 
@@ -1098,7 +1088,6 @@ L["Never (Disabled)"] = "Never (desabilitado)"
 L["New aura group"] = [=[Novo grupo de aura
 
 ]=]
-L["New filter"] = "Novo Filtro"
 L["None"] = "Nenhum"
 L["None (Disabled)"] = [=[Nenhum (desativado)
 
@@ -1258,9 +1247,6 @@ L["Positioning"] = [=[Posicionamento
 L["Power"] = "Poder"
 L["Power bar"] = "Barra de poder"
 L["Power Type"] = "Tipo de poder"
-L["Prevents unit tooltips from showing while in combat."] = [=[Impede que as dicas de ferramentas da unidade sejam exibidas durante o combate.
-
-]=]
 L["Priest mana bar"] = [=[Sacerdote mana bar
 
 ]=]
@@ -1496,9 +1482,6 @@ L["Show auras stack"] = [=[Mostrar pilha de auras
 L["Show background"] = [=[Mostrar plano de fundo
 
 ]=]
-L["Show boss debuffs"] = [=[Mostrar debuffs chefe
-
-]=]
 L["Show buffs before debuffs when sharing the same anchor point."] = [=[Mostre buffs antes de debuffs ao compartilhar o mesmo ponto de ancoragem.
 
 ]=]
@@ -1508,9 +1491,6 @@ L["Show cast time"] = "Mostrar tempo de lançamento"
 L["Show castable on other auras"] = "Mostrar conjurável em outras auras"
 L["Show casted by boss"] = "Mostrar casted do chefe"
 L["Show curable debuffs"] = [=[Mostrar debuffs curáveis
-
-]=]
-L["Show curable/removable auras"] = [=[Mostrar auras curáveis/removíveis
 
 ]=]
 L["Show Heal Absorbs"] = "Exibir cura absorvida"
@@ -1552,9 +1532,6 @@ L["Shows current health value in absolute form meaning 15000 health is shown as 
 
 ]=]
 L["Shows current power value in absolute form, 15000 power will be displayed as 1500 still."] = [=[Mostra o valor da potência atual em forma absoluta, 15000 potência será exibida como 1500 ainda.
-
-]=]
-L["Shows debuffs cast by a boss."] = [=[Mostra debuffs lançados por um chefe.
 
 ]=]
 L["Shows debuffs that you can cure."] = [=[Mostra debuffs que você pode curar.
@@ -1681,9 +1658,6 @@ L["Status"] = "Estado"
 L["Status indicator, shows if the unit is currently in combat. For the player it will also show if you are rested."] = [=[Indicador de status, mostra se a unidade está atualmente em combate. Para o jogador, também mostrará se você está descansado.
 
 ]=]
-L["Stealable/Curable/Dispellable"] = [=[Roubável/Curável/Dissipável
-
-]=]
 L["Style of borders to show for all auras."] = [=[Estilo de bordas para mostrar para todas as auras.
 
 ]=]
@@ -1723,9 +1697,6 @@ L["Text parent"] = "Texto pai"
 L["Text/Tags"] = [=[Texto/Tags
 
 ]=]
-L["The blacklist \"%s\" already exists."] = [=[A lista negra "%s" já existe.
-
-]=]
 L["The check boxes below will allow you to enable or disable units.|n|n|cffff2020Warning!|r Target of Target units have a higher performance cost compared to other units. If you have performance issues, please disable those units or reduce the features enabled for those units."] = [=[As caixas de seleção abaixo permitirão que você habilite ou desabilite unidades.|n|n|cffff2020Aviso!|r As unidades Target of Target têm um custo de desempenho mais elevado em comparação com outras unidades. Se você tiver problemas de desempenho, desative essas unidades ou reduza os recursos ativados para essas unidades.
 
 ]=]
@@ -1741,9 +1712,6 @@ L["The tag \"%s\" already exists."] = [=[A tag "%s" já existe.
 L["The unit frames you see are examples, they are not perfect and do not show all the data they normally would.|n|nYou can hide them by locking them through /shadowuf or clicking the button below."] = [=[Os quadros de unidade que você vê são exemplos, não são perfeitos e não mostram todos os dados que normalmente fariam.|n|nVocê pode ocultá-los bloqueando-os através de /shadowuf ou clicando no botão abaixo.
 
 ]=]
-L["The whitelist \"%s\" already exists."] = [=[A lista branca "%s" já existe.
-
-]=]
 L["Thick outline"] = [=[Contorno espesso
 
 ]=]
@@ -1753,9 +1721,6 @@ L["Thin outline"] = [=[Contorno fino
 L["This bar will automatically hide when you are at the level cap, or you do not have any reputations tracked."] = "Essa barra será oculta automaticamente quando você atingir o nível máximo, ou se você não tiver alguma reputação."
 L[ [=[This color will be used if the indicator shown is your own, only applies if icons are not used.
 Handy if you want to know if a target has a Rejuvenation on them, but you also want to know if you were the one who casted the Rejuvenation.]=] ] = [=[Esta cor será usada se o indicador mostrado for seu, só se aplica se os ícones não forem usados. Útil se você quiser saber se um alvo tem um Rejuvenescimento neles, mas você também quer saber se você foi quem lançou o Rejuvenescimento.
-
-]=]
-L["This filter has no aura types set to filter out."] = [=[Esse filtro não tem tipos de aura definidos para filtrar.
 
 ]=]
 L["This filter has no auras in it, you will have to add some using the dialog above."] = [=[Este filtro não tem auras nele, você terá que adicionar alguns usando a caixa de diálogo acima.
@@ -1888,7 +1853,6 @@ L["Vehicles"] = "Veículos"
 L["Vertical growth"] = [=[Crescimento vertical
 
 ]=]
-L["View"] = "Ver"
 L["Visibility"] = "Visibilidade"
 L["WARNING! ShadowedUF_Indicators has been deprecated as v4 and is now built in. Please delete ShadowedUF_Indicators, your configuration will be saved."] = [=[AVISO! ShadowedUF_Indicators foi preterido como v4 e agora está integrado. Por favor, exclua ShadowedUF_Indicators, sua configuração será salva.
 
@@ -1903,12 +1867,6 @@ L["What type of auras should be enlarged, use the scaled aura size option to cha
 
 ]=]
 L["When the unit is mising health, the [missinghp] tag is shown, when they are at full health then the [name] tag is shown. This lets you see -1000 when they are missing 1000 HP, but their name when they are not missing any.|n|nIn combat, health deficit only works on allied units."] = [=[Quando a unidade está com a saúde debilitada, a tag [missinghp] é mostrada, quando eles estão em plena saúde, a tag [name] é mostrada. Isso permite que você veja -1000 quando eles estão faltando 1000 HP, mas seu nome quando eles não estão faltando nenhum.|n|nEm combate, o déficit de vida funciona apenas em unidades aliadas.
-
-]=]
-L["When this filter is active, apply the filter to buffs."] = [=[Quando esse filtro estiver ativo, aplique o filtro aos buffs.
-
-]=]
-L["When this filter is active, apply the filter to debuffs."] = [=[Quando esse filtro estiver ativo, aplique o filtro aos debuffs.
 
 ]=]
 L["When to color the empty bar by reaction, overriding the default color by option."] = [=[Quando colorir a barra vazia por reação, substituindo a cor padrão por opção.
@@ -1944,16 +1902,7 @@ L["Whether to show auras that do not fall into the above categories."] = [=[Se d
 L["Whether to show buffs that you cannot cast."] = [=[Se mostrar buffs que você não pode lançar.
 
 ]=]
-L["Whitelist"] = [=[Lista de permissões
-
-]=]
-L["Whitelist filters"] = [=[Filtros de lista branca
-
-]=]
 L["Whitelists"] = [=[Listas brancas
-
-]=]
-L["Whitelists will hide any aura not in the filter group.|nBlacklists will hide auras that are in the filter group.|nOverride lists will bypass any filter and always be shown."] = [=[As listas brancas ocultarão qualquer aura que não esteja no grupo de filtros.|nBlacklists ocultará auras que estão no grupo de filtros.|As listas nOverride ignorarão qualquer filtro e sempre serão mostradas.
 
 ]=]
 L["Widget Size"] = [=[Tamanho do widget
@@ -2010,19 +1959,10 @@ L["You can link auras together using this, for example you can link Mark of the 
 L["You can override what aura is enabled on a per-class basis, note that if the aura is disabled through the main listing, then your class settings here will not matter."] = [=[Você pode substituir qual aura está habilitada por classe, observe que se a aura estiver desabilitada através da listagem principal, suas configurações de classe aqui não serão importantes.
 
 ]=]
-L["You can set what unit frame should use what filter group and in what zone type here, if you want to change what auras goes into what group then see the \"Manage aura groups\" option."] = [=[Você pode definir qual quadro de unidade deve usar qual grupo de filtros e em que tipo de zona aqui, se quiser alterar quais auras entram em qual grupo, consulte a opção "Gerenciar grupos de aura".
-
-]=]
 L["You cannot edit this tag because it is one of the default ones included in this mod. This function is here to provide an example for your own custom tags."] = [=[Você não pode editar esta tag porque é um dos padrões incluídos neste mod. Essa função está aqui para fornecer um exemplo para suas próprias tags personalizadas.
 
 ]=]
 L["You cannot name a tag \"%s\", tag names should contain no brackets or parenthesis."] = [=[Você não pode nomear uma marca "%s", os nomes de marca não devem conter colchetes ou parênteses.
-
-]=]
-L["You do not have any filters of this type added yet, you will have to create one in the management panel before this page is useful."] = [=[Você não tem nenhum filtro deste tipo adicionado ainda, você terá que criar um no painel de gerenciamento antes que esta página seja útil.
-
-]=]
-L["You have entered combat, unit frames have been locked. Once you leave combat you will need to unlock them again through /shadowuf."] = [=[Você entrou em combate, os quadros da unidade foram bloqueados. Uma vez que você deixar o combate, você precisará desbloqueá-los novamente através de /shadowuf.
 
 ]=]
 L["You have to set the events to fire, you can only enter letters and underscores, \"FOO_BAR\" for example is valid, \"APPLE_5_ORANGE\" is not because it contains a number."] = "Você tem que definir os eventos para disparar, você só pode inserir letras e sublinhados, \"FOO_BAR\" por exemplo é válido, \"APPLE_5_ORANGE\" não é porque contém um número."
@@ -2034,9 +1974,6 @@ L["You must restart Shadowed Unit Frames."] = [=[Você deve reiniciar os Quadros
 
 ]=]
 L["You must wrap your code in a function."] = [=[Você deve encapsular seu código em uma função.
-
-]=]
-L["You will need to create an aura filter before you can set which unit to enable aura filtering on."] = [=[Você precisará criar um filtro de aura antes de definir em qual unidade habilitar a filtragem de aura.
 
 ]=]
 L["You will need to do a /console reloadui before a hidden frame becomes visible again.|nPlayer and other unit frames are automatically hidden depending on if you enable the unit in Shadowed Unit Frames."] = [=[Você precisará fazer um /console reloadui antes que um quadro oculto se torne visível novamente.|O nPlayer e outros quadros de unidade ficam automaticamente ocultos, dependendo se você ativar a unidade em Quadros de Unidade Sombreada.
@@ -2064,31 +2001,20 @@ L["Big defensive cooldowns"] = "Grandes defensivos"
 L["Center Left"] = "Centro Esquerda"
 L["Center Right"] = "Centro Direita"
 L["Class-filtered auras"] = "Auras filtradas por classe"
-L["Combat auras"] = "Auras de combate"
-L["Combat debuffs"] = "Penalidades de combate"
 L["Crowd control effects"] = "Efeitos de controle"
 L["Dispellable by me"] = "Dissipável por mim"
 L["External defensives"] = "Defensivos externos"
 L["Group/Raid Auras"] = "Auras de grupo/raide"
-L["Group/Raid debuffs"] = "Penalidades de grupo/raide"
 L["Important auras"] = "Auras importantes"
 L["My big defensives"] = "Meus grandes defensivos"
 L["My class auras"] = "Minhas auras de classe"
 L["My external defensives"] = "Meus defensivos externos"
-L["My combat auras"] = "Minhas auras de combate"
-L["Only shows your buffs deemed useful in combat by Blizzard."] = "Mostra apenas seus bônus considerados úteis em combate pela Blizzard."
-L["My group/raid debuffs"] = "Minhas penalidades de grupo/raide"
-L["Only shows debuffs you applied that are relevant in a group or raid context."] = "Mostra apenas penalidades que você aplicou e que são relevantes em contexto de grupo ou raide."
 L["Purgeable/Stealable"] = "Purgável/Roubável"
-L["Only shows buffs deemed useful in combat (e.g. HoTs)."] = "Mostra apenas bônus considerados úteis em combate pela Blizzard (ex. HoTs)."
 L["Only shows buffs marked as important by Blizzard. Server-maintained list."] = "Mostra apenas bônus marcados como importantes pela Blizzard. Lista mantida pelo servidor."
-L["Only shows buffs that can be purged, stolen or dispelled by your class."] = "Mostra apenas bônus que podem ser purgados, roubados ou dissipados pela sua classe."
 L["Only shows buffs you cast yourself."] = "Mostra apenas bônus que você lançou."
 L["Only shows buff types that your class can cast (e.g. a Priest sees Fortitude and Renew), regardless of who cast them."] = "Mostra apenas tipos de bônus que sua classe pode lançar (ex. um Sacerdote vê Resistência e Renovar), independente de quem os lançou."
 L["Only shows crowd control effects (Stun, Root, Silence, Fear, Polymorph, Cyclone, etc.)."] = "Mostra apenas efeitos de controle (Atordoar, Enraizar, Silêncio, Medo, Polimorfia, Ciclone, etc.)."
-L["Only shows debuffs deemed useful in combat by Blizzard."] = "Mostra apenas penalidades consideradas úteis em combate pela Blizzard."
 L["Only shows debuffs marked as important by Blizzard. Server-maintained list."] = "Mostra apenas penalidades marcadas como importantes pela Blizzard. Lista mantida pelo servidor."
-L["Only shows debuffs whose dispel type matches your class (Holy Priest = Magic + Disease, Resto Druid = Magic + Curse + Poison, etc.)."] = "Mostra apenas penalidades cujo tipo de dissipação corresponde à sua classe (Sacerdote Sagrado = Magia + Doença, Druida Restauração = Magia + Maldição + Veneno, etc.)."
 L["Only shows debuffs you applied yourself."] = "Mostra apenas penalidades que você aplicou."
 L["Only shows defensive buffs received from another player (Pain Suppression, Ironbark, Life Cocoon, etc.)."] = "Mostra apenas bônus defensivos recebidos de outro jogador (Supressão de Dor, Cascaferro, Casulo de Vida, etc.)."
 L["Only shows external defensives that you cast on someone."] = "Mostra apenas defensivos externos que você lançou em alguém."
@@ -2097,7 +2023,6 @@ L["Only shows major defensive cooldowns that you activated yourself."] = "Mostra
 L["Only shows your class buff types that you cast yourself."] = "Mostra apenas tipos de bônus da sua classe que você lançou."
 L["Shows all buffs on the unit without any filtering."] = "Mostra todos os bônus da unidade sem filtro."
 L["Shows all debuffs on the unit without any filtering."] = "Mostra todas as penalidades da unidade sem filtro."
-L["Shows debuffs relevant in a group or raid context (boss mechanics, important debuffs)."] = "Mostra penalidades relevantes em contexto de grupo ou raide (mecânicas de chefe, penalidades importantes)."
 
 -- Performance
 L["Performance"] = "Desempenho"
@@ -2120,9 +2045,6 @@ L["How often to scan for temporary weapon enchants (seconds)."] = "Frequência d
 L["Reset to defaults"] = "Restaurar padrões"
 L["Reset all performance settings to their default values."] = "Restaura todas as configurações de desempenho para seus valores padrão."
 L["Add spell"] = "Adicionar feitiço"
-L["Blacklist / Whitelist"] = "Lista negra / Lista branca"
-L["Apply the blacklist/whitelist from the Aura Filters tab to this frame. This is separate from the Blizzard API filter below."] = "Aplicar a lista negra ou branca da aba Filtros de Auras a este quadro. Esta configuração é independente do filtro da Blizzard abaixo."
-L["Whitelists will hide any aura not in the filter group.|nBlacklists will hide auras that are in the filter group.|nOnly Blizzard whitelisted spells (non-secret in combat) can be added to filters."] = "As listas brancas ocultam qualquer aura ausente do filtro.|nAs listas negras ocultam as auras presentes no filtro.|nApenas feitiços autorizados pela Blizzard (não secretos em combate) podem ser adicionados."
 
 local ShadowUF = select(2, ...)
 ShadowUF.L = setmetatable(L, {__index = ShadowUF.L})

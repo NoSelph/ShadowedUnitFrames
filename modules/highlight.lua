@@ -61,10 +61,8 @@ local function getDispelFilters(value)
 	return healthMod and healthMod.GetDispelFilters and healthMod.GetDispelFilters(value)
 end
 
-local function isUnitAssist(unit)
-	local healthMod = ShadowUF.modules.healthBar
-	return healthMod and healthMod.IsUnitAssist and healthMod.IsUnitAssist(unit)
-end
+-- Neither side applies on units we can neither help nor harm (cross-faction warmode off), mute via never-matching candidates
+local MUTE_CANDIDATES = { includeDispelTypes = {} }
 
 local function createDispelSlots(frame, dispelFilter)
 	if( frame.highlight.dispelSlots ) then return true end
@@ -161,6 +159,9 @@ function Highlight:UpdateDispelSlots(frame)
 		frame.highlight.dispelSlots = nil
 		frame.highlight.dispelSlotButtons = nil
 		frame.highlight.dispelOverlays = nil
+		-- The fresh slots start on the assist filter with no candidates, drop the stale mirrors
+		frame.highlight.dispelSlotFilter = nil
+		frame.highlight.dispelSlotMuted = nil
 	end
 
 	if( not frame.highlight.dispelSlots and not createDispelSlots(frame, filters.assist) ) then return end
@@ -168,18 +169,23 @@ function Highlight:UpdateDispelSlots(frame)
 	local container = frame.highlight.dispelSlots
 	local inCombat = InCombatLockdown()
 
-	-- Pick the side matching the unit's reaction, keep the current filter while it's unreadable
+	-- Pick the side matching the unit's reaction, mute when neither side applies
 	local dispelFilter = frame.highlight.dispelSlotFilter or filters.assist
+	local muted = frame.highlight.dispelSlotMuted
 	if( frame.unit and not frame.configMode ) then
-		local assist = isUnitAssist(frame.unit)
-		if( assist == true ) then
+		local state = ShadowUF.GetUnitReactionState(frame.unit)
+		if( state == "assist" ) then
 			dispelFilter = filters.assist
-		elseif( assist == false ) then
+			muted = false
+		elseif( state == "attack" ) then
 			dispelFilter = filters.noassist
+			muted = false
+		else
+			muted = true
 		end
 	end
 
-	-- Slot filter strings are runtime-mutable, mode and reaction switches apply live
+	-- Slot filter strings and candidate filters are runtime-mutable, mode and reaction switches apply live
 	if( frame.highlight.dispelSlotFilter ~= dispelFilter ) then
 		local switched = true
 		for edge in pairs(HIGHLIGHT_EDGES) do
@@ -187,6 +193,15 @@ function Highlight:UpdateDispelSlots(frame)
 		end
 		if( switched ) then
 			frame.highlight.dispelSlotFilter = dispelFilter
+		end
+	end
+	if( muted ~= frame.highlight.dispelSlotMuted ) then
+		local switched = true
+		for edge in pairs(HIGHLIGHT_EDGES) do
+			switched = pcall(container.SetAuraSlotCandidateFilters, container, "dispel-" .. edge, muted and MUTE_CANDIDATES or nil) and switched
+		end
+		if( switched ) then
+			frame.highlight.dispelSlotMuted = muted
 		end
 	end
 	if( frame.unit and not frame.configMode ) then

@@ -159,6 +159,8 @@ function Auras:OnEnable(frame)
 	-- Containers self-register UNIT_AURA and manage temp enchants natively
 	frame:RegisterNormalEvent("PLAYER_ENTERING_WORLD", self, "Update")
 	frame:RegisterNormalEvent("ZONE_CHANGED_NEW_AREA", self, "UpdateFilter")
+	-- Reaction flips re-gate the dispel-based debuff sections without a unit change
+	frame:RegisterUnitEvent("UNIT_FACTION", self, "Update")
 	frame:RegisterUpdateFunc(self, "Update")
 
 	self:UpdateFilter(frame)
@@ -573,7 +575,7 @@ local FLOW_V = { TOP = "Up", BOTTOM = "Down" }
 -- Pre-Sections UI, one filter split into PLAYER/!PLAYER groups when "enlarge my auras" is on (negation keeps the union duplicate-free)
 local function splitTokens(filterValue)
 	local tokens = {}
-	if( filterValue and filterValue ~= "ALL" and filterValue ~= "BLIZZARD" and not filterValue:find("^CUSTOM:") ) then
+	if( filterValue and filterValue ~= "ALL" and not filterValue:find("^CUSTOM:") ) then
 		for token in string.gmatch(filterValue, "[^|]+") do
 			if( token ~= "ALL" ) then
 				tokens[token] = true
@@ -589,27 +591,21 @@ local function buildSections(auraType, config)
 	-- CUSTOM:<name> = base filter + spell ID candidate filters resolved at runtime
 	local customFilter = filterValue:match("^CUSTOM:(.+)")
 	local filterString = base
-	if( filterValue ~= "ALL" and filterValue ~= "BLIZZARD" and not customFilter ) then
+	if( filterValue ~= "ALL" and not customFilter ) then
 		filterString = base .. "|" .. filterValue
-	end
-
-	-- BLIZZARD: replicate the default UI's aura selection via ProcessAura metadata, needs SetAuraProcessingPolicy(ProcessAura) on the container
-	local processedAuraType
-	if( filterValue == "BLIZZARD" and AuraUtil and AuraUtil.AuraUpdateChangedType ) then
-		processedAuraType = auraType == "buffs" and AuraUtil.AuraUpdateChangedType.Buff or AuraUtil.AuraUpdateChangedType.Debuff
 	end
 
 	local sections = {}
 	local largeSize = math.floor(config.size * (config.selfScale or 1.30) + 0.5)
 	local sortMethod = config.sortMethod
 	if( config.enlarge and config.enlarge.PLAYER and not filterString:find("PLAYER", nil, true) ) then
-		table.insert(sections, { filterString = filterString .. "|PLAYER", size = largeSize, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue .. "|PLAYER") })
-		table.insert(sections, { filterString = filterString .. "|!PLAYER", size = config.size, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
+		table.insert(sections, { filterString = filterString .. "|PLAYER", size = largeSize, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue .. "|PLAYER") })
+		table.insert(sections, { filterString = filterString .. "|!PLAYER", size = config.size, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
 	elseif( config.enlarge and config.enlarge.PLAYER ) then
 		-- Filter is already player-only; everything shows enlarged
-		table.insert(sections, { filterString = filterString, size = largeSize, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
+		table.insert(sections, { filterString = filterString, size = largeSize, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
 	else
-		table.insert(sections, { filterString = filterString, size = config.size, auraType = auraType, customFilter = customFilter, processedAuraType = processedAuraType, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
+		table.insert(sections, { filterString = filterString, size = config.size, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
 	end
 
 	if( config.sections ) then
@@ -619,14 +615,10 @@ local function buildSections(auraType, config)
 				local extraFilter = extra.filter
 				local extraCustom = extraFilter:match("^CUSTOM:(.+)")
 				local fs = base
-				if( extraFilter ~= "ALL" and extraFilter ~= "BLIZZARD" and not extraCustom ) then
+				if( extraFilter ~= "ALL" and not extraCustom ) then
 					fs = fs .. "|" .. extraFilter
 				end
-				local extraProcessed
-				if( extraFilter == "BLIZZARD" and AuraUtil and AuraUtil.AuraUpdateChangedType ) then
-					extraProcessed = auraType == "buffs" and AuraUtil.AuraUpdateChangedType.Buff or AuraUtil.AuraUpdateChangedType.Debuff
-				end
-				table.insert(sections, { filterString = fs, size = extra.size or config.size, auraType = auraType, customFilter = extraCustom, processedAuraType = extraProcessed, sortMethod = extra.sortMethod, maxCount = extra.maxCount, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(extraFilter) })
+				table.insert(sections, { filterString = fs, size = extra.size or config.size, auraType = auraType, customFilter = extraCustom, sortMethod = extra.sortMethod, maxCount = extra.maxCount, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(extraFilter) })
 			end
 		end
 	end
@@ -895,22 +887,12 @@ local function configureGroupContainer(frame, group, config, extraSections)
 		group.containerButtons = {}
 		container:SetFrameLevel(group:GetFrameLevel() + 1)
 
-		-- BLIZZARD-filter sections need ProcessAura metadata on the container
-		local needsProcessPolicy = false
-		for _, section in ipairs(sections) do
-			if( section.processedAuraType ) then needsProcessPolicy = true break end
-		end
-		if( needsProcessPolicy and CustomAuraContainerAuraProcessingPolicy ) then
-			pcall(container.SetAuraProcessingPolicy, container, CustomAuraContainerAuraProcessingPolicy.ProcessAura, {})
-		end
-
 		local maxAuras = config.perRow * config.maxRows
 		for index, section in ipairs(sections) do
 			-- Visible counts are secret so totals can't be balanced across sections, each one is capped on its own
 			local addOk, err = pcall(container.AddAuraGroup, container, "section" .. index, section.filterString, {
 				maxFrameCount = section.maxCount or maxAuras,
 				initializeFrame = makeButtonInitializer(group, config, section, index),
-				candidateFilters = section.processedAuraType and { processedAuraType = section.processedAuraType } or nil,
 				sortMethod = AuraContainerSortMethod and section.sortMethod and AuraContainerSortMethod[section.sortMethod] or nil,
 			})
 			if( not addOk and not group.hasContainerError ) then
@@ -1071,6 +1053,24 @@ function Auras:ConfigureContainers(frame, config)
 	self:UpdateContainerCandidateFilters(frame)
 end
 
+-- Dispel-based debuff filters only make sense on units the player can assist, mute them on enemies and neutrals
+-- Same never-matching candidate shape as the indicator slot mute
+local MUTE_CANDIDATES = { includeDispelTypes = {} }
+local REACTION_GATED_TOKENS = { RAID = true, RAID_PLAYER_DISPELLABLE = true, DISPELLABLE = true }
+
+-- Dispel-based debuff filters only apply to units we can actually help
+local function resolveAssist(unit)
+	return ShadowUF.GetUnitReactionState(unit) == "assist"
+end
+
+local function isReactionGatedSection(section)
+	if( section.auraType ~= "debuffs" or not section.tokens ) then return false end
+	for token in pairs(section.tokens) do
+		if( REACTION_GATED_TOKENS[token] ) then return true end
+	end
+	return false
+end
+
 -- Candidate filters are runtime-mutable (unlike filter strings), filter edits and zone changes need no rebuild
 -- Blizzard ignores spell ID filters on friendly-unit debuffs and enemy-unit buffs (identity gate), those lists just do nothing there
 function Auras:UpdateContainerCandidateFilters(frame)
@@ -1078,6 +1078,10 @@ function Auras:UpdateContainerCandidateFilters(frame)
 	local whitelist = frame.auras.whitelist
 	local blacklist = frame.auras.blacklist
 	local customFilters = ShadowUF.db.profile.customFilters or {}
+
+	local assist = frame.unit and resolveAssist(frame.unit) or false
+	frame.auras.sectionsAssist = assist
+	local hasGatedSections = false
 
 	for _, auraType in ipairs(AURA_TYPES) do
 		for i = 1, 6 do
@@ -1127,10 +1131,11 @@ function Auras:UpdateContainerCandidateFilters(frame)
 					if( include or exclude ) then
 						filters = { includeSpellIDs = include, excludeSpellIDs = exclude }
 					end
-					-- Setting candidate filters replaces the whole table, keep the BLIZZARD metadata alive across refreshes
-					if( section.processedAuraType ) then
-						filters = filters or {}
-						filters.processedAuraType = section.processedAuraType
+					if( isReactionGatedSection(section) ) then
+						hasGatedSections = true
+						if( not assist ) then
+							filters = MUTE_CANDIDATES
+						end
 					end
 					pcall(group.container.SetAuraGroupCandidateFilters, group.container, "section" .. index, filters)
 
@@ -1144,6 +1149,8 @@ function Auras:UpdateContainerCandidateFilters(frame)
 			end
 		end
 	end
+
+	frame.auras.hasReactionGatedSections = hasGatedSections
 end
 
 -- The container refreshes itself on UNIT_AURA (never read that payload), we only track unit identity here
@@ -1924,15 +1931,6 @@ local function scan(parent, frame, type, config, displayConfig, filter)
 	end
 end
 
-local function scanBlizzard(parent, frame, type, config, displayConfig)
-	if( frame.totalAuras >= frame.maxAuras or not config.enabled ) then return end
-
-	if( frame.parent.configMode ) then
-		local baseFilter = (type == "buffs") and "HELPFUL" or "HARMFUL"
-		return scanConfigMode(parent, frame, type, config, displayConfig, baseFilter)
-	end
-end
-
 -- Child takes over the parent's own position
 local function anchorChildToBase(config, group, childGroup)
 	local position = positionData[getPositionKey(config)]
@@ -1991,6 +1989,12 @@ function Auras:Update(frame)
 					end
 				end
 			end
+
+			-- Reaction flips (retargets, mind control, duels) re-gate the dispel-based debuff sections
+			if( frame.auras.hasReactionGatedSections and frame.unit and frame.auras.sectionsAssist ~= resolveAssist(frame.unit) ) then
+				self:UpdateContainerCandidateFilters(frame)
+			end
+
 			return self:UpdateContainers(frame)
 		end
 	end
@@ -2025,16 +2029,12 @@ function Auras:Update(frame)
 					local filterValue = frameConfig.filter or "ALL"
 					local ok, err
 
-					if filterValue == "BLIZZARD" then
-						ok, err = pcall(scanBlizzard, frame.auras, group, auraType, frameConfig, frameConfig)
-					else
-						local baseFilter = auraType == "buffs" and "HELPFUL" or "HARMFUL"
-						local effectiveFilter = baseFilter
-						if filterValue ~= "ALL" then
-							effectiveFilter = baseFilter .. "|" .. filterValue
-						end
-						ok, err = pcall(scan, frame.auras, group, auraType, frameConfig, frameConfig, effectiveFilter)
+					local baseFilter = auraType == "buffs" and "HELPFUL" or "HARMFUL"
+					local effectiveFilter = baseFilter
+					if filterValue ~= "ALL" then
+						effectiveFilter = baseFilter .. "|" .. filterValue
 					end
+					ok, err = pcall(scan, frame.auras, group, auraType, frameConfig, frameConfig, effectiveFilter)
 					if not ok and not group.hasErrored then
 						ShadowUF:Print("Error scanning " .. groupKey .. " (logged once): " .. tostring(err))
 						group.hasErrored = true
@@ -2065,13 +2065,9 @@ function Auras:Update(frame)
 					local filterValue = pair.childConfig.filter or "ALL"
 					local ok, err
 
-					if filterValue == "BLIZZARD" then
-						ok, err = pcall(scanBlizzard, frame.auras, pair.parent, childAuraType, pair.childConfig, pair.parentConfig)
-					else
-						local baseFilter = childAuraType == "buffs" and "HELPFUL" or "HARMFUL"
-						local effectiveFilter = filterValue ~= "ALL" and (baseFilter .. "|" .. filterValue) or baseFilter
-						ok, err = pcall(scan, frame.auras, pair.parent, childAuraType, pair.childConfig, pair.parentConfig, effectiveFilter)
-					end
+					local baseFilter = childAuraType == "buffs" and "HELPFUL" or "HARMFUL"
+					local effectiveFilter = filterValue ~= "ALL" and (baseFilter .. "|" .. filterValue) or baseFilter
+					ok, err = pcall(scan, frame.auras, pair.parent, childAuraType, pair.childConfig, pair.parentConfig, effectiveFilter)
 					if not ok and not pair.parent.hasErrored then
 						ShadowUF:Print("Error scanning sequential auras (logged once): " .. tostring(err))
 						pair.parent.hasErrored = true

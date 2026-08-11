@@ -84,13 +84,8 @@ local function getDispelFilters(value)
 end
 Health.GetDispelFilters = getDispelFilters
 
--- UnitCanAssist can return secret booleans on restricted maps, nil means unreadable
-local function isUnitAssist(unit)
-	local ok, assist = pcall(UnitCanAssist, "player", unit)
-	if( not ok or issecretvalue(assist) ) then return nil end
-	return assist and true or false
-end
-Health.IsUnitAssist = isUnitAssist
+-- Neither side applies on units we can neither help nor harm (cross-faction warmode off), mute via never-matching candidates
+local MUTE_CANDIDATES = { includeDispelTypes = {} }
 
 local function createDispelSlot(frame, dispelFilter)
 	if( frame.healthBar.dispelSlot ) then return true end
@@ -152,6 +147,9 @@ function Health:UpdateDispelSlot(frame)
 		frame.healthBar.dispelSlot:SetEnabled(false)
 		frame.healthBar.dispelSlot:Hide()
 		frame.healthBar.dispelSlot = nil
+		-- The fresh slot starts on the assist filter with no candidates, drop the stale mirrors
+		frame.healthBar.dispelSlotFilter = nil
+		frame.healthBar.dispelSlotMuted = nil
 	end
 
 	if( not frame.healthBar.dispelSlot and not createDispelSlot(frame, filters.assist) ) then return end
@@ -159,21 +157,31 @@ function Health:UpdateDispelSlot(frame)
 	local container = frame.healthBar.dispelSlot
 	local inCombat = InCombatLockdown()
 
-	-- Pick the side matching the unit's reaction, keep the current filter while it's unreadable
+	-- Pick the side matching the unit's reaction, mute when neither side applies
 	local dispelFilter = frame.healthBar.dispelSlotFilter or filters.assist
+	local muted = frame.healthBar.dispelSlotMuted
 	if( frame.unit and not frame.configMode ) then
-		local assist = isUnitAssist(frame.unit)
-		if( assist == true ) then
+		local state = ShadowUF.GetUnitReactionState(frame.unit)
+		if( state == "assist" ) then
 			dispelFilter = filters.assist
-		elseif( assist == false ) then
+			muted = false
+		elseif( state == "attack" ) then
 			dispelFilter = filters.noassist
+			muted = false
+		else
+			muted = true
 		end
 	end
 
-	-- Slot filter strings are runtime-mutable, mode and reaction switches apply live
+	-- Slot filter strings and candidate filters are runtime-mutable, mode and reaction switches apply live
 	if( frame.healthBar.dispelSlotFilter ~= dispelFilter ) then
 		if( pcall(container.SetAuraSlotFilterString, container, "dispel", dispelFilter) ) then
 			frame.healthBar.dispelSlotFilter = dispelFilter
+		end
+	end
+	if( muted ~= frame.healthBar.dispelSlotMuted ) then
+		if( pcall(container.SetAuraSlotCandidateFilters, container, "dispel", muted and MUTE_CANDIDATES or nil) ) then
+			frame.healthBar.dispelSlotMuted = muted
 		end
 	end
 	if( frame.unit and not frame.configMode ) then
