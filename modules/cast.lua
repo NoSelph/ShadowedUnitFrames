@@ -2,6 +2,24 @@ local Cast = {}
 local L = ShadowUF.L
 local FADE_TIME = 0.30
 
+-- ColorMixin cache for SetVertexColorFromBoolean, rebuilt whenever the layout is applied
+local fillUninterruptible, fillCast, fillChannel
+local bgUninterruptible, bgCast, bgChannel
+
+local function refreshCastColors()
+	local colors = ShadowUF.db.profile.castColors
+	local alpha = ShadowUF.db.profile.bars.alpha
+	local bgAlpha = ShadowUF.db.profile.bars.backgroundAlpha
+
+	fillUninterruptible = CreateColor(colors.uninterruptible.r, colors.uninterruptible.g, colors.uninterruptible.b, alpha)
+	fillCast = CreateColor(colors.cast.r, colors.cast.g, colors.cast.b, alpha)
+	fillChannel = CreateColor(colors.channel.r, colors.channel.g, colors.channel.b, alpha)
+
+	bgUninterruptible = CreateColor(colors.uninterruptible.r, colors.uninterruptible.g, colors.uninterruptible.b, bgAlpha)
+	bgCast = CreateColor(colors.cast.r, colors.cast.g, colors.cast.b, bgAlpha)
+	bgChannel = CreateColor(colors.channel.r, colors.channel.g, colors.channel.b, bgAlpha)
+end
+
 ShadowUF:RegisterModule(Cast, "castBar", L["Cast bar"], true)
 
 -- Fake units use polling since events don't fire for them
@@ -127,6 +145,8 @@ function Cast:OnEnable(frame)
 end
 
 function Cast:OnLayoutApplied(frame, config)
+	refreshCastColors()
+
 	if( not frame.visibility.castBar ) then return end
 
 	-- Set textures
@@ -135,24 +155,10 @@ function Cast:OnLayoutApplied(frame, config)
 	frame.castBar.bar:GetStatusBarTexture():SetHorizTile(false)
 	frame.castBar.background:SetVertexColor(0, 0, 0, 0)
 	frame.castBar.background:SetHorizTile(false)
-	
-	-- Create overlay StatusBar for non-interruptible casts (animates with cast)
-	if (not frame.castBar.uninterruptibleOverlay) then
-		frame.castBar.uninterruptibleOverlay = CreateFrame("StatusBar", nil, frame.castBar.bar)
-		frame.castBar.uninterruptibleOverlay:SetAlpha(0)
-	end
-	frame.castBar.uninterruptibleOverlay:SetStatusBarTexture(ShadowUF.Layout.mediaPath.statusbar)
-	local c = ShadowUF.db.profile.castColors.uninterruptible or {r = 0.6, g = 0.6, b = 0.6}
-	frame.castBar.uninterruptibleOverlay:SetStatusBarColor(c.r, c.g, c.b, 1)
-	frame.castBar.uninterruptibleOverlay:SetAllPoints(frame.castBar.bar)
-	frame.castBar.uninterruptibleOverlay:SetMinMaxValues(0, 1)
-	frame.castBar.uninterruptibleOverlay:SetValue(0)
 
 	-- Setup fill
 	frame.castBar.bar:SetOrientation(config.castBar.vertical and "VERTICAL" or "HORIZONTAL")
 	frame.castBar.bar:SetReverseFill(config.castBar.reverse and true or false)
-	frame.castBar.uninterruptibleOverlay:SetOrientation(config.castBar.vertical and "VERTICAL" or "HORIZONTAL")
-	frame.castBar.uninterruptibleOverlay:SetReverseFill(config.castBar.reverse and true or false)
 
 	-- Setup the main bar + icon
 	frame.castBar.bar:ClearAllPoints()
@@ -296,9 +302,6 @@ end
 
 local function channelOnUpdate(self, elapsed)
 	if( self.usingDurationObject ) then
-		local percent = self.durationObject:GetRemainingPercent()
-		local overlay = self.parent.castBar.uninterruptibleOverlay
-		if overlay then overlay:SetValue(percent) end
 		if( self.time.enabled ) then
 			local remaining = self.durationObject:GetRemainingDuration()
 			self.time:SetFormattedText("%.1f", remaining)
@@ -310,8 +313,6 @@ local function channelOnUpdate(self, elapsed)
 	self.elapsed = self.elapsed - (time - self.lastUpdate)
 	self.lastUpdate = time
 	self:SetValue(self.elapsed)
-	local overlay = self.parent.castBar.uninterruptibleOverlay
-	if overlay then overlay:SetValue(self.elapsed) end
 
 	if( self.elapsed <= 0 ) then
 		self.elapsed = 0
@@ -619,31 +620,11 @@ function Cast:UpdateCast(frame, unit, channelled, spell, displayName, icon, star
 		cast:SetScript("OnUpdate", castOnUpdate)
 	end
 	
-	-- Uninterruptible overlay (handles secret values and animates with bar)
-	local overlay = frame.castBar.uninterruptibleOverlay
-	if (overlay) then
-		-- Animate overlay same as main bar
-		if (cast.usingDurationObject and cast.durationObject) then
-			if (overlay.SetTimerDuration) then
-				local direction = channelled and Enum.StatusBarTimerDirection.RemainingTime or Enum.StatusBarTimerDirection.ElapsedTime
-				overlay:SetMinMaxValues(0, 1)
-				overlay:SetTimerDuration(cast.durationObject, Enum.StatusBarInterpolation.Immediate, direction)
-			end
-		else
-			overlay:SetMinMaxValues(0, cast.endSeconds)
-			overlay:SetValue(cast.elapsed)
-		end
-		-- Show/hide based on notInterruptible (handles secret values)
-		if (overlay.SetAlphaFromBoolean) then
-			overlay:SetAlphaFromBoolean(notInterruptible, 1, 0)
-		end
-	end
-	
-	-- Always use cast/channel color, overlay handles the non-interruptible visual
+	-- notInterruptible is secret in combat, so the color choice is resolved natively
 	if( cast.isChannelled ) then
-		setBarColor(cast, ShadowUF.db.profile.castColors.channel.r, ShadowUF.db.profile.castColors.channel.g, ShadowUF.db.profile.castColors.channel.b)
+		frame:SetBlockColorFromBoolean(cast, "castBar", notInterruptible, fillUninterruptible, fillChannel, bgUninterruptible, bgChannel)
 	else
-		setBarColor(cast, ShadowUF.db.profile.castColors.cast.r, ShadowUF.db.profile.castColors.cast.g, ShadowUF.db.profile.castColors.cast.b)
+		frame:SetBlockColorFromBoolean(cast, "castBar", notInterruptible, fillUninterruptible, fillCast, bgUninterruptible, bgCast)
 	end
 end
 

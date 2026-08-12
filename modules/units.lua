@@ -234,6 +234,40 @@ local function SetBlockColor(self, bar, key, r, g, b)
 	end
 end
 
+-- Color a block from a boolean that may be secret; colors are ColorMixin objects carrying their own alpha
+local function SetBlockColorFromBoolean(self, bar, key, value, colorTrue, colorFalse, bgColorTrue, bgColorFalse)
+	local bgColor = bar.background.overrideColor or bar.background.backgroundColor
+	local unitCfg = ShadowUF.db.profile.units[self.unitType][key]
+	local bgAlpha = ShadowUF.db.profile.bars.backgroundAlpha
+	local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+
+	bar:SetStatusBarColor(1, 1, 1, 1)
+
+	if( not unitCfg.invert ) then
+		if tex then
+			tex:SetVertexColorFromBoolean(value, colorTrue, colorFalse)
+		end
+
+		if( not bgColor ) then
+			bar.background:SetVertexColorFromBoolean(value, bgColorTrue, bgColorFalse)
+		else
+			bar.background:SetVertexColor(bgColor.r, bgColor.g, bgColor.b, bgAlpha)
+		end
+	else
+		bar.background:SetVertexColorFromBoolean(value, colorTrue, colorFalse)
+
+		local fr, fg, fb = 0, 0, 0
+		if bgColor then
+			fr, fg, fb = bgColor.r, bgColor.g, bgColor.b
+		end
+
+		local fillAlpha = 1 - bgAlpha
+		if tex then
+			tex:SetVertexColor(fr, fg, fb, fillAlpha)
+		end
+	end
+end
+
 -- Event handling
 local function OnEvent(self, event, unit, ...)
 	if( not unitEvents[event] or self.unit == unit or (self.unitEventOverrides and self.unitEventOverrides[event] == unit)) then
@@ -821,6 +855,7 @@ function Units:CreateUnit(...)
 	frame.ReregisterUnitEvents = ReregisterUnitEvents
 	frame.SetBarColor = SetBarColor
 	frame.SetBlockColor = SetBlockColor
+	frame.SetBlockColorFromBoolean = SetBlockColorFromBoolean
 	frame.FullUpdate = FullUpdate
 	frame.SetVisibility = SetVisibility
 	frame.UnitClassToken = ClassToken
