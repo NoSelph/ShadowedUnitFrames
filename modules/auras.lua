@@ -187,14 +187,21 @@ function Auras:DisableContainers(frame)
 end
 
 -- Aura positioning code
--- Key is "growH:growV" (e.g. "RIGHT:BOTTOM", "CENTER:TOP")
+-- Key is "growH:growV:spacingH:spacingV" (e.g. "RIGHT:BOTTOM:2:2")
 -- growH = LEFT/RIGHT/CENTER (icon fill direction within a row)
 -- growV = TOP/BOTTOM (row stacking direction)
+-- Spacing sits in the key so the cached closures capture the configured gaps
+
+-- Global icon spacing shared by the containers and the legacy renderer
+local function getAuraSpacing()
+	return ShadowUF.db.profile.auras.spacingH or 2, ShadowUF.db.profile.auras.spacingV or 2
+end
 
 local function getPositionKey(config, forcedGrowH, forcedGrowV)
 	local h = forcedGrowH or config.growH or "RIGHT"
 	local v = forcedGrowV or config.growV or "BOTTOM"
-	return h .. ":" .. v
+	local spacingH, spacingV = getAuraSpacing()
+	return h .. ":" .. v .. ":" .. spacingH .. ":" .. spacingV
 end
 
 -- Helper to get anchor, growth, and inset for positioning
@@ -209,7 +216,7 @@ end
 local positionData = setmetatable({}, {
 	__index = function(tbl, index)
 		local data = {}
-		local growH, growV = strsplit(":", index)
+		local growH, growV, spacingH, spacingV = strsplit(":", index)
 
 		data.isCenterGrowth = (growH == "CENTER")
 		local effectiveH = data.isCenterGrowth and "RIGHT" or growH
@@ -217,8 +224,8 @@ local positionData = setmetatable({}, {
 		data.xMod = (effectiveH == "RIGHT") and 1 or -1
 		data.yMod = (growV == "TOP") and 1 or -1
 
-		local auraX = 2
-		local colY = 2
+		local auraX = tonumber(spacingH) or 2
+		local colY = tonumber(spacingV) or 2
 
 		data.initialAnchor = function(button, offset)
 			button:ClearAllPoints()
@@ -253,6 +260,27 @@ local positionData = setmetatable({}, {
 		return tbl[index]
 	end,
 })
+
+-- The blizzard ring art is rounded and the square icon corners would poke through it
+-- The masked state lives on the region so a button can round several of them
+local function applyBlizzardIconMask(button, region, enabled)
+	if( not region ) then return end
+
+	if( enabled ) then
+		if( not button.iconMask ) then
+			button.iconMask = button:CreateMaskTexture()
+			button.iconMask:SetAtlas("UI-HUD-CoolDownManager-Mask")
+			button.iconMask:SetAllPoints(button)
+		end
+		if( not region.blizzardMasked ) then
+			region:AddMaskTexture(button.iconMask)
+			region.blizzardMasked = true
+		end
+	elseif( region.blizzardMasked ) then
+		region:RemoveMaskTexture(button.iconMask)
+		region.blizzardMasked = false
+	end
+end
 
 -- Helper to set first-button properties
 local function setupFirstButton(button, config, group, position)
@@ -396,14 +424,17 @@ local function updateButton(id, group, config)
 
 	if( ShadowUF.db.profile.auras.borderType == "" ) then
 		button.border:Hide()
+		applyBlizzardIconMask(button, button.icon, false)
 	elseif( ShadowUF.db.profile.auras.borderType == "blizzard" ) then
 		button.border:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
 		button.border:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
 		button.border:Show()
+		applyBlizzardIconMask(button, button.icon, true)
 	else
 		button.border:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. ShadowUF.db.profile.auras.borderType)
 		button.border:SetTexCoord(0, 1, 0, 1)
 		button.border:Show()
+		applyBlizzardIconMask(button, button.icon, false)
 	end
 
 	-- Set the button sizing
@@ -700,6 +731,8 @@ local function getContainerSignature(group, config, sections)
 	table.insert(structural, tostring(ShadowUF.db.profile.auraColors.disableDispel))
 	table.insert(structural, tostring(config.temporary and group.parent.unit == "player" and group.type == "buffs"))
 	table.insert(runtime, tostring(config.perRow * config.maxRows))
+	local spacingH, spacingV = getAuraSpacing()
+	table.insert(runtime, spacingH .. "x" .. spacingV)
 	local structuralSignature = table.concat(structural, ";")
 	return structuralSignature, structuralSignature .. "##" .. table.concat(runtime, ";")
 end
@@ -731,13 +764,36 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 		button:SetIcon(icon)
 
-		-- The SetAuraBorder region only shows when dispellable, so it needs its own art on top of a separate always-visible neutral border
+		-- A dispel region only shows when the aura has a type, the neutral ring comes from separate always visible art
 		if( borderType == "blizzard" ) then
-			local dispel = button:CreateTexture(nil, "OVERLAY")
+			-- Blizzard tints untyped auras with the None color, a red that only reads right on debuffs
+			-- Buffs take their neutral ring from an always visible grey base instead, matching the legacy renderer
+			if( auraType ~= "debuffs" ) then
+				local border = button:CreateTexture(nil, "OVERLAY")
+				border:SetPoint("CENTER", button)
+				border:SetSize(size, size)
+				border:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
+				border:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
+				border:SetVertexColor(0.6, 0.6, 0.6)
+				record.border = border
+			end
+			-- Same art and dispel tinting as the TargetFrame DispelBorder
+			-- PreserveAsset keeps the texture and routes the coloring through AuraUtil.SetAuraBorderColor like Blizzard's own frames
+			local dispel = button:CreateTexture(nil, "OVERLAY", nil, 1)
 			dispel:SetPoint("CENTER", button)
-			dispel:SetSize(size + 1, size + 1)
+			dispel:SetSize(size, size)
+			dispel:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
+			dispel:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
 			record.dispel = dispel
-			pcall(button.SetAuraBorder, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.BorderWithIcon or 1, showWhenHarmful = true, showWhenHelpful = true })
+			pcall(button.AddDispelTypeTexture, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, showWithoutDispelType = auraType == "debuffs" or nil })
+
+			-- Blizzard badges the dispel school in the corner, the Icon style leaves untyped auras blank on its own
+			local dispelIcon = button:CreateTexture(nil, "OVERLAY", nil, 2)
+			dispelIcon:SetPoint("TOPRIGHT", button, "TOPRIGHT", 2, 2)
+			dispelIcon:SetSize(size * 0.5, size * 0.5)
+			record.dispelIcon = dispelIcon
+			pcall(button.AddDispelTypeTexture, button, dispelIcon, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.Icon or 2, showWhenHarmful = true, showWhenHelpful = true })
+			applyBlizzardIconMask(button, icon, true)
 		elseif( borderType ~= "" ) then
 			local border = button:CreateTexture(nil, "OVERLAY")
 			border:SetPoint("CENTER", button)
@@ -758,7 +814,7 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 					dispel:SetPoint("CENTER", button)
 					dispel:SetSize(size + 1, size + 1)
 					dispel:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. borderType)
-					pcall(button.SetAuraBorder, button, dispel, { style = style, showWhenHarmful = true, showWhenHelpful = true, stealableFilter = stealableState, customDispelColorMap = colorMap })
+					pcall(button.AddDispelTypeTexture, button, dispel, { style = style, showWhenHarmful = true, showWhenHelpful = true, stealableFilter = stealableState, customDispelColorMap = colorMap })
 					return dispel
 				end
 
@@ -776,6 +832,10 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 		if( pandemicColor ) then
 			local pandemic = Auras:CreatePandemicOverlay(button)
 			record.pandemic = pandemic
+			-- The region becomes an inbound script object once Blizzard owns it so the mask goes on first
+			if( borderType == "blizzard" ) then
+				applyBlizzardIconMask(button, pandemic, true)
+			end
 			pcall(button.AddPandemicRegion, button, pandemic)
 		end
 
@@ -784,6 +844,10 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 		cooldown:SetReverse(true)
 		cooldown:SetDrawEdge(false)
 		cooldown:SetDrawSwipe(true)
+		-- The swipe takes no mask, Blizzard ships a pre-rounded asset that matches the rounded icon
+		if( borderType == "blizzard" ) then
+			cooldown:SetSwipeTexture("Interface\\HUD\\UI-HUD-CoolDownManager-Icon-Swipe")
+		end
 		cooldown:SetSwipeColor(0, 0, 0, ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8)
 		cooldown:SetHideCountdownNumbers(hideCC)
 		if( not ShadowUF.db.profile.auras.disableCooldown ) then
@@ -842,6 +906,8 @@ local function configureGroupContainer(frame, group, config, extraSections)
 		if( group.containerStructural == structural and group.container.SetAuraGroupFilterString ) then
 			fastPathed = true
 			local maxAuras = config.perRow * config.maxRows
+			local spacingH, spacingV = getAuraSpacing()
+			local groupLayout = { elementSpacing = spacingH, lineSpacing = spacingV }
 			for index, section in ipairs(sections) do
 				local key = "section" .. index
 				local sortValue = AuraContainerSortMethod and AuraContainerSortMethod[section.sortMethod or "Default"] or 0
@@ -850,10 +916,15 @@ local function configureGroupContainer(frame, group, config, extraSections)
 				local okFilter = pcall(group.container.SetAuraGroupFilterString, group.container, key, section.filterString)
 				local okSort = pcall(group.container.SetAuraGroupSortMethod, group.container, key, sortValue, sortDirection)
 				local okMax = pcall(group.container.SetAuraGroupMaxFrameCount, group.container, key, section.maxCount or maxAuras)
-				if( not (okFilter and okSort and okMax) ) then
+				-- Missing setter counts as success so spacing degrades quietly on builds without it
+				local okLayout = not group.container.SetAuraGroupLayout or pcall(group.container.SetAuraGroupLayout, group.container, key, groupLayout)
+				if( not (okFilter and okSort and okMax and okLayout) ) then
 					fastPathed = false
 					break
 				end
+			end
+			if( fastPathed ) then
+				pcall(group.container.SetItemEnchantmentLayout, group.container, groupLayout)
 			end
 		end
 
@@ -888,12 +959,15 @@ local function configureGroupContainer(frame, group, config, extraSections)
 		container:SetFrameLevel(group:GetFrameLevel() + 1)
 
 		local maxAuras = config.perRow * config.maxRows
+		local spacingH, spacingV = getAuraSpacing()
+		local groupLayout = { elementSpacing = spacingH, lineSpacing = spacingV }
 		for index, section in ipairs(sections) do
 			-- Visible counts are secret so totals can't be balanced across sections, each one is capped on its own
 			local addOk, err = pcall(container.AddAuraGroup, container, "section" .. index, section.filterString, {
 				maxFrameCount = section.maxCount or maxAuras,
 				initializeFrame = makeButtonInitializer(group, config, section, index),
 				sortMethod = AuraContainerSortMethod and section.sortMethod and AuraContainerSortMethod[section.sortMethod] or nil,
+				layout = groupLayout,
 			})
 			if( not addOk and not group.hasContainerError ) then
 				ShadowUF:Print("Error adding aura group '" .. tostring(section.filterString) .. "' (logged once): " .. tostring(err))
@@ -907,6 +981,7 @@ local function configureGroupContainer(frame, group, config, extraSections)
 			local enchantSection = { size = config.size, auraType = "buffs" }
 			pcall(container.AddItemEnchantment, container, slots.MainHand, { initializeFrame = makeButtonInitializer(group, config, enchantSection, 0) })
 			pcall(container.AddItemEnchantment, container, slots.OffHand, { initializeFrame = makeButtonInitializer(group, config, enchantSection, 0) })
+			pcall(container.SetItemEnchantmentLayout, container, groupLayout)
 		end
 	end
 
@@ -942,7 +1017,8 @@ local function configureGroupContainer(frame, group, config, extraSections)
 	if( AnchorUtil and AnchorUtil.FlowDirection ) then
 		pcall(setGrowthDirection, container, AnchorUtil.FlowDirection[FLOW_H[growH]], AnchorUtil.FlowDirection[FLOW_V[growV]])
 	end
-	pcall(setMaximumLineSize, container, config.perRow * (config.size + 2))
+	local lineSpacingH = (getAuraSpacing())
+	pcall(setMaximumLineSize, container, config.perRow * (config.size + lineSpacingH) + 2)
 
 	container:Show()
 
@@ -956,6 +1032,7 @@ local function configureGroupContainer(frame, group, config, extraSections)
 	local motionEnabled = ShadowUF.db.profile.locked and true or false
 	local tooltipMode = ShadowUF.db.profile.tooltipCombat
 	local hideAuraTooltips = (tooltipMode == true or tooltipMode == "all") and true or false
+	local blizzardBorder = ShadowUF.db.profile.auras.borderType == "blizzard"
 	for _, record in ipairs(group.containerButtons) do
 		-- Sizes are runtime (not in the structural signature), resize the button and its regions to the current section size
 		local size
@@ -966,9 +1043,12 @@ local function configureGroupContainer(frame, group, config, extraSections)
 		end
 		if( size ) then
 			record.button:SetSize(size, size)
-			if( record.border ) then record.border:SetSize(size + 1, size + 1) end
-			if( record.dispel ) then record.dispel:SetSize(size + 1, size + 1) end
-			if( record.dispelAlt ) then record.dispelAlt:SetSize(size + 1, size + 1) end
+			-- The blizzard ring art sits flush with the icon, the custom art needs a pixel of outset
+			local borderSize = blizzardBorder and size or (size + 1)
+			if( record.border ) then record.border:SetSize(borderSize, borderSize) end
+			if( record.dispel ) then record.dispel:SetSize(borderSize, borderSize) end
+			if( record.dispelAlt ) then record.dispelAlt:SetSize(borderSize, borderSize) end
+			if( record.dispelIcon ) then record.dispelIcon:SetSize(size * 0.5, size * 0.5) end
 		end
 
 		pcall(record.button.SetMouseMotionEnabled, record.button, motionEnabled)
@@ -1651,14 +1731,17 @@ function Auras:ShowBossDebuffsPlaceholders(frame)
 		-- Border (same logic as updateButton)
 		if ShadowUF.db.profile.auras.borderType == "" then
 			button.border:Hide()
+			applyBlizzardIconMask(button, button.icon, false)
 		elseif ShadowUF.db.profile.auras.borderType == "blizzard" then
 			button.border:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
 			button.border:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
 			button.border:Show()
+			applyBlizzardIconMask(button, button.icon, true)
 		else
 			button.border:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. ShadowUF.db.profile.auras.borderType)
 			button.border:SetTexCoord(0, 1, 0, 1)
 			button.border:Show()
+			applyBlizzardIconMask(button, button.icon, false)
 		end
 		button.border:SetVertexColor(0.80, 0.20, 0.80)
 
@@ -1814,6 +1897,7 @@ local function showPandemicPreview(button)
 		button.pandemic = Auras:CreatePandemicOverlay(button)
 	end
 
+	applyBlizzardIconMask(button, button.pandemic, ShadowUF.db.profile.auras.borderType == "blizzard")
 	button.pandemic:SetColorTexture(color.r or 1, color.g or 1, color.b or 1, color.a or 0.35)
 	button.pandemic:Show()
 end

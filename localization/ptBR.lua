@@ -1,4 +1,4 @@
-if( GetLocale() ~= "ptBR" ) then return end
+﻿if( GetLocale() ~= "ptBR" ) then return end
 local L = {}
 L["%d auras in group"] = [=[%d auras em grupo
 
@@ -69,11 +69,14 @@ L["Expiration (yours first)"] = "Expiração (suas primeiro)"
 L["F"] = "F"
 L["Filter"] = "Filtro"
 L["Frame changes are deferred while in combat and will apply afterwards."] = "Mudanças de quadro são adiadas em combate e aplicadas depois."
+L["Gap in pixels between aura icons on the same row, negative values overlap them."] = "Espaço em pixels entre os ícones de aura na mesma fileira, valores negativos os sobrepõem."
+L["Gap in pixels between aura rows, negative values overlap them."] = "Espaço em pixels entre as fileiras de auras, valores negativos as sobrepõem."
 L["Group"] = "Grupo"
 L["Group this aura will be listed under. Both a spell and a group are required to add an aura."] = "Grupo em que esta aura será listada. Um feitiço e um grupo são necessários para adicionar uma aura."
 L["Hide matching spells"] = "Ocultar os feitiços listados"
 L["Hides the stack count text on all Shadowed Unit Frame auras."] = "Oculta o texto de pilhas em todas as auras do Shadowed Unit Frames."
 L["HoTs & raid frames buffs"] = "HoTs e buffs de quadros de raide"
+L["Horizontal spacing"] = "Espaçamento horizontal"
 L["How auras in this frame are ordered. Sorting is per section."] = "Como as auras deste quadro são ordenadas. A ordenação é por seção."
 L["Important only"] = "Apenas importantes"
 L["In combat, Blizzard only applies spell filters to buffs on friendly units and debuffs on hostile units, plus spells it flags as never secret."] = "Em combate, a Blizzard só aplica filtros de feitiços a buffs de unidades aliadas e debuffs de unidades hostis, além de feitiços marcados como nunca secretos."
@@ -131,6 +134,7 @@ L["Unit frames cannot be unlocked while in combat."] = "Os quadros de unidade n�
 L["Unknown spell. Enter a spell ID, a spell link or an exact spell name."] = "Feitiço desconhecido. Insira um ID de feitiço, um link de feitiço ou o nome exato."
 L["Use Boss Mod Cast Name overrides"] = "Usar nomes de feitiços dos boss mods"
 L["Use spell name overrides provided by boss mods (BigWigs) on the cast bars."] = "Usa os nomes de feitiços fornecidos por boss mods (BigWigs) nas barras de lançamento."
+L["Vertical spacing"] = "Espaçamento vertical"
 L["Which auras to show in this frame"] = "Quais auras mostrar neste quadro"
 L["Which tooltips to hide while in combat. Aura tooltips are shown natively by the game and can be kept visible."] = "Quais dicas ocultar em combate. As dicas de auras são mostradas nativamente pelo jogo e podem ficar visíveis."
 L["You can then use these filters in the Auras tab of the player, target, raid, etc. modules, or assign them per zone type in the Zone Filters tab."] = "Depois você pode usar esses filtros na aba Auras dos módulos jogador, alvo, raide etc., ou atribuí-los por tipo de zona na aba Filtros de zona."

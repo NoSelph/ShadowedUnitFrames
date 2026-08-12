@@ -1,4 +1,4 @@
-
+﻿
 if( GetLocale() ~= "koKR" ) then return end
 local L = {}
 L["%d auras in group"] = "그룹 내 오라 %d개"
@@ -59,11 +59,14 @@ L["Expiration"] = "만료"
 L["Expiration (yours first)"] = "만료(내 것 우선)"
 L["Filter"] = "필터"
 L["Frame changes are deferred while in combat and will apply afterwards."] = "창 변경은 전투 중 보류되며 전투 후 적용됩니다."
+L["Gap in pixels between aura icons on the same row, negative values overlap them."] = "같은 줄에 있는 오라 아이콘 사이의 간격(픽셀)입니다. 음수 값은 아이콘을 겹치게 합니다."
+L["Gap in pixels between aura rows, negative values overlap them."] = "오라 줄 사이의 간격(픽셀)입니다. 음수 값은 줄을 겹치게 합니다."
 L["Group"] = "그룹"
 L["Group this aura will be listed under. Both a spell and a group are required to add an aura."] = "이 오라가 표시될 그룹입니다. 오라를 추가하려면 주문과 그룹이 모두 필요합니다."
 L["Hide matching spells"] = "목록의 주문 숨기기"
 L["Hides the stack count text on all Shadowed Unit Frame auras."] = "모든 Shadowed Unit Frames 오라의 중첩 표시 텍스트를 숨깁니다."
 L["HoTs & raid frames buffs"] = "HoT 및 공격대 창 버프"
+L["Horizontal spacing"] = "가로 간격"
 L["How auras in this frame are ordered. Sorting is per section."] = "이 창의 오라 정렬 방식입니다. 정렬은 섹션별로 적용됩니다."
 L["If you don't, you will be unable to use any combo point features (Chi, Holy Power, Combo Points, Aura Points, etc) until you do so."] = "그렇게 하지 않으면 연계 점수 기능(기, 신성한 힘, 연계 점수, 오라 점수 등)을 사용할 수 없습니다."
 L["Important only"] = "중요한 것만"
@@ -120,6 +123,7 @@ L["Unit frames cannot be unlocked while in combat."] = "전투 중에는 유닛 
 L["Unknown spell. Enter a spell ID, a spell link or an exact spell name."] = "알 수 없는 주문입니다. 주문 ID, 주문 링크 또는 정확한 주문 이름을 입력하세요."
 L["Use Boss Mod Cast Name overrides"] = "보스 모드의 주문 이름 사용"
 L["Use spell name overrides provided by boss mods (BigWigs) on the cast bars."] = "시전 바에 보스 모드(BigWigs)가 제공하는 주문 이름을 사용합니다."
+L["Vertical spacing"] = "세로 간격"
 L["Which auras to show in this frame"] = "이 창에 표시할 오라"
 L["Which tooltips to hide while in combat. Aura tooltips are shown natively by the game and can be kept visible."] = "전투 중 숨길 툴팁입니다. 오라 툴팁은 게임이 기본으로 표시하며 계속 보이게 할 수 있습니다."
 L["You can then use these filters in the Auras tab of the player, target, raid, etc. modules, or assign them per zone type in the Zone Filters tab."] = "이후 이 필터를 플레이어, 대상, 공격대 등 모듈의 오라 탭에서 사용하거나 구역 필터 탭에서 구역 유형별로 지정할 수 있습니다."

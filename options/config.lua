@@ -1398,6 +1398,34 @@ local function loadGeneralOptions()
 									queueLayoutReload()
 								end,
 							},
+							spacingH = {
+								order = 2.2,
+								type = "range",
+								name = L["Horizontal spacing"],
+								desc = L["Gap in pixels between aura icons on the same row, negative values overlap them."],
+								min = -10, max = 30, step = 1,
+								get = function(info)
+									return ShadowUF.db.profile.auras.spacingH or 2
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.auras.spacingH = value ~= 2 and value or nil
+									queueLayoutReload()
+								end,
+							},
+							spacingV = {
+								order = 2.4,
+								type = "range",
+								name = L["Vertical spacing"],
+								desc = L["Gap in pixels between aura rows, negative values overlap them."],
+								min = -10, max = 30, step = 1,
+								get = function(info)
+									return ShadowUF.db.profile.auras.spacingV or 2
+								end,
+								set = function(info, value)
+									ShadowUF.db.profile.auras.spacingV = value ~= 2 and value or nil
+									queueLayoutReload()
+								end,
+							},
 							pandemic = {
 								order = 3,
 								type = "toggle",
