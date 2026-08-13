@@ -161,6 +161,10 @@ function Auras:OnEnable(frame)
 	frame:RegisterNormalEvent("ZONE_CHANGED_NEW_AREA", self, "UpdateFilter")
 	-- Reaction flips re-gate the dispel-based debuff sections without a unit change
 	frame:RegisterUnitEvent("UNIT_FACTION", self, "Update")
+	-- Instance and phase transitions move units in and out of the area of interest
+	frame:RegisterUnitEvent("UNIT_PHASE", self, "Update")
+	frame:RegisterUnitEvent("UNIT_CONNECTION", self, "Update")
+	frame:RegisterUnitEvent("UNIT_AURA", self, "CheckUnitReachable")
 	frame:RegisterUpdateFunc(self, "Update")
 
 	self:UpdateFilter(frame)
@@ -1133,22 +1137,26 @@ function Auras:ConfigureContainers(frame, config)
 	self:UpdateContainerCandidateFilters(frame)
 end
 
--- Dispel-based debuff filters only make sense on units the player can assist, mute them on enemies and neutrals
+-- Dispel-based debuff filters only make sense on units the player can assist, the buff ones (purge and steal) only on units they can't, so the wrong side gets muted
 -- Same never-matching candidate shape as the indicator slot mute
 local MUTE_CANDIDATES = { includeDispelTypes = {} }
-local REACTION_GATED_TOKENS = { RAID = true, RAID_PLAYER_DISPELLABLE = true, DISPELLABLE = true }
+local DEBUFF_GATED_TOKENS = { RAID = true, RAID_PLAYER_DISPELLABLE = true, DISPELLABLE = true }
+-- RAID buffs stay ungated, that's the class buff filter and it's ally-facing
+local BUFF_GATED_TOKENS = { RAID_PLAYER_DISPELLABLE = true, DISPELLABLE = true }
 
--- Dispel-based debuff filters only apply to units we can actually help
 local function resolveAssist(unit)
 	return ShadowUF.GetUnitReactionState(unit) == "assist"
 end
 
-local function isReactionGatedSection(section)
-	if( section.auraType ~= "debuffs" or not section.tokens ) then return false end
+-- Returns the reaction state the section requires to be active ("assist"/"noassist"), nil when ungated
+local function sectionReactionGate(section)
+	if( not section.tokens ) then return nil end
+	local gated = section.auraType == "debuffs" and DEBUFF_GATED_TOKENS or BUFF_GATED_TOKENS
 	for token in pairs(section.tokens) do
-		if( REACTION_GATED_TOKENS[token] ) then return true end
+		if( gated[token] ) then
+			return section.auraType == "debuffs" and "assist" or "noassist"
+		end
 	end
-	return false
 end
 
 -- Candidate filters are runtime-mutable (unlike filter strings), filter edits and zone changes need no rebuild
@@ -1211,9 +1219,10 @@ function Auras:UpdateContainerCandidateFilters(frame)
 					if( include or exclude ) then
 						filters = { includeSpellIDs = include, excludeSpellIDs = exclude }
 					end
-					if( isReactionGatedSection(section) ) then
+					local gate = sectionReactionGate(section)
+					if( gate ) then
 						hasGatedSections = true
-						if( not assist ) then
+						if( (gate == "assist") ~= assist ) then
 							filters = MUTE_CANDIDATES
 						end
 					end
@@ -1233,6 +1242,14 @@ function Auras:UpdateContainerCandidateFilters(frame)
 	frame.auras.hasReactionGatedSections = hasGatedSections
 end
 
+-- Crossing the area of interest boundary swaps the forwarded aura payload, so UNIT_AURA fires exactly when the filters start (or stop) misbehaving
+function Auras:CheckUnitReachable(frame)
+	if( frame.configMode or not frame.unit or frame.auras.containersReachable == nil ) then return end
+	if( frame.auras.containersReachable ~= ShadowUF.IsUnitReachable(frame.unit) ) then
+		self:UpdateContainers(frame)
+	end
+end
+
 -- The container refreshes itself on UNIT_AURA (never read that payload), we only track unit identity here
 function Auras:UpdateContainers(frame)
 	-- Live path owns the containers again, let config mode redo its pass if we go back to it
@@ -1246,6 +1263,9 @@ function Auras:UpdateContainers(frame)
 		if( ok ) then identity = guid end
 	end
 
+	local reachable = frame.unit and ShadowUF.IsUnitReachable(frame.unit) or false
+	frame.auras.containersReachable = reachable
+
 	for _, auraType in ipairs(AURA_TYPES) do
 		for i = 1, 6 do
 			local group = frame.auras[auraType .. i]
@@ -1253,7 +1273,7 @@ function Auras:UpdateContainers(frame)
 			if( container and not group.containerMerged and not group.containerDisabled ) then
 				if( frame.unit ) then
 					local ok = pcall(container.SetUnit, container, frame.unit)
-					if( ok ) then
+					if( ok and reachable ) then
 						container:SetEnabled(true)
 						-- Show is blocked in combat (inherited protection)
 						if( not InCombatLockdown() ) then
@@ -1271,7 +1291,7 @@ function Auras:UpdateContainers(frame)
 							pcall(container.UpdateAllAuras, container)
 						end
 					else
-						-- Token rejected (compound units, etc.), keep it quiet
+						-- SetEnabled drops the event registrations and clears the displayed buttons on its own
 						container:SetEnabled(false)
 					end
 				else

@@ -165,6 +165,9 @@ function Indicators:OnEnable(frame)
 	frame:RegisterUnitEvent("UNIT_AURA", self, "UpdateAuras")
 	-- UNIT_FACTION re-runs the slot mute gate when reaction flips without a unit change (mind control, duels)
 	frame:RegisterUnitEvent("UNIT_FACTION", self, "UpdateAuras")
+	-- Instance and phase transitions move units in and out of the area of interest
+	frame:RegisterUnitEvent("UNIT_PHASE", self, "UpdateAuras")
+	frame:RegisterUnitEvent("UNIT_CONNECTION", self, "UpdateAuras")
 	frame:RegisterUpdateFunc(self, "UpdateAuras")
 end
 
@@ -754,6 +757,7 @@ function Indicators:BuildIndicatorSlots(frame)
 	frame.auraIndicators.slotRecords = slotRecords
 	frame.auraIndicators.slotIdentity = nil
 	frame.auraIndicators.slotsAssist = nil
+	frame.auraIndicators.slotsReachable = nil
 	slotContainerFrames[frame] = true
 	ensureSlotCombatWatcher()
 end
@@ -851,6 +855,15 @@ function Indicators:UpdateAuras(frame)
 	local slotContainer = frame.auraIndicators and frame.auraIndicators.slotContainer
 	if( slotContainer ) then
 		pcall(slotContainer.SetUnit, slotContainer, frame.unit)
+
+		-- Out of the area of interest the candidate filters fail open and every aura lights every slot, silence the container there
+		if( frame.unit and not frame.configMode ) then
+			local reachable = ShadowUF.IsUnitReachable(frame.unit)
+			if( frame.auraIndicators.slotsReachable ~= reachable ) then
+				frame.auraIndicators.slotsReachable = reachable
+				pcall(slotContainer.SetEnabled, slotContainer, reachable)
+			end
+		end
 
 		-- Each slot only stays active on the side where its spell ID filter is enforced; units that can neither be helped nor harmed (cross-faction warmode off) mute both sides
 		if( frame.unit and not frame.configMode and frame.auraIndicators.slotRecords ) then

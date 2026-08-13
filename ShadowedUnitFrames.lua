@@ -172,6 +172,21 @@ function ShadowUF.GetUnitReactionState(unit)
 	return isEnemy and "attack" or "none"
 end
 
+-- Units out of the area of interest (other instance, phase, or simply too far) forward aura data the container filters cannot evaluate, so every section ends up matching everything
+-- Unknown states count as reachable, an unusable token is already caught by the SetUnit pcalls
+function ShadowUF.IsUnitReachable(unit)
+	local ok, connected = pcall(UnitIsConnected, unit)
+	if( ok and not issecretvalue(connected) and not connected ) then return false end
+
+	local okVisible, visible = pcall(UnitIsVisible, unit)
+	if( okVisible and not issecretvalue(visible) and not visible ) then return false end
+
+	local okPhase, phase = pcall(UnitPhaseReason, unit)
+	if( okPhase and not issecretvalue(phase) and phase ~= nil ) then return false end
+
+	return true
+end
+
 function ShadowUF:CheckBuild()
 	local build = select(4, GetBuildInfo())
 	if( self.db.profile.wowBuild == build ) then return end
