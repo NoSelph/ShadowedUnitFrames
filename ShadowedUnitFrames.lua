@@ -5,7 +5,7 @@
 ShadowUF = select(2, ...)
 
 local L = ShadowUF.L
-ShadowUF.dbRevision = 71
+ShadowUF.dbRevision = 72
 ShadowUF.playerUnit = "player"
 ShadowUF.enabledUnits = {}
 ShadowUF.modules = {}
@@ -237,6 +237,31 @@ function ShadowUF:CheckUpgrade()
 	auraColors.removable = auraColors.removable or {r = 1, g = 0.70, b = 0.10}
 	auraColors.pandemic = auraColors.pandemic or {r = 1, g = 1, b = 1, a = 0.35}
 
+	if( revision <= 71 ) then
+		-- Aura frame text settings sit behind an explicit opt-in, a stored 0 offset means unset so it doesn't count as a customization
+		local textKeys = {"timerAnchor", "timerX", "timerY", "stackAnchor", "stackX", "stackY", "cooldownFontSize", "cooldownFontColor", "stackFontSize", "stackFontColor", "disableBlizzardCC", "disableStacks"}
+		for _, unitCfg in pairs(self.db.profile.units) do
+			if( unitCfg.auras ) then
+				for _, auraType in pairs({"buffs", "debuffs"}) do
+					if( type(unitCfg.auras[auraType]) == "table" ) then
+						for _, frameCfg in pairs(unitCfg.auras[auraType]) do
+							if( type(frameCfg) == "table" ) then
+								for _, key in pairs({"timerX", "timerY", "stackX", "stackY"}) do
+									if( frameCfg[key] == 0 ) then frameCfg[key] = nil end
+								end
+								for _, key in pairs(textKeys) do
+									if( frameCfg[key] ~= nil ) then
+										frameCfg.textOverride = true
+										break
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
 	if( revision <= 70 ) then
 		-- Right-click cancel opt-out moved from the per aura frame clickThrough to a global toggle, carry over player buff settings
 		local playerBuffs = self.db.profile.units.player and self.db.profile.units.player.auras and self.db.profile.units.player.auras.buffs

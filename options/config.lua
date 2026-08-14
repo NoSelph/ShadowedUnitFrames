@@ -11,7 +11,6 @@ local GetSpellTexture = C_Spell.GetSpellTexture
 
 -- Shared by the aura text position selects (per-frame tab and the General defaults)
 local auraTextAnchorValues = {
-	[""] = L["Default"],
 	["TOPLEFT"] = L["Top Left"], ["TOP"] = L["Top"], ["TOPRIGHT"] = L["Top Right"],
 	["LEFT"] = L["Left"], ["CENTER"] = L["Center"], ["RIGHT"] = L["Right"],
 	["BOTTOMLEFT"] = L["Bottom Left"], ["BOTTOM"] = L["Bottom"], ["BOTTOMRIGHT"] = L["Bottom Right"],
@@ -1131,7 +1130,11 @@ local function loadGeneralOptions()
 								name = L["Font"],
 								dialogControl = "LSM30_Font",
 								values = getMediaData,
-								arg = "font.cooldownName",
+								get = function(info) return ShadowUF.db.profile.font.cooldownName or ShadowUF.db.profile.font.name end,
+								set = function(info, value)
+									ShadowUF.db.profile.font.cooldownName = value
+									queueLayoutReload()
+								end,
 							},
 							size = {
 								order = 10,
@@ -1202,9 +1205,9 @@ local function loadGeneralOptions()
 								type = "select",
 								name = L["Anchor point"],
 								values = auraTextAnchorValues,
-								get = function(info) return ShadowUF.db.profile.font.cooldownAnchor or "" end,
+								get = function(info) return ShadowUF.db.profile.font.cooldownAnchor or "CENTER" end,
 								set = function(info, value)
-									ShadowUF.db.profile.font.cooldownAnchor = value ~= "" and value or nil
+									ShadowUF.db.profile.font.cooldownAnchor = value
 									queueLayoutReload()
 								end,
 							},
@@ -1245,7 +1248,7 @@ local function loadGeneralOptions()
 									for _, name in pairs(SML:List("font")) do list[name] = name end
 									return list
 								end,
-								get = function(info) return ShadowUF.db.profile.font.stackName end,
+								get = function(info) return ShadowUF.db.profile.font.stackName or "Myriad Condensed Web" end,
 								set = function(info, value)
 									ShadowUF.db.profile.font.stackName = value
 									queueLayoutReload()
@@ -1348,9 +1351,9 @@ local function loadGeneralOptions()
 								type = "select",
 								name = L["Anchor point"],
 								values = auraTextAnchorValues,
-								get = function(info) return ShadowUF.db.profile.font.stackAnchor or "" end,
+								get = function(info) return ShadowUF.db.profile.font.stackAnchor or "BOTTOMRIGHT" end,
 								set = function(info, value)
-									ShadowUF.db.profile.font.stackAnchor = value ~= "" and value or nil
+									ShadowUF.db.profile.font.stackAnchor = value
 									queueLayoutReload()
 								end,
 							},
@@ -3634,19 +3637,32 @@ local function loadUnitOptions()
 			local auraType = info[#(info) - 3]
 			setAuraFrameValue(info[2], auraType, frameIndex, info[#(info)], value)
 		end
-		local function textFieldDisabled(info)
+		local function frameDisabled(info)
 			local auraType = info[#(info) - 3]
 			local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
 			return not (cfg and cfg.enabled)
 		end
-		local function textAnchorGet(info)
-			local globalKey = info[#(info)] == "timerAnchor" and "cooldownAnchor" or "stackAnchor"
-			return textFieldGet(info) or ShadowUF.db.profile.font[globalKey] or ""
+		local function textFieldDisabled(info)
+			local auraType = info[#(info) - 3]
+			local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+			return not (cfg and cfg.enabled and cfg.textOverride)
 		end
-		local function textAnchorSet(info, value)
-			textFieldSet(info, value ~= "" and value or nil)
+		local function textAnchorGet(info)
+			local timer = info[#(info)] == "timerAnchor"
+			local globalKey = timer and "cooldownAnchor" or "stackAnchor"
+			return textFieldGet(info) or ShadowUF.db.profile.font[globalKey] or (timer and "CENTER" or "BOTTOMRIGHT")
 		end
 		local textArgs = {
+				textOverride = {
+					order = 0,
+					type = "toggle",
+					name = L["Override General text settings"],
+					desc = L["Use the text settings below instead of the ones from the General tab."],
+					width = "full",
+					get = function(info) return textFieldGet(info) and true or false end,
+					set = textFieldSet,
+					disabled = frameDisabled,
+				},
 				timerHeader = {
 					order = 0.1,
 					type = "header",
@@ -3667,11 +3683,7 @@ local function loadUnitOptions()
 						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "disableBlizzardCC", value)
 					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 3]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
-					end,
+					disabled = textFieldDisabled,
 				},
 				cooldownFontSize = {
 					order = 2,
@@ -3687,11 +3699,7 @@ local function loadUnitOptions()
 						local auraType = info[#(info) - 3]
 						setAuraFrameValue(info[2], auraType, frameIndex, "cooldownFontSize", value)
 					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 3]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
-					end,
+					disabled = textFieldDisabled,
 				},
 				cooldownFontColor = {
 					order = 4,
@@ -3715,11 +3723,7 @@ local function loadUnitOptions()
 							reloadUnitAuras()
 						end
 					end,
-					disabled = function(info)
-						local auraType = info[#(info) - 3]
-						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
-						return not (cfg and cfg.enabled)
-					end,
+					disabled = textFieldDisabled,
 				},
 				timerAnchor = {
 					order = 5,
@@ -3727,7 +3731,7 @@ local function loadUnitOptions()
 					name = L["Anchor point"],
 					values = auraTextAnchorValues,
 					get = textAnchorGet,
-					set = textAnchorSet,
+					set = textFieldSet,
 					disabled = textFieldDisabled,
 				},
 				timerX = {
@@ -3800,7 +3804,7 @@ local function loadUnitOptions()
 					name = L["Anchor point"],
 					values = auraTextAnchorValues,
 					get = textAnchorGet,
-					set = textAnchorSet,
+					set = textFieldSet,
 					disabled = textFieldDisabled,
 				},
 				stackX = {

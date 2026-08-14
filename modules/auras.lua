@@ -8,6 +8,11 @@ Auras.configStyleGeneration = 1
 
 local AURA_TYPES = {"buffs", "debuffs"}
 
+-- Per frame text settings only apply once the frame opts in, otherwise the General ones are used
+local function textConfig(config)
+	return config and config.textOverride and config or nil
+end
+
 -- AuraButtons are forbidden under any aura restriction (combat, M+, PvP), combat lockdown alone is too narrow a proxy
 local function aurasAreSecret()
 	if( C_Secrets and C_Secrets.ShouldAurasBeSecret ) then
@@ -442,8 +447,8 @@ local function updateButton(id, group, config)
 	end
 
 	-- Set the button sizing
-	-- Per-frame override for Blizzard Cooldown Count, fallback to global
-	local hideCC = config.disableBlizzardCC
+	local textCfg = textConfig(config)
+	local hideCC = textCfg and textCfg.disableBlizzardCC
 	if hideCC == nil then hideCC = ShadowUF.db.profile.blizzardcc end
 	button.cooldown:SetHideCountdownNumbers(hideCC)
 	button:SetHeight(config.size)
@@ -465,6 +470,7 @@ end
 
 function Auras:UpdateCooldownText(button, config)
 	if( not button or not button.cooldown ) then return end
+	config = textConfig(config)
 
 	button.cooldown:SetSwipeColor(0, 0, 0, ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8)
 
@@ -502,18 +508,12 @@ function Auras:UpdateCooldownText(button, config)
 			text:SetTextColor(1, 1, 1, 1)
 		end
 
-		local anchor = (config and config.timerAnchor) or fontDetails.cooldownAnchor
-		if( anchor ) then
-			local x = (config and config.timerX) or fontDetails.cooldownX or 0
-			local y = (config and config.timerY) or fontDetails.cooldownY or 0
-			text:ClearAllPoints()
-			text:SetPoint(anchor, button.cooldown, anchor, x, y)
-			text.sufAnchored = true
-		elseif( text.sufAnchored ) then
-			text:ClearAllPoints()
-			text:SetPoint("CENTER", button.cooldown, "CENTER", 0, 0)
-			text.sufAnchored = nil
-		end
+		-- CENTER is where the widget puts the countdown on its own
+		local anchor = (config and config.timerAnchor) or fontDetails.cooldownAnchor or "CENTER"
+		local x = (config and config.timerX) or fontDetails.cooldownX or 0
+		local y = (config and config.timerY) or fontDetails.cooldownY or 0
+		text:ClearAllPoints()
+		text:SetPoint(anchor, button.cooldown, anchor, x, y)
 	end
 end
 
@@ -522,6 +522,7 @@ function Auras:UpdateStackText(record, config, buttonSize)
 	local stack = record.stack
 	if( not stack ) then return end
 	local button = record.button or record
+	config = textConfig(config)
 
 	-- Font, outline and shadow are global-only settings
 	local fontDetails = ShadowUF.db.profile.font
@@ -549,17 +550,14 @@ function Auras:UpdateStackText(record, config, buttonSize)
 		stack:SetTextColor(1, 1, 1, 1)
 	end
 
-	local anchor = (config and config.stackAnchor) or fontDetails.stackAnchor
+	-- BOTTOMRIGHT reproduces filling the button with RIGHT/BOTTOM justification
+	local anchor = (config and config.stackAnchor) or fontDetails.stackAnchor or "BOTTOMRIGHT"
+	local x = (config and config.stackX) or fontDetails.stackX or 0
+	local y = (config and config.stackY) or fontDetails.stackY or 0
 	stack:ClearAllPoints()
-	if( anchor ) then
-		-- Point-anchored fontstrings must auto-size, legacy buttons carry an explicit 1x1
-		stack:SetSize(0, 0)
-		local x = (config and config.stackX) or fontDetails.stackX or 0
-		local y = (config and config.stackY) or fontDetails.stackY or 0
-		stack:SetPoint(anchor, button, anchor, x, y)
-	else
-		stack:SetAllPoints(button)
-	end
+	-- Point-anchored fontstrings must auto-size, legacy buttons carry an explicit 1x1
+	stack:SetSize(0, 0)
+	stack:SetPoint(anchor, button, anchor, x, y)
 end
 
 -- Let the mover access this for creating aura things
@@ -721,9 +719,10 @@ local function getContainerSignature(group, config, sections)
 		table.insert(runtime, section.filterString .. "@" .. section.size .. "@" .. (section.sortMethod or "") .. "@" .. (section.maxCount or ""))
 		table.insert(structural, tostring(section.pandemic))
 	end
-	local hideCC = config.disableBlizzardCC
+	local textCfg = textConfig(config)
+	local hideCC = textCfg and textCfg.disableBlizzardCC
 	if( hideCC == nil ) then hideCC = ShadowUF.db.profile.blizzardcc end
-	local hideStacks = config.disableStacks
+	local hideStacks = textCfg and textCfg.disableStacks
 	if( hideStacks == nil ) then hideStacks = ShadowUF.db.profile.auras.disableStacks end
 	table.insert(structural, tostring(#sections))
 	table.insert(structural, ShadowUF.db.profile.auras.borderType)
@@ -745,7 +744,8 @@ end
 local function makeButtonInitializer(group, config, section, sectionIndex)
 	local size = section.size
 	local auraType = section.auraType or group.type
-	local hideCC = config.disableBlizzardCC
+	local textCfg = textConfig(config)
+	local hideCC = textCfg and textCfg.disableBlizzardCC
 	if( hideCC == nil ) then hideCC = ShadowUF.db.profile.blizzardcc end
 	local borderType = ShadowUF.db.profile.auras.borderType
 	local canCancel = group.canCancel
@@ -866,8 +866,7 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 		record.stack = stack
 		Auras:UpdateStackText(record, config, size)
 		-- No formatter option, it errors on secret values
-		-- Per-frame override falls back to the global toggle, like the countdown one
-		local hideStacks = config.disableStacks
+		local hideStacks = textCfg and textCfg.disableStacks
 		if( hideStacks == nil ) then hideStacks = ShadowUF.db.profile.auras.disableStacks end
 		if( not hideStacks ) then
 			pcall(button.SetApplicationCount, button, stack, {})
@@ -1767,7 +1766,7 @@ function Auras:ShowBossDebuffsPlaceholders(frame)
 
 		-- Test cooldown
 		if config.showCooldown ~= false then
-			button.cooldown:SetCooldown(GetTime() - (i * 15), 300)
+			button.cooldown:SetCooldown(GetTime() - ((i - 1) * 15) % 300, 300)
 			button.cooldown:Show()
 		else
 			button.cooldown:Hide()
@@ -1984,7 +1983,8 @@ local function scanConfigMode(parent, frame, type, config, displayConfig, filter
 				-- Show cooldown for test
 				if( not ShadowUF.db.profile.auras.disableCooldown and ( config.timers.ALL or ( isPlayerAura and config.timers.PLAYER ) ) ) then
 					local duration = 300
-					local startTime = GetTime() - (i * 20)
+					-- Staggering the fake start times has to wrap, past the duration the icons sit expired with no countdown
+					local startTime = GetTime() - ((i - 1) * 20) % duration
 					button.cooldown:SetCooldown(startTime, duration)
 					button.cooldown:Show()
 				else
