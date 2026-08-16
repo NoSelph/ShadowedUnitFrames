@@ -465,13 +465,25 @@ function ShadowUF.UnitClassToken(unit)
 	return class
 end
 
+-- Compound tokens inherit secrecy from every unit in the chain, so targettarget on a boss is secret even when the ToT is a groupmate
+-- A secret token can't index the profile palette, C_ClassColor takes it but answers with the Blizzard colors
 function ShadowUF:GetClassColor(unit)
-	if( not UnitIsPlayer(unit) ) then
+	local resolved, isPlayer = pcall(UnitIsPlayer, unit)
+	if( not resolved or not isPlayer ) then
 		return nil
 	end
 
-	local class = ShadowUF.UnitClassToken(unit)
-	return class and ShadowUF:Hex(ShadowUF.db.profile.classColors[class])
+	local class = select(2, UnitClass(unit))
+	if( not issecretvalue(class) ) then
+		return class and ShadowUF:Hex(ShadowUF.db.profile.classColors[class])
+	end
+
+	local ok, classColor = pcall(C_ClassColor.GetClassColor, class)
+	if( not ok or not classColor ) then
+		return nil
+	end
+
+	return ShadowUF:Hex(classColor)
 end
 
 function ShadowUF:FormatShortTime(seconds)
@@ -751,7 +763,6 @@ Tags.defaultTags = {
 	end]],
 	["colorname"] = [[function(unit, unitOwner)
 		local name = UnitName(unitOwner)
-		if issecretvalue(name) then return name end
 		local color = ShadowUF:GetClassColor(unitOwner)
 		if( not color ) then
 			return name
@@ -958,8 +969,10 @@ Tags.defaultTags = {
 	["nsrt:colorname"] = [[function(unit, unitOwner)
 		local name = UnitName(unitOwner)
 		if not name then return end
-		if issecretvalue(name) then return name end
-		local nick = NSAPI and NSAPI:GetName(name, "GlobalNickNames") or name
+		local nick = name
+		if( not issecretvalue(name) and NSAPI ) then
+			nick = NSAPI:GetName(name, "GlobalNickNames") or name
+		end
 		local color = ShadowUF:GetClassColor(unitOwner)
 		if not color then return nick end
 		return string.format("%s%s|r", color, nick)
