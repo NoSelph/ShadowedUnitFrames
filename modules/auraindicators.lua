@@ -311,6 +311,7 @@ local function checkFilterAura(frame, type, isFriendly, name, texture, count, au
 			indicator.colorB = nil
 			indicator.pandemicStart = pandemicStart
 			indicator.dispelName = auraType
+			indicator.dispelHarmful = type == "debuffs"
 
 			applied = true
 		end
@@ -365,6 +366,7 @@ local function checkSpecificAura(frame, type, name, texture, count, auraType, du
 	indicator.colorB = color.b
 	indicator.pandemicStart = getPandemicStart(frame.unit, auraInstanceID, caster, endTime)
 	indicator.dispelName = auraType
+	indicator.dispelHarmful = type == "debuffs"
 
 	return true
 end
@@ -541,7 +543,7 @@ end
 local MUTE_CANDIDATES = { includeDispelTypes = {} }
 
 -- Slot button styling; anchoring happens here too since the button is forbidden after creation whenever auras are secret (M+ reload included)
-local function makeIndicatorSlotStyler(display)
+local function makeIndicatorSlotStyler(display, isHarmful)
 	return function(button)
 		if( display.anchorTo ) then
 			button:ClearAllPoints()
@@ -559,10 +561,20 @@ local function makeIndicatorSlotStyler(display)
 
 			local borderType = ShadowUF.db.profile.auras.borderType
 			if( borderType == "blizzard" ) then
+				if( not isHarmful ) then
+					local base = button:CreateTexture(nil, "OVERLAY")
+					base:SetPoint("TOPLEFT", button, -1, 1)
+					base:SetPoint("BOTTOMRIGHT", button, 1, -1)
+					base:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
+					base:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
+					base:SetVertexColor(0.6, 0.6, 0.6)
+				end
 				local dispel = button:CreateTexture(nil, "OVERLAY", nil, 1)
 				dispel:SetPoint("TOPLEFT", button, -1, 1)
 				dispel:SetPoint("BOTTOMRIGHT", button, 1, -1)
-				pcall(button.SetAuraBorder, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.BorderWithIcon or 1, showWhenHarmful = true, showWhenHelpful = true })
+				dispel:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
+				dispel:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
+				pcall(button.AddDispelTypeTexture, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, showWithoutDispelType = isHarmful or nil })
 			elseif( borderType ~= "" ) then
 				local border = button:CreateTexture(nil, "OVERLAY")
 				border:SetPoint("TOPLEFT", button, -1, 1)
@@ -746,7 +758,7 @@ function Indicators:BuildIndicatorSlots(frame)
 		indicatorRank[descriptor.indicator] = (indicatorRank[descriptor.indicator] or 0) + 1
 		descriptor.display.anchorTo = frame.auraIndicators[descriptor.indicator]
 		descriptor.display.frameLevel = frame.topFrameLevel + 7 + indicatorRank[descriptor.indicator] * 2
-		descriptor.options.initializeFrame = makeIndicatorSlotStyler(descriptor.display)
+		descriptor.options.initializeFrame = makeIndicatorSlotStyler(descriptor.display, string.find(descriptor.filter, "HARMFUL", 1, true) ~= nil)
 		if( pcall(container.AddAuraSlot, container, descriptor.key, descriptor.filter, descriptor.options) ) then
 			slotRecords[descriptor.key] = { candidates = descriptor.options.candidateFilters, activeWhen = descriptor.activeWhen }
 		end
@@ -810,8 +822,12 @@ function Indicators:UpdateIndicators(frame)
 				if( indicator.border and ShadowUF.db.profile.auras.borderType ~= "" ) then
 					local dispelName = not issecretvalue(indicator.dispelName) and indicator.dispelName or nil
 					if( ShadowUF.db.profile.auras.borderType == "blizzard" ) then
-						if( AuraUtil and AuraUtil.SetAuraBorderColor ) then
+						-- Blizzard's None fallback is a red that only reads right on debuffs, buffs and unmapped types (Enrage) get the neutral grey instead
+						local info = dispelName and AuraUtil and AuraUtil.GetDebuffDisplayInfoTable and AuraUtil.GetDebuffDisplayInfoTable()[dispelName]
+						if( AuraUtil and AuraUtil.SetAuraBorderColor and (info or indicator.dispelHarmful) ) then
 							AuraUtil.SetAuraBorderColor(indicator.border, dispelName)
+						else
+							indicator.border:SetVertexColor(0.6, 0.6, 0.6)
 						end
 					else
 						local colorMap = not ShadowUF.db.profile.auraColors.disableDispel and ShadowUF.modules.auras:GetDispelColorMap()
@@ -914,6 +930,7 @@ function Indicators:UpdateAuras(frame)
 			indicator.priority = -1
 			indicator.pandemicStart = nil
 			indicator.dispelName = nil
+			indicator.dispelHarmful = nil
 
 			if( UnitIsEnemy(frame.unit, "player") ) then
 				indicator.enabled = config.hostile

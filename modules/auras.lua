@@ -27,6 +27,15 @@ local dispelColorMap
 local removableColorMap
 local DISPEL_COLOR_TYPES = {"Magic", "Curse", "Disease", "Poison", "Bleed", "Enrage"}
 
+-- Corner badge atlases for the CustomAsset style, dispel names left out of the map (Enrage) render a blank badge
+local dispelBadgeAssetMap = {
+	Magic = { asset = "RaidFrame-Icon-DebuffMagic" },
+	Curse = { asset = "RaidFrame-Icon-DebuffCurse" },
+	Disease = { asset = "RaidFrame-Icon-DebuffDisease" },
+	Poison = { asset = "RaidFrame-Icon-DebuffPoison" },
+	Bleed = { asset = "RaidFrame-Icon-DebuffBleed" },
+}
+
 function Auras:GetDispelColorMap()
 	if( dispelColorMap ~= nil ) then return dispelColorMap or nil end
 
@@ -791,12 +800,12 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 			record.dispel = dispel
 			pcall(button.AddDispelTypeTexture, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, showWithoutDispelType = auraType == "debuffs" or nil })
 
-			-- Blizzard badges the dispel school in the corner, the Icon style leaves untyped auras blank on its own
+			-- Blizzard badges the dispel school in the corner, untyped auras stay hidden by the show gate
 			local dispelIcon = button:CreateTexture(nil, "OVERLAY", nil, 2)
 			dispelIcon:SetPoint("TOPRIGHT", button, "TOPRIGHT", 2, 2)
 			dispelIcon:SetSize(size * 0.5, size * 0.5)
 			record.dispelIcon = dispelIcon
-			pcall(button.AddDispelTypeTexture, button, dispelIcon, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.Icon or 2, showWhenHarmful = true, showWhenHelpful = true })
+			pcall(button.AddDispelTypeTexture, button, dispelIcon, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.CustomAsset or 4, showWhenHarmful = true, showWhenHelpful = true, customDispelAssetMap = dispelBadgeAssetMap })
 			applyBlizzardIconMask(button, icon, true)
 		elseif( borderType ~= "" ) then
 			local border = button:CreateTexture(nil, "OVERLAY")
