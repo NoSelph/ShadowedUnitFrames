@@ -115,26 +115,10 @@ function Totems:OnLayoutApplied(frame)
 	self:Update(frame)
 end
 
--- Uses GetTotemTimeLeft() instead of manual arithmetic to work with secret values in combat.
--- SetValue() accepts secrets (AllowedWhenTainted), and type() is safe on secrets.
+-- The bar fill is timer-driven, this tick only keeps the timer text fresh.
+-- Expiry cleanup happens in Update via PLAYER_TOTEM_UPDATE, which fires with a plain slot index.
 local function totemMonitor(self, elapsed)
-	local timeLeft = GetTotemTimeLeft(self.totemSlot)
-	if type(timeLeft) == "number" then
-		self:SetValue(timeLeft)
-	else
-		-- nil = totem expired (nil is never secret, safe to test via type())
-		self:SetValue(0)
-		self:SetScript("OnUpdate", nil)
-		self.totemSlot = nil
-
-		if( not self.parent.inVehicle and MAX_TOTEMS == 1 ) then
-			ShadowUF.Layout:SetBarVisibility(self.parent, "totemBar", false)
-		end
-	end
-
-	if( self.fontString ) then
-		self.fontString:UpdateTags()
-	end
+	self.fontString:UpdateTags()
 end
 
 function Totems:UpdateVisibility(frame)
@@ -149,40 +133,42 @@ function Totems:UpdateVisibility(frame)
 	end
 end
 
--- Helper function to check if a totem is active, handling secret values
-local function isTotemActive(have)
-	if issecretvalue(have) then
-		-- If it's a secret value, the totem exists
-		return true
-	end
-	return have
+-- An empty slot yields nil despite the doc's Nilable = false.
+local function slotDuration(id)
+	local duration = GetTotemDuration(id)
+	if not duration then return nil end
+	if duration:HasSecretValues() then return duration, true end
+	if duration:IsZero() then return nil end
+	return duration, false
 end
 
+-- GetTotemInfo returns are secret under combat restrictions, so activity is read from GetTotemDuration instead.
+-- On secret slots the occupancy boolean routes into SetAlphaFromBoolean, empty slots turn invisible without ever being branched on.
 function Totems:Update(frame)
 	local numSlots = GetNumTotemSlots and GetNumTotemSlots() or MAX_TOTEMS
 	local totalActive = 0
+	local anySecret = false
 	for _, indicator in pairs(frame.totemBar.totems) do
-		local have, _name, start, duration, icon
-		local foundTotem = false
-		local foundSlot
+		local durationObj, foundSlot, secretSlot
 
 		if MAX_TOTEMS == 1 and indicator.id == 1 then
 			for id = 1, numSlots do
-				have, _name, start, duration, icon = GetTotemInfo(id)
-				if isTotemActive(have) then
-					foundTotem = true
+				durationObj, secretSlot = slotDuration(id)
+				if durationObj then
 					foundSlot = id
 					break
 				end
 			end
 		else
-			have, _name, start, duration, icon = GetTotemInfo(indicator.id)
-			foundTotem = isTotemActive(have)
-			foundSlot = indicator.id
+			durationObj, secretSlot = slotDuration(indicator.id)
+			foundSlot = durationObj and indicator.id
 		end
 
-		if foundTotem then
+		if durationObj then
+			local have, _, _, _, icon = GetTotemInfo(foundSlot)
+
 			if( ShadowUF.db.profile.units[frame.unitType].totemBar.icon ) then
+				-- the icon may be secret, SetTexture accepts it
 				indicator.background:SetTexture(icon)
 				indicator.background:Show()
 			end
@@ -190,20 +176,22 @@ function Totems:Update(frame)
 			indicator.have = true
 			indicator.totemSlot = foundSlot
 
-			
-			indicator:SetMinMaxValues(0, duration)
+			indicator:SetMinMaxValues(0, 1)
+			indicator:SetTimerDuration(durationObj, Enum.StatusBarInterpolation.Immediate, Enum.StatusBarTimerDirection.RemainingTime)
+			indicator:SetScript("OnUpdate", indicator.fontString and totemMonitor or nil)
 
-			local timeLeft = GetTotemTimeLeft(foundSlot)
-			if type(timeLeft) == "number" then
-				indicator:SetValue(timeLeft)
-				indicator:SetScript("OnUpdate", totemMonitor)
+			if secretSlot then
+				anySecret = true
+				-- GetTotemInfo may return nothing, and type() reads through secrets
+				if type(have) == "boolean" then
+					indicator:SetAlphaFromBoolean(have)
+				else
+					indicator:SetAlpha(1.0)
+				end
 			else
-				indicator:SetValue(0)
-				indicator:SetScript("OnUpdate", nil)
+				indicator:SetAlpha(1.0)
+				totalActive = totalActive + 1
 			end
-			indicator:SetAlpha(1.0)
-
-			totalActive = totalActive + 1
 
 		elseif( indicator.have ) then
 			indicator.have = nil
@@ -211,6 +199,7 @@ function Totems:Update(frame)
 			indicator:SetScript("OnUpdate", nil)
 			indicator:SetMinMaxValues(0, 1)
 			indicator:SetValue(0)
+			indicator:SetAlpha(1.0)
 
 			if( ShadowUF.db.profile.units[frame.unitType].totemBar.icon ) then
 				indicator.background:SetTexture(ShadowUF.Layout.mediaPath.statusbar)
@@ -228,7 +217,7 @@ function Totems:Update(frame)
 
 	if( not frame.inVehicle ) then
 		if( MAX_TOTEMS == 1 or not ShadowUF.db.profile.units[frame.unitType].totemBar.showAlways ) then
-			ShadowUF.Layout:SetBarVisibility(frame, "totemBar", totalActive > 0)
+			ShadowUF.Layout:SetBarVisibility(frame, "totemBar", totalActive > 0 or anySecret)
 		end
 	end
 end
