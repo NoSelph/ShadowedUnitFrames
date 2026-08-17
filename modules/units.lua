@@ -334,7 +334,7 @@ local function SetVisibility(self)
 							end
 						end
 						if( enabled ) then break end
-					elseif( option == true ) then
+					elseif( option == true or type(option) == "string" ) then
 						enabled = true
 						break
 					end

@@ -5,7 +5,7 @@
 ShadowUF = select(2, ...)
 
 local L = ShadowUF.L
-ShadowUF.dbRevision = 72
+ShadowUF.dbRevision = 73
 ShadowUF.playerUnit = "player"
 ShadowUF.enabledUnits = {}
 ShadowUF.modules = {}
@@ -237,6 +237,17 @@ function ShadowUF:CheckUpgrade()
 	auraColors.removable = auraColors.removable or {r = 1, g = 0.70, b = 0.10}
 	auraColors.pandemic = auraColors.pandemic or {r = 1, g = 1, b = 1, a = 0.35}
 
+	if( revision <= 72 ) then
+		-- Dispel display modes are now stored as filter mode strings
+		for _, unitCfg in pairs(self.db.profile.units) do
+			if( unitCfg.highlight and unitCfg.highlight.debuff == true ) then
+				unitCfg.highlight.debuff = "PLAYER_DISPELLABLE"
+			end
+			if( unitCfg.healthBar and unitCfg.healthBar.colorDispel == true ) then
+				unitCfg.healthBar.colorDispel = "PLAYER_DISPELLABLE"
+			end
+		end
+	end
 	if( revision <= 71 ) then
 		-- Aura frame text settings sit behind an explicit opt-in, a stored 0 offset means unset so it doesn't count as a customization
 		local textKeys = {"timerAnchor", "timerX", "timerY", "stackAnchor", "stackX", "stackY", "cooldownFontSize", "cooldownFontColor", "stackFontSize", "stackFontColor", "disableBlizzardCC", "disableStacks"}

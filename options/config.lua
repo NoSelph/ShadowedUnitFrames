@@ -4462,7 +4462,6 @@ local function loadUnitOptions()
 								arg = "highlight.debuff",
 								get = function(info)
 									local value = getUnit(info)
-									if( value == true ) then return "RAID_PLAYER_DISPELLABLE" end
 									return type(value) == "string" and value or ""
 								end,
 								set = function(info, value)
@@ -5955,7 +5954,6 @@ local function loadUnitOptions()
 								arg = "healthBar.colorDispel",
 								get = function(info)
 									local value = getUnit(info)
-									if( value == true ) then return "RAID_PLAYER_DISPELLABLE" end
 									return type(value) == "string" and value or ""
 								end,
 								set = function(info, value)

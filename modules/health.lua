@@ -77,9 +77,7 @@ local DISPEL_FILTERS = {
 	DISPELLABLE = { assist = "HARMFUL|DISPELLABLE", noassist = "HELPFUL|DISPELLABLE" },
 }
 
--- Old configs stored a boolean, true was the player-scoped behavior
 local function getDispelFilters(value)
-	if( value == true ) then value = "PLAYER_DISPELLABLE" end
 	return value and DISPEL_FILTERS[value]
 end
 Health.GetDispelFilters = getDispelFilters
