@@ -181,9 +181,6 @@ function ShadowUF.IsUnitReachable(unit)
 	local okVisible, visible = pcall(UnitIsVisible, unit)
 	if( okVisible and not issecretvalue(visible) and not visible ) then return false end
 
-	local okPhase, phase = pcall(UnitPhaseReason, unit)
-	if( okPhase and not issecretvalue(phase) and phase ~= nil ) then return false end
-
 	return true
 end
 
