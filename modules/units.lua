@@ -834,6 +834,14 @@ local function ArenaClassToken(self)
 	return specID and select(6, GetSpecializationInfoByID(specID))
 end
 
+-- The stock ping mixin reads frame.unit and taints itself doing so, securecopy then errors on the secret GUID
+-- Soft-fail the ping on restricted units until I properly fix this.
+local function PingTargetInfo(self)
+	local ok, guid = pcall(UnitGUID, self.unit)
+	if( not ok or (issecretvalue and issecretvalue(guid)) or not guid ) then return {} end
+	return {guid = guid}
+end
+
 function Units:CreateUnit(...)
 	local frame = select("#", ...) > 1 and CreateFrame(...) or select(1, ...)
 	frame.fullUpdates = {}
@@ -855,6 +863,7 @@ function Units:CreateUnit(...)
 	frame.FullUpdate = FullUpdate
 	frame.SetVisibility = SetVisibility
 	frame.UnitClassToken = ClassToken
+	frame.GetTargetInfo = PingTargetInfo
 	frame.topFrameLevel = 5
 
 	-- Ensures that text is the absolute highest thing there is
