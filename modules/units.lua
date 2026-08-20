@@ -16,6 +16,16 @@ local function SafeUnitGUID(unit)
 	return ok and guid or nil
 end
 
+-- GUID comparison that stays legal when either side is secret, both secret is indeterminate and counts as unchanged
+local function GUIDChanged(oldGUID, newGUID)
+	local checkSecret = _G.issecretvalue
+	local isSecret = (checkSecret and checkSecret(newGUID)) or false
+	local wasSecret = (checkSecret and checkSecret(oldGUID)) or false
+	if( isSecret and wasSecret ) then return false end
+	if( isSecret ~= wasSecret ) then return true end
+	return oldGUID ~= newGUID
+end
+
 ShadowUF.Units = Units
 ShadowUF:RegisterModule(Units, "units")
 
@@ -470,24 +480,7 @@ function Units:CheckUnitStatus(frame)
 		return
 	end
 
-	-- Global 'issecretvalue' check for both current and stored GUID
-	local checkSecret = _G.issecretvalue
-	local isSecret = checkSecret and checkSecret(guid)
-	local wasSecret = checkSecret and checkSecret(frame.unitGUID)
-
-	local changed = false
-
-	if( isSecret and wasSecret ) then
-		changed = false
-	elseif( isSecret ~= wasSecret ) then
-		changed = true
-	else
-		if( guid ~= frame.unitGUID ) then
-			changed = true
-		end
-	end
-
-	if( changed ) then
+	if( GUIDChanged(frame.unitGUID, guid) ) then
 		frame.unitGUID = guid
 
 		if( guid ) then
@@ -515,9 +508,12 @@ function Units:CheckGroupedUnitStatus(frame)
 		frame.unitGUID = SafeUnitGUID(frame.unit)
 		frame:FullUpdate()
 	elseif( UnitExists(frame.unit) ) then
-		frame.unitGUID = SafeUnitGUID(frame.unit)
-		-- GROUP_ROSTER_UPDATE and PARTY_MEMBER_ENABLE/DISABLE burst-fire within one tick and game state is frozen during dispatch, one full update per tick is enough
-		if( frame.lastFullUpdateTime ~= GetTime() ) then
+		local guid = SafeUnitGUID(frame.unit)
+		-- The roster can shift mid-tick, so an occupant change always repaints and the tick gate only absorbs bursts that kept the same unit
+		if( GUIDChanged(frame.unitGUID, guid) ) then
+			frame.unitGUID = guid
+			frame:FullUpdate()
+		elseif( frame.lastFullUpdateTime ~= GetTime() ) then
 			frame:FullUpdate()
 		end
 	end
