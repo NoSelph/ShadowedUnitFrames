@@ -7283,6 +7283,7 @@ local function loadCustomFilterOptions()
 						mode = {
 							order = 0,
 							type = "select",
+							width = 1.8,
 							name = L["Mode"],
 							values = {
 								["include"] = L["Show only matching spells"],
@@ -7313,9 +7314,27 @@ local function loadCustomFilterOptions()
 								end
 							end,
 						},
+						player = {
+							order = 0.5,
+							type = "toggle",
+							name = L["Only show self cast auras"],
+							desc = L["Only auras you specifically cast will be shown."],
+							get = function()
+								local filter = getFilter()
+								return filter and filter.player
+							end,
+							set = function(info, value)
+								local filter = getFilter()
+								if( filter ) then
+									filter.player = value or nil
+									reloadUnitAuras()
+								end
+							end,
+						},
 						addSpell = {
 							order = 1,
 							type = "input",
+							width = "full",
 							dialogControl = "ShadowUF_SpellEditBox",
 							name = L["Add spell"],
 							desc = L["Accepts a spell ID, a spell link (shift-click a spell) or an exact spell name. You can also drag a spell from the spellbook onto this field. Spell names only resolve for spells your character currently knows; use the spell ID for anything else."] .. "|n" .. L["Blizzard only applies spell filters to buffs on friendly units and to debuffs on hostile units, plus any spell it flags as never secret."],
@@ -7335,10 +7354,25 @@ local function loadCustomFilterOptions()
 								end
 							end,
 						},
+					},
+				},
+				spells = {
+					order = 1,
+					type = "group",
+					inline = true,
+					name = L["Auras"],
+					args = {},
+				},
+				deleteGroup = {
+					order = 2,
+					type = "group",
+					inline = true,
+					name = L["Delete filter"],
+					args = {
 						delete = {
-							order = 2,
+							order = 0,
 							type = "execute",
-							name = L["Delete filter"],
+							name = L["Delete"],
 							confirm = true,
 							confirmText = L["Are you sure you want to delete this filter?"],
 							func = function()
@@ -7354,13 +7388,6 @@ local function loadCustomFilterOptions()
 							end,
 						},
 					},
-				},
-				spells = {
-					order = 1,
-					type = "group",
-					inline = true,
-					name = L["Auras"],
-					args = {},
 				},
 			},
 		}
@@ -7393,7 +7420,6 @@ local function loadCustomFilterOptions()
 				group.args.spells.args["remove" .. i] = {
 					order = i + 0.5,
 					type = "execute",
-					width = "half",
 					name = L["Delete"],
 					func = function()
 						local filter = getFilter()

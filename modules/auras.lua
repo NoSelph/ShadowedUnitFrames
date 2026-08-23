@@ -1197,9 +1197,10 @@ function Auras:UpdateContainerCandidateFilters(frame)
 
 				local carriedExcludes
 				for index, section in ipairs(group.containerSections) do
-					local include, exclude
+					local include, exclude, playerOnly
 					local custom = section.customFilter and customFilters[section.customFilter]
 					if( custom and custom.spells ) then
+						playerOnly = custom.player
 						if( custom.mode == "exclude" ) then
 							exclude = CopyTable(custom.spells)
 							if( allCustomSpells ) then
@@ -1215,6 +1216,7 @@ function Auras:UpdateContainerCandidateFilters(frame)
 						-- Zone-assigned lists apply on their own, the assignment (zone x unit type) is the opt-in
 						include = buildSpellIDMap(whitelist)
 						exclude = buildSpellIDMap(blacklist)
+						playerOnly = frame.auras.whitelistPlayer
 						if( allCustomSpells ) then
 							exclude = exclude and CopyTable(exclude) or {}
 							for spellID in pairs(allCustomSpells) do
@@ -1224,8 +1226,9 @@ function Auras:UpdateContainerCandidateFilters(frame)
 					end
 
 					local filters
-					if( include or exclude ) then
-						filters = { includeSpellIDs = include, excludeSpellIDs = exclude }
+					if( include or exclude or playerOnly ) then
+						-- isFromPlayerOrPlayerPet sits outside the identity gate, enforced even where spell ID lists are not
+						filters = { includeSpellIDs = include, excludeSpellIDs = exclude, isFromPlayerOrPlayerPet = playerOnly or nil }
 					end
 					local gate = sectionReactionGate(section)
 					if( gate ) then
@@ -1810,6 +1813,7 @@ function Auras:UpdateFilter(frame)
 	local whiteList = white and customs[white]
 	local blackList = black and customs[black]
 	frame.auras.whitelist = (whiteList and whiteList.mode ~= "exclude") and whiteList.spells or filterDefault
+	frame.auras.whitelistPlayer = (whiteList and whiteList.mode ~= "exclude") and whiteList.player or nil
 	frame.auras.blacklist = (blackList and blackList.mode == "exclude") and blackList.spells or filterDefault
 
 	-- Push the zone filters onto the containers as candidate filters
