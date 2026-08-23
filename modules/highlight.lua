@@ -172,8 +172,8 @@ function Highlight:UpdateDispelSlots(frame)
 	-- Pick the side matching the unit's reaction, mute when neither side applies
 	local dispelFilter = frame.highlight.dispelSlotFilter or filters.assist
 	local muted = frame.highlight.dispelSlotMuted
-	if( frame.unit and not frame.configMode ) then
-		local state = ShadowUF.GetUnitReactionState(frame.unit)
+	if( frame.unitSUF and not frame.configMode ) then
+		local state = ShadowUF.GetUnitReactionState(frame.unitSUF)
 		if( state == "assist" ) then
 			dispelFilter = filters.assist
 			muted = false
@@ -204,8 +204,8 @@ function Highlight:UpdateDispelSlots(frame)
 			frame.highlight.dispelSlotMuted = muted
 		end
 	end
-	if( frame.unit and not frame.configMode ) then
-		local ok = pcall(container.SetUnit, container, frame.unit)
+	if( frame.unitSUF and not frame.configMode ) then
+		local ok = pcall(container.SetUnit, container, frame.unitSUF)
 		container:SetEnabled(ok and true or false)
 		if( ok ) then
 			if( not inCombat ) then container:Show() end
@@ -390,17 +390,17 @@ function Highlight:Update(frame)
 end
 
 function Highlight:UpdateThreat(frame)
-	frame.highlight.hasThreat = UnitThreatSituation(frame.unit) == 3 or nil
+	frame.highlight.hasThreat = UnitThreatSituation(frame.unitSUF) == 3 or nil
 	self:Update(frame)
 end
 
 function Highlight:UpdateAttention(frame)
-	frame.highlight.hasAttention = UnitIsUnit(frame.unit, "target") or UnitIsUnit(frame.unit, "focus") or nil
+	frame.highlight.hasAttention = UnitIsUnit(frame.unitSUF, "target") or UnitIsUnit(frame.unitSUF, "focus") or nil
 	self:Update(frame)
 end
 
 function Highlight:UpdateClassification(frame)
-	frame.highlight.hasClassification = UnitClassification(frame.unit)
+	frame.highlight.hasClassification = UnitClassification(frame.unitSUF)
 	self:Update(frame)
 end
 

@@ -82,7 +82,7 @@ function Tags:RegisterEvents(parent, fontString, tags)
 				if event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT" then
 					parent:RegisterUnitEvent("UNIT_MANA", fontString, "UpdateTags")
 
-					if ( parent.unit == "player" ) then
+					if ( parent.unitSUF == "player" ) then
 						parent:RegisterNormalEvent("PLAYER_UNGHOST", fontString, "UpdateTags")
 					end
 				end
@@ -93,8 +93,8 @@ end
 
 -- Update the cached power type
 function Tags:UpdatePowerType(frame)
-	if( not frame.unit or not UnitExists(frame.unit) ) then return end
-	local ok, powerID, powerType = pcall(UnitPowerType, frame.unit)
+	if( not frame.unitSUF or not UnitExists(frame.unitSUF) ) then return end
+	local ok, powerID, powerType = pcall(UnitPowerType, frame.unitSUF)
 	if not ok then return end
 	if( not powerMap[powerType] ) then powerType = powerMap[powerID] or "ENERGY" end
 
@@ -223,7 +223,7 @@ local function createTagFunction(tags, resetCache)
 	frequencyCache[tags] = lowestFrequency < 9999 and lowestFrequency or nil
 	tagPool[tags] = function(fontString, frame, event, unit, powerType)
 		-- we can only run on frames with units set
-		if not fontString.parent.unit or (not fontString.parent.configMode and not UnitExists(fontString.parent.unit)) then
+		if not fontString.parent.unitSUF or (not fontString.parent.configMode and not UnitExists(fontString.parent.unitSUF)) then
 			return
 		end
 
@@ -234,7 +234,7 @@ local function createTagFunction(tags, resetCache)
 		end
 
 		for id = 1, #args do
-			local ok, result = pcall(args[id], fontString.parent.unit, fontString.parent.unitOwner, fontString)
+			local ok, result = pcall(args[id], fontString.parent.unitSUF, fontString.parent.unitOwner, fontString)
 			temp[id] = (ok and result) or ""
 		end
 

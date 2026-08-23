@@ -28,7 +28,7 @@ function Stagger:OnLayoutApplied(frame)
 end
 
 function Stagger:UpdateMinMax(frame)
-	local ok, maxHealth = pcall(UnitHealthMax, frame.unit)
+	local ok, maxHealth = pcall(UnitHealthMax, frame.unitSUF)
 	if not ok then return end
 	frame.staggerBar.maxHealth = maxHealth
 	frame.staggerBar:SetMinMaxValues(0, maxHealth)
@@ -50,7 +50,7 @@ function Stagger.ComputeColorState(stagger, maxHealth)
 end
 
 function Stagger:Update(frame)
-	local okS, stagger = pcall(UnitStagger, frame.unit)
+	local okS, stagger = pcall(UnitStagger, frame.unitSUF)
 	if not okS or not stagger then return end
 
 	frame.staggerBar:SetValue(stagger)

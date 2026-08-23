@@ -284,7 +284,7 @@ local function checkFilterAura(frame, type, isFriendly, name, texture, count, au
 	elseif( not isFriendly and type == "buffs" and auraInstanceID and frame.auraIndicators.slotsAssist == "attack" ) then
 		-- Purgeable/soothable buffs on the hostile side, same token as the combat slot
 		-- slotsAssist is stamped at the top of every UpdateAuras; units we can't harm (cross-faction warmode off) never take this branch
-		local ok, filteredOut = pcall(C_UnitAuras.IsAuraFilteredOutByInstanceID, frame.unit, auraInstanceID, "HELPFUL|RAID_PLAYER_DISPELLABLE")
+		local ok, filteredOut = pcall(C_UnitAuras.IsAuraFilteredOutByInstanceID, frame.unitSUF, auraInstanceID, "HELPFUL|RAID_PLAYER_DISPELLABLE")
 		if( ok and not issecretvalue(filteredOut) and not filteredOut ) then
 			category = "curable"
 		end
@@ -292,7 +292,7 @@ local function checkFilterAura(frame, type, isFriendly, name, texture, count, au
 	if( not category ) then return end
 
 	local applied = false
-	local pandemicStart = getPandemicStart(frame.unit, auraInstanceID, caster, endTime)
+	local pandemicStart = getPandemicStart(frame.unitSUF, auraInstanceID, caster, endTime)
 
 	for key, config in pairs(ShadowUF.db.profile.auraIndicators.indicators) do
 		local indicator = frame.auraIndicators[key]
@@ -364,7 +364,7 @@ local function checkSpecificAura(frame, type, name, texture, count, auraType, du
 	indicator.colorR = color.r
 	indicator.colorG = color.g
 	indicator.colorB = color.b
-	indicator.pandemicStart = getPandemicStart(frame.unit, auraInstanceID, caster, endTime)
+	indicator.pandemicStart = getPandemicStart(frame.unitSUF, auraInstanceID, caster, endTime)
 	indicator.dispelName = auraType
 	indicator.dispelHarmful = type == "debuffs"
 
@@ -428,7 +428,7 @@ local function scanAuraSlots(frame, type, isFriendly, unit, ...)
 end
 
 local function fetchAuraSlots(frame, type, isFriendly, filter)
-	return scanAuraSlots(frame, type, isFriendly, frame.unit, C_UnitAuras.GetAuraSlots(frame.unit, filter))
+	return scanAuraSlots(frame, type, isFriendly, frame.unitSUF, C_UnitAuras.GetAuraSlots(frame.unitSUF, filter))
 end
 
 local function scanAuras(frame, filter, type)
@@ -437,8 +437,8 @@ local function scanAuras(frame, filter, type)
 
 	-- UnitIsFriend=true during duels, UnitIsEnemy=false for neutrals
 	-- Combine both: true only for actual friendlies (not neutrals, not duel targets)
-	local isEnemy = UnitIsEnemy(frame.unit, "player")
-	local isFriendly = UnitIsFriend(frame.unit, "player") and not isEnemy
+	local isEnemy = UnitIsEnemy(frame.unitSUF, "player")
+	local isFriendly = UnitIsFriend(frame.unitSUF, "player") and not isEnemy
 
 	-- pcall for compound unit tokens (same pattern as auras.lua)
 	pcall(fetchAuraSlots, frame, type, isFriendly, filter)
@@ -454,11 +454,11 @@ local function scanConfiguredAuras(frame)
 		local spellID = tonumber(key)
 		local okData, auraData
 		if( spellID ) then
-			okData, auraData = pcall(C_UnitAuras.GetUnitAuraBySpellID, frame.unit, spellID)
+			okData, auraData = pcall(C_UnitAuras.GetUnitAuraBySpellID, frame.unitSUF, spellID)
 		else
-			okData, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, frame.unit, key, "HELPFUL")
+			okData, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, frame.unitSUF, key, "HELPFUL")
 			if( not okData or not auraData ) then
-				okData, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, frame.unit, key, "HARMFUL")
+				okData, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, frame.unitSUF, key, "HARMFUL")
 			end
 		end
 
@@ -680,7 +680,7 @@ function Indicators:BuildIndicatorSlots(frame)
 		signature = ShadowUF.db.profile.auras.borderType .. "#" .. tostring(ShadowUF.db.profile.auras.pandemic) .. "#" .. colorsKey .. "##" .. table.concat(signatureParts, ";")
 	end
 	if( frame.auraIndicators.slotContainer and frame.auraIndicators.slotSignature == signature ) then
-		pcall(frame.auraIndicators.slotContainer.SetUnit, frame.auraIndicators.slotContainer, frame.unit)
+		pcall(frame.auraIndicators.slotContainer.SetUnit, frame.auraIndicators.slotContainer, frame.unitSUF)
 		return
 	end
 
@@ -764,7 +764,7 @@ function Indicators:BuildIndicatorSlots(frame)
 		end
 	end
 
-	pcall(container.SetUnit, container, frame.unit)
+	pcall(container.SetUnit, container, frame.unitSUF)
 	frame.auraIndicators.slotContainer = container
 	frame.auraIndicators.slotRecords = slotRecords
 	frame.auraIndicators.slotIdentity = nil
@@ -870,11 +870,11 @@ function Indicators:UpdateAuras(frame)
 	-- Keep the slots on the current unit token and their visibility in sync with the restriction state
 	local slotContainer = frame.auraIndicators and frame.auraIndicators.slotContainer
 	if( slotContainer ) then
-		pcall(slotContainer.SetUnit, slotContainer, frame.unit)
+		pcall(slotContainer.SetUnit, slotContainer, frame.unitSUF)
 
 		-- Out of the area of interest the candidate filters fail open and every aura lights every slot, silence the container there
-		if( frame.unit and not frame.configMode ) then
-			local reachable = ShadowUF.IsUnitReachable(frame.unit)
+		if( frame.unitSUF and not frame.configMode ) then
+			local reachable = ShadowUF.IsUnitReachable(frame.unitSUF)
 			if( frame.auraIndicators.slotsReachable ~= reachable ) then
 				frame.auraIndicators.slotsReachable = reachable
 				pcall(slotContainer.SetEnabled, slotContainer, reachable)
@@ -882,8 +882,8 @@ function Indicators:UpdateAuras(frame)
 		end
 
 		-- Each slot only stays active on the side where its spell ID filter is enforced; units that can neither be helped nor harmed (cross-faction warmode off) mute both sides
-		if( frame.unit and not frame.configMode and frame.auraIndicators.slotRecords ) then
-			local state = ShadowUF.GetUnitReactionState(frame.unit)
+		if( frame.unitSUF and not frame.configMode and frame.auraIndicators.slotRecords ) then
+			local state = ShadowUF.GetUnitReactionState(frame.unitSUF)
 			if( frame.auraIndicators.slotsAssist ~= state ) then
 				frame.auraIndicators.slotsAssist = state
 				for key, record in pairs(frame.auraIndicators.slotRecords) do
@@ -903,8 +903,8 @@ function Indicators:UpdateAuras(frame)
 		-- SetUnit early-outs on an unchanged token, a same-token retarget would keep showing the old unit's auras forever.
 		-- Kick a refresh when the resolved identity changes, or on every event-driven update while it's secret (same pattern as Auras:UpdateContainers)
 		local identity
-		if( frame.unit and not ShadowUF.IsUnitIdentitySecret(frame.unit) ) then
-			local ok, guid = pcall(UnitGUID, frame.unit)
+		if( frame.unitSUF and not ShadowUF.IsUnitIdentitySecret(frame.unitSUF) ) then
+			local ok, guid = pcall(UnitGUID, frame.unitSUF)
 			if( ok ) then identity = guid end
 		end
 		local kick
@@ -932,7 +932,7 @@ function Indicators:UpdateAuras(frame)
 			indicator.dispelName = nil
 			indicator.dispelHarmful = nil
 
-			if( UnitIsEnemy(frame.unit, "player") ) then
+			if( UnitIsEnemy(frame.unitSUF, "player") ) then
 				indicator.enabled = config.hostile
 			else
 				indicator.enabled = config.friendly
@@ -941,7 +941,7 @@ function Indicators:UpdateAuras(frame)
 	end
 
 	-- If they are dead, don't bother showing any indicators yet
-	if( UnitIsDeadOrGhost(frame.unit) or not UnitIsConnected(frame.unit) ) then
+	if( UnitIsDeadOrGhost(frame.unitSUF) or not UnitIsConnected(frame.unitSUF) ) then
 		self:UpdateIndicators(frame)
 		return
 	end
@@ -955,7 +955,7 @@ function Indicators:UpdateAuras(frame)
 
 	-- Check for any indicators that are triggered due to something missing
 	-- No point flagging a missing buff on a unit we can't even buff (RP NPCs, hostiles)
-	if( ShadowUF.GetUnitReactionState(frame.unit) ~= "assist" ) then
+	if( ShadowUF.GetUnitReactionState(frame.unitSUF) ~= "assist" ) then
 		self:UpdateIndicators(frame)
 		return
 	end

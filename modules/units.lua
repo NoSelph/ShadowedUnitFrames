@@ -46,7 +46,7 @@ RegisterStateDriver(petBattleFrame, "petbattle", "[petbattle] active; none")
 
 -- Frame shown, do a full update
 local function FullUpdate(self)
-	if( not self.unit or (not self.configMode and not UnitExists(self.unit)) ) then return end
+	if( not self.unitSUF or (not self.configMode and not UnitExists(self.unitSUF)) ) then return end
 	-- An early-return must not mark the tick as updated or a same-tick unit reassignment would lose its gated update
 	self.lastFullUpdateTime = GetTime()
 	for i=1, #(self.fullUpdates), 2 do
@@ -280,7 +280,7 @@ end
 
 -- Event handling
 local function OnEvent(self, event, unit, ...)
-	if( not unitEvents[event] or self.unit == unit or (self.unitEventOverrides and self.unitEventOverrides[event] == unit)) then
+	if( not unitEvents[event] or self.unitSUF == unit or (self.unitEventOverrides and self.unitEventOverrides[event] == unit)) then
 		for handler, func in pairs(self.registeredEvents[event]) do
 			handler[func](handler, self, event, unit, ...)
 		end
@@ -408,16 +408,16 @@ local function checkVehicleData(self, elapsed)
 			self:SetScript("OnUpdate", nil)
 
 			self.inVehicle = false
-			self.unit = self.unitOwner
+			self.unitSUF = self.unitOwner
 			self:FullUpdate()
 
 		-- Got data, stop checking and do a full frame update
-		elseif( UnitExists(self.unit) ) then
+		elseif( UnitExists(self.unitSUF) ) then
 			self.timeElapsed = nil
 			self.dataAttempts = nil
 			self:SetScript("OnUpdate", nil)
 
-			self.unitGUID = SafeUnitGUID(self.unit)
+			self.unitGUID = SafeUnitGUID(self.unitSUF)
 			self:FullUpdate()
 		end
 	end
@@ -444,36 +444,36 @@ function Units:CheckVehicleStatus(frame, event, unit)
 	end
 	if( ( not frame.inVehicle or vehicleGUIDChanged ) and UnitHasVehicleUI(frame.unitOwner) and UnitHasVehiclePlayerFrameUI(frame.unitOwner) and not ShadowUF.db.profile.units[frame.unitType].disableVehicle ) then
 		frame.inVehicle = true
-		frame.unit = frame.vehicleUnit
+		frame.unitSUF = frame.vehicleUnit
 
-		if( not UnitIsConnected(frame.unit) ) then
+		if( not UnitIsConnected(frame.unitSUF) ) then
 			frame.timeElapsed = 0
 			frame.dataAttempts = 0
 			frame:SetScript("OnUpdate", checkVehicleData)
 		else
-			frame.unitGUID = SafeUnitGUID(frame.unit)
+			frame.unitGUID = SafeUnitGUID(frame.unitSUF)
 			frame:FullUpdate()
 		end
 
 	-- Was in a vehicle, no longer has a UI
 	elseif( frame.inVehicle and ( not UnitHasVehicleUI(frame.unitOwner) or not UnitHasVehiclePlayerFrameUI(frame.unitOwner) or ShadowUF.db.profile.units[frame.unitType].disableVehicle ) ) then
 		frame.inVehicle = false
-		frame.unit = frame.unitOwner
-		frame.unitGUID = UnitExists(frame.unit) and SafeUnitGUID(frame.unit) or nil
+		frame.unitSUF = frame.unitOwner
+		frame.unitGUID = UnitExists(frame.unitSUF) and SafeUnitGUID(frame.unitSUF) or nil
 		frame:FullUpdate()
 	end
 end
 
 -- Handles checking for GUID changes for doing a full update, this fixes frames sometimes showing the wrong unit when they change
 function Units:CheckUnitStatus(frame)
-	if( not frame.unit or not UnitExists(frame.unit) ) then
+	if( not frame.unitSUF or not UnitExists(frame.unitSUF) ) then
 		if( frame.unitGUID ) then
 			frame.unitGUID = nil
 		end
 		return
 	end
 
-	local ok, guid = pcall(UnitGUID, frame.unit)
+	local ok, guid = pcall(UnitGUID, frame.unitSUF)
 	if not ok then
 		-- compound token (e.g. party1target) — can't get GUID in PvP, just update
 		frame:FullUpdate()
@@ -492,8 +492,8 @@ end
 
 -- The argument from UNIT_PET is the pets owner, so the player summoning a new pet gets "player", party1 summoning a new pet gets "party1" and so on
 function Units:CheckPetUnitUpdated(frame, event, unit)
-	if( unit == frame.unitRealOwner and UnitExists(frame.unit) ) then
-		frame.unitGUID = SafeUnitGUID(frame.unit)
+	if( unit == frame.unitRealOwner and UnitExists(frame.unitSUF) ) then
+		frame.unitGUID = SafeUnitGUID(frame.unitSUF)
 		frame:FullUpdate()
 	end
 end
@@ -502,13 +502,13 @@ end
 -- OnAttributeChanged won't do anything because the frame is already setup, however, the active unit is non-existant
 -- while the primary unit is. So if we see they're in a vehicle with this case, we force the full update to get the vehicle change
 function Units:CheckGroupedUnitStatus(frame)
-	if( frame.inVehicle and not UnitExists(frame.unit) and UnitExists(frame.unitOwner) ) then
+	if( frame.inVehicle and not UnitExists(frame.unitSUF) and UnitExists(frame.unitOwner) ) then
 		frame.inVehicle = false
-		frame.unit = frame.unitOwner
-		frame.unitGUID = SafeUnitGUID(frame.unit)
+		frame.unitSUF = frame.unitOwner
+		frame.unitGUID = SafeUnitGUID(frame.unitSUF)
 		frame:FullUpdate()
-	elseif( UnitExists(frame.unit) ) then
-		local guid = SafeUnitGUID(frame.unit)
+	elseif( UnitExists(frame.unitSUF) ) then
+		local guid = SafeUnitGUID(frame.unitSUF)
 		-- The roster can shift mid-tick, so an occupant change always repaints and the tick gate only absorbs bursts that kept the same unit
 		if( GUIDChanged(frame.unitGUID, guid) ) then
 			frame.unitGUID = guid
@@ -554,7 +554,7 @@ local function createFakeUnitUpdateTimer(frame)
 	if( not frame.updateTimer ) then
 		-- Flagged so consumers can tell a routine poll from an event-driven update (aura containers only rebuild on real identity changes)
 		frame.updateTimer = C_Timer.NewTicker(0.5, function()
-			if( UnitExists(frame.unit) ) then
+			if( UnitExists(frame.unitSUF) ) then
 				frame.pollingUpdate = true
 				frame:FullUpdate()
 				frame.pollingUpdate = nil
@@ -564,7 +564,7 @@ local function createFakeUnitUpdateTimer(frame)
 end
 
 -- Attribute set, something changed
--- unit = Active unitid
+-- unitSUF = Active unitid, Blizzard's ping mixin reads frame.unit in secure context and a tainted one poisons the GUID for securecopy
 -- unitID = Just the number from the unitid
 -- unitType = Unitid minus numbers in it, used for configuration
 -- unitRealType = The actual unit type, if party is shown in raid this will be "party" while unitType is still "raid"
@@ -578,7 +578,7 @@ OnAttributeChanged = function(self, name, unit)
 	if( self.configUnit and unitFrames[self.configUnit] == self ) then unitFrames[self.configUnit] = nil end
 
 	-- Setup identification data
-	self.unit = unit
+	self.unitSUF = unit
 	self.unitID = tonumber(string.match(unit, "([0-9]+)"))
 	self.unitRealType = string.gsub(unit, "([0-9]+)", "")
 	self.unitType = self.unitUnmapped and string.gsub(self.unitUnmapped, "([0-9]+)", "") or self.unitType or self.unitRealType
@@ -620,7 +620,7 @@ OnAttributeChanged = function(self, name, unit)
 	end
 
 	-- Handles switching the internal unit variable to that of their vehicle
-	if( self.unit == "player" or self.unitRealType == "party" or self.unitRealType == "raid" ) then
+	if( self.unitSUF == "player" or self.unitRealType == "party" or self.unitRealType == "raid" ) then
 		self:RegisterNormalEvent("UNIT_ENTERED_VEHICLE", Units, "CheckVehicleStatus")
 		self:RegisterNormalEvent("UNIT_EXITED_VEHICLE", Units, "CheckVehicleStatus")
 		self:RegisterUpdateFunc(Units, "CheckVehicleStatus")
@@ -630,12 +630,12 @@ OnAttributeChanged = function(self, name, unit)
 	self:RegisterUnitEvent("UNIT_PHASE", self, "FullUpdate")
 
 	-- Pet changed, going from pet -> vehicle for one
-	if( self.unit == "pet" or self.unitType == "partypet" ) then
-		self.unitRealOwner = self.unit == "pet" and "player" or ShadowUF.partyUnits[self.unitID]
+	if( self.unitSUF == "pet" or self.unitType == "partypet" ) then
+		self.unitRealOwner = self.unitSUF == "pet" and "player" or ShadowUF.partyUnits[self.unitID]
 		self:SetAttribute("unitRealOwner", self.unitRealOwner)
 		self:RegisterNormalEvent("UNIT_PET", Units, "CheckPetUnitUpdated")
 
-		if( self.unit == "pet" ) then
+		if( self.unitSUF == "pet" ) then
 			self:SetAttribute("disableVehicleSwap", ShadowUF.db.profile.units.player.disableVehicle)
 		else
 			self:SetAttribute("disableVehicleSwap", ShadowUF.db.profile.units.party.disableVehicle)
@@ -662,22 +662,22 @@ OnAttributeChanged = function(self, name, unit)
 					end
 				end
 			]])
-			RegisterStateDriver(self, "vehicleupdated", string.format("[target=%s, nohelp, noharm] vehicle; pet", self.unitRealOwner, self.unit))
+			RegisterStateDriver(self, "vehicleupdated", string.format("[target=%s, nohelp, noharm] vehicle; pet", self.unitRealOwner, self.unitSUF))
 		end
 
 	-- Automatically do a full update on target change
-	elseif( self.unit == "target" ) then
+	elseif( self.unitSUF == "target" ) then
 		self.isUnitVolatile = true
 		self:RegisterNormalEvent("PLAYER_TARGET_CHANGED", Units, "CheckUnitStatus")
 		self:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", Units, "CheckEngagedUpdate")
 
 	-- Automatically do a full update on focus change
-	elseif( self.unit == "focus" ) then
+	elseif( self.unitSUF == "focus" ) then
 		self.isUnitVolatile = true
 		self:RegisterNormalEvent("PLAYER_FOCUS_CHANGED", Units, "CheckUnitStatus")
 		self:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", Units, "CheckEngagedUpdate")
 
-	elseif( self.unit == "player" ) then
+	elseif( self.unitSUF == "player" ) then
 		-- this should not get called in combat, but just in case make sure we are not actually in combat
 		if not InCombatLockdown() then
 			self:SetAttribute("toggleForVehicle", true)
@@ -737,10 +737,10 @@ OnAttributeChanged = function(self, name, unit)
 		elseif( self.unitRealType == "arenatargettarget" ) then
 			local owner = ShadowUF.arenaUnits[self.unitID]
 			self.unitRealOwner = owner and (owner .. "target")
-		elseif( self.unit == "focustarget" ) then
+		elseif( self.unitSUF == "focustarget" ) then
 			self.unitRealOwner = "focus"
 			self:RegisterNormalEvent("PLAYER_FOCUS_CHANGED", Units, "CheckUnitStatus")
-		elseif( self.unit == "targettarget" or self.unit == "targettargettarget" ) then
+		elseif( self.unitSUF == "targettarget" or self.unitSUF == "targettargettarget" ) then
 			self.unitRealOwner = "target"
 			self:RegisterNormalEvent("PLAYER_TARGET_CHANGED", Units, "CheckUnitStatus")
 		end
@@ -805,24 +805,38 @@ local function OnLeave(self)
 	end
 end
 
+-- Blizzard's UnitFrame_UpdateTooltip reads self.unit which our frames don't carry, so we run the same flow on our own field
+local function SUF_UpdateTooltip(self)
+	GameTooltip_SetDefaultAnchor(GameTooltip, self)
+	if( GameTooltip:SetUnit(self.unitSUF) ) then
+		GameTooltip_AddBlankLineToTooltip(GameTooltip)
+		GameTooltip_AddInstructionLine(GameTooltip, UNIT_POPUP_RIGHT_CLICK)
+		GameTooltip:Show()
+		self.UpdateTooltip = SUF_UpdateTooltip
+	else
+		self.UpdateTooltip = nil
+	end
+end
+
 local function SUF_OnEnter(self)
 	if( not ShadowUF.db.profile.tooltipCombat or not InCombatLockdown() ) then
 		if not GameTooltip:IsForbidden() then
-			UnitFrame_OnEnter(self)
+			SUF_UpdateTooltip(self)
 		end
 	end
 end
 
 local function SUF_OnLeave(self)
 	if not GameTooltip:IsForbidden() then
-		UnitFrame_OnLeave(self)
+		self.UpdateTooltip = nil
+		GameTooltip:FadeOut()
 	end
 end
 
 -- Create the generic things that we want in every secure frame regardless if it's a button or a header
 local function ClassToken(self)
-	if( not self.unit or not UnitExists(self.unit) ) then return nil end
-	local class = select(2, UnitClass(self.unit))
+	if( not self.unitSUF or not UnitExists(self.unitSUF) ) then return nil end
+	local class = select(2, UnitClass(self.unitSUF))
 	-- Secret when the unit's identity is secret (target/focus/boss in combat), callers index color tables with it so treat as unknown
 	-- issecretvalue first, even a boolean test on a secret is an error
 	if( issecretvalue and issecretvalue(class) ) then return nil end
@@ -834,10 +848,10 @@ local function ArenaClassToken(self)
 	return specID and select(6, GetSpecializationInfoByID(specID))
 end
 
--- The stock ping mixin reads frame.unit and taints itself doing so, securecopy then errors on the secret GUID
--- Soft-fail the ping on restricted units until I properly fix this.
+-- Child frames resolve their unit through useparent-unit and unitsuffix, purely Lua-side, so they carry no raw unit attribute for the stock ping mixin to fall back on
+-- We resolve the ping GUID ourselves and drop ones we can't access, pinging a restricted unit just fails quietly
 local function PingTargetInfo(self)
-	local ok, guid = pcall(UnitGUID, self.unit)
+	local ok, guid = pcall(UnitGUID, self.unitSUF)
 	if( not ok or (issecretvalue and issecretvalue(guid)) or not guid ) then return {} end
 	return {guid = guid}
 end
@@ -863,7 +877,6 @@ function Units:CreateUnit(...)
 	frame.FullUpdate = FullUpdate
 	frame.SetVisibility = SetVisibility
 	frame.UnitClassToken = ClassToken
-	frame.GetTargetInfo = PingTargetInfo
 	frame.topFrameLevel = 5
 
 	-- Ensures that text is the absolute highest thing there is
@@ -1477,6 +1490,7 @@ function Units:LoadChildUnit(parent, type, id)
 	frame.unitType = type
 	frame.parent = parent
 	frame.isChildUnit = true
+	frame.GetTargetInfo = PingTargetInfo
 	frame.hasStateWatch = type == "partypet"
 	frame:SetFrameStrata("LOW")
 	frame:SetAttribute("useparent-unit", true)
@@ -1560,13 +1574,13 @@ end
 function Units:ProfileChanged()
 	-- Reset the anchors for all frames to prevent X is dependant on Y
 	for frame in pairs(frameList) do
-		if( frame.unit ) then
+		if( frame.unitSUF ) then
 			frame:ClearAllPoints()
 		end
 	end
 
 	for frame in pairs(frameList) do
-		if( frame.unit and ShadowUF.db.profile.units[frame.unitType].enabled ) then
+		if( frame.unitSUF and ShadowUF.db.profile.units[frame.unitType].enabled ) then
 			-- Force all enabled modules to disable
 			for key, module in pairs(ShadowUF.modules) do
 				if( frame[key] and frame.visibility[key] ) then
@@ -1643,7 +1657,7 @@ function Units:InitializeArena()
 		local frame = headerFrames.arena.children[i]
 		frame:SetAttribute("state-unitexists", true)
 		frame:Show()
-		if( UnitExists(frame.unit) ) then
+		if( UnitExists(frame.unitSUF) ) then
 			frame:FullUpdate()
 		else
 			-- Unit doesn't exist during prep phase, show class-colored placeholder
@@ -1719,7 +1733,7 @@ function Units:CheckPlayerZone(force)
 
 	ShadowUF:LoadUnits()
 	for frame in pairs(frameList) do
-		if( frame.unit and ShadowUF.db.profile.units[frame.unitType].enabled ) then
+		if( frame.unitSUF and ShadowUF.db.profile.units[frame.unitType].enabled ) then
 			frame:SetVisibility()
 
 			-- Auras are enabled so will need to check if the filter has to change
@@ -1727,7 +1741,7 @@ function Units:CheckPlayerZone(force)
 				ShadowUF.modules.auras:UpdateFilter(frame)
 			end
 
-			if( UnitExists(frame.unit) ) then
+			if( UnitExists(frame.unitSUF) ) then
 				frame:FullUpdate()
 			end
 		end
@@ -1796,7 +1810,7 @@ centralFrame:SetScript("OnEvent", function(self, event, unit, ...)
 		if( status == "seen" and headerFrames.arena ) then
 			for i=1, #(headerFrames.arena.children) do
 				local frame = headerFrames.arena.children[i]
-				if( frame.unit == unit ) then
+				if( frame.unitSUF == unit ) then
 					frame.unitGUID = nil
 					if( UnitExists(unit) ) then
 						frame:FullUpdate()
@@ -1839,7 +1853,7 @@ centralFrame:SetScript("OnEvent", function(self, event, unit, ...)
 		checkCurableSpells()
 
 		for frame in pairs(ShadowUF.Units.frameList) do
-			if( frame.unit ) then
+			if( frame.unitSUF ) then
 				frame:SetVisibility()
 
 				if( frame:IsVisible() ) then
@@ -1863,14 +1877,14 @@ centralFrame:SetScript("OnEvent", function(self, event, unit, ...)
 	-- Handle Target/Focus changes instantly to avoid latency
 	elseif( event == "PLAYER_TARGET_CHANGED" ) then
 		for frame in pairs(ShadowUF.Units.frameList) do
-			if( frame.unit == "target" and frame:IsVisible() ) then
+			if( frame.unitSUF == "target" and frame:IsVisible() ) then
 				frame:FullUpdate()
 			end
 		end
 		
 	elseif( event == "PLAYER_FOCUS_CHANGED" ) then
 		for frame in pairs(ShadowUF.Units.frameList) do
-			if( frame.unit == "focus" and frame:IsVisible() ) then
+			if( frame.unitSUF == "focus" and frame:IsVisible() ) then
 				frame:FullUpdate()
 			end
 		end

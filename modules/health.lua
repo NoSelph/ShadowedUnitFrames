@@ -158,8 +158,8 @@ function Health:UpdateDispelSlot(frame)
 	-- Pick the side matching the unit's reaction, mute when neither side applies
 	local dispelFilter = frame.healthBar.dispelSlotFilter or filters.assist
 	local muted = frame.healthBar.dispelSlotMuted
-	if( frame.unit and not frame.configMode ) then
-		local state = ShadowUF.GetUnitReactionState(frame.unit)
+	if( frame.unitSUF and not frame.configMode ) then
+		local state = ShadowUF.GetUnitReactionState(frame.unitSUF)
 		if( state == "assist" ) then
 			dispelFilter = filters.assist
 			muted = false
@@ -182,8 +182,8 @@ function Health:UpdateDispelSlot(frame)
 			frame.healthBar.dispelSlotMuted = muted
 		end
 	end
-	if( frame.unit and not frame.configMode ) then
-		local ok = pcall(container.SetUnit, container, frame.unit)
+	if( frame.unitSUF and not frame.configMode ) then
+		local ok = pcall(container.SetUnit, container, frame.unitSUF)
 		container:SetEnabled(ok and true or false)
 		if( ok ) then
 			if( not inCombat ) then container:Show() end
@@ -210,7 +210,7 @@ function Health:OnEnable(frame)
 	frame:RegisterUnitEvent("UNIT_THREAT_SITUATION_UPDATE", self, "UpdateColor")
 	frame:RegisterUnitEvent("UNIT_TARGETABLE_CHANGED", self, "UpdateColor")
 
-	if( frame.unit == "pet" ) then
+	if( frame.unitSUF == "pet" ) then
 		frame:RegisterUnitEvent("UNIT_POWER_UPDATE", self, "UpdateColor")
 	end
 
@@ -261,13 +261,13 @@ function Health:UpdateColor(frame)
 	frame.healthBar.wasOffline = nil
 
 	local color
-	local unit = frame.unit
+	local unit = frame.unitSUF
 	local reactionType = ShadowUF.db.profile.units[frame.unitType].healthBar.reactionType
 	if( not UnitIsConnected(unit) ) then
 		frame.healthBar.wasOffline = true
 		frame:SetBarColor("healthBar", ShadowUF.db.profile.healthColors.offline.r, ShadowUF.db.profile.healthColors.offline.g, ShadowUF.db.profile.healthColors.offline.b)
 		return
-	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorAggro and UnitThreatSituation(frame.unit) == 3 ) then
+	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorAggro and UnitThreatSituation(frame.unitSUF) == 3 ) then
 		frame:SetBarColor("healthBar", ShadowUF.db.profile.healthColors.aggro.r, ShadowUF.db.profile.healthColors.aggro.g, ShadowUF.db.profile.healthColors.aggro.b)
 		return
 	elseif( frame.inVehicle ) then
@@ -305,12 +305,12 @@ function Health:UpdateColor(frame)
 	elseif( ShadowUF.db.profile.units[frame.unitType].healthBar.colorType == "playerclass" and (frame.unitType == "partypet" or frame.unitType == "raidpet" or frame.unitType == "arenapet") and (frame.parent or frame.unitType == "raidpet") ) then
 		local unit2
 		if frame.unitType == "raidpet" then
-			local id = string.match(frame.unit, "raidpet(%d+)")
+			local id = string.match(frame.unitSUF, "raidpet(%d+)")
 			if id then
 				unit2 = "raid" .. id
 			end
 		elseif frame.parent then
-			unit2 = frame.parent.unit
+			unit2 = frame.parent.unitSUF
 		end
 		if unit2 then
 			local class = select(2, UnitClass(unit2))
@@ -354,7 +354,7 @@ function Health:UpdateColor(frame)
 end
 
 function Health:Update(frame)
-	local unit = frame.unit
+	local unit = frame.unitSUF
 	if( not unit or not UnitExists(unit) ) then return end
 
 	local isOffline = not UnitIsConnected(unit)
@@ -387,7 +387,7 @@ function Health:Update(frame)
 	-- Color health by percentage
 	elseif( frame.healthBar.hasPercent ) then
 		-- 12.0: Check for Curve
-		local curve = getGradientColor(frame.unit)
+		local curve = getGradientColor(frame.unitSUF)
 		if( type(curve) == "userdata" ) then
 		    -- Curve Logic
 		    if( frame.healthBar.SetStatusBarColorCurve ) then
@@ -403,7 +403,7 @@ function Health:Update(frame)
 		    end
 		else
 		    -- Manual Logic
-		    frame:SetBarColor("healthBar", getGradientColor(frame.unit))
+		    frame:SetBarColor("healthBar", getGradientColor(frame.unitSUF))
 		end
 	end
 end

@@ -18,13 +18,13 @@ end
 
 local altColor = {}
 function AltPower:UpdateVisibility(frame)
-	local barID = UnitPowerBarID(frame.unit) or 0
+	local barID = UnitPowerBarID(frame.unitSUF) or 0
 	local barInfo = GetUnitPowerBarInfoByID(barID)
 	local visible = false
 	if( barInfo and barInfo.barType ) then
 		if( ( frame.unitType == "player" or frame.unitType == "pet" ) or not barInfo.hideFromOthers ) then
 			visible = true
-		elseif( barInfo.showOnRaid and not ShadowUF.IsUnitIdentitySecret(frame.unit) and ( UnitInRaid(frame.unit) or UnitInParty(frame.unit) ) ) then
+		elseif( barInfo.showOnRaid and not ShadowUF.IsUnitIdentitySecret(frame.unitSUF) and ( UnitInRaid(frame.unitSUF) or UnitInParty(frame.unitSUF) ) ) then
 			visible = true
 		end
 	end
@@ -46,10 +46,10 @@ end
 
 function AltPower:Update(frame, event, unit, type)
 	if( event and type ~= "ALTERNATE" ) then return end
-	local barID = UnitPowerBarID(frame.unit) or 0
+	local barID = UnitPowerBarID(frame.unitSUF) or 0
 	local barInfo = GetUnitPowerBarInfoByID(barID)
 	local minPower = barInfo and barInfo.minPower or 0
 
-	pcall(frame.altPowerBar.SetMinMaxValues, frame.altPowerBar, minPower, UnitPowerMax(frame.unit, ALTERNATE_POWER_INDEX) or 0)
-	pcall(frame.altPowerBar.SetValue, frame.altPowerBar, UnitPower(frame.unit, ALTERNATE_POWER_INDEX) or 0)
+	pcall(frame.altPowerBar.SetMinMaxValues, frame.altPowerBar, minPower, UnitPowerMax(frame.unitSUF, ALTERNATE_POWER_INDEX) or 0)
+	pcall(frame.altPowerBar.SetValue, frame.altPowerBar, UnitPower(frame.unitSUF, ALTERNATE_POWER_INDEX) or 0)
 end

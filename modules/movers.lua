@@ -253,7 +253,7 @@ local function prepareChildUnits(header, ...)
 end
 
 local function OnEnter(self)
-	local tooltip = self.tooltipText or self.unitID and string.format("%s #%d", L.units[self.unitType], self.unitID) or L.units[self.unit] or self.unit
+	local tooltip = self.tooltipText or self.unitID and string.format("%s #%d", L.units[self.unitType], self.unitID) or L.units[self.unitSUF] or self.unitSUF
 	local additionalText = ShadowUF.Units.childUnits[self.unitType] and L["Child units cannot be dragged, you will have to reposition them through /shadowuf."]
 
 	GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
@@ -444,7 +444,7 @@ local function setupConfigFrame(frame)
 		-- Units visible, but it's not supposed to be
 		if( frame:IsVisible() and ( not ShadowUF.db.profile.units[frame.unitType].enabled or frame.isPlaceholderHidden ) ) then
 			RegisterUnitWatch(frame, frame.hasStateWatch)
-			if( not UnitExists(frame.unit) ) then frame:Hide() end
+			if( not UnitExists(frame.unitSUF) ) then frame:Hide() end
 
 		-- Unit's not visible and it's enabled so it should
 		elseif( not frame.isPlaceholderHidden and not frame:IsVisible() and ShadowUF.db.profile.units[frame.unitType].enabled ) then
@@ -674,7 +674,7 @@ end
 teardownTestFrame = function(frame)
 	frame.configMode = nil
 	frame.unitOwner = nil
-	frame.unit = nil
+	frame.unitSUF = nil
 	frame.configUnitID = nil
 	if( frame.isPlaceholderHidden ) then
 		frame.isPlaceholderHidden = nil
@@ -692,7 +692,7 @@ teardownTestFrame = function(frame)
 	end
 
 	RegisterUnitWatch(frame, frame.hasStateWatch)
-	if( not UnitExists(frame.unit) ) then frame:Hide() end
+	if( not UnitExists(frame.unitSUF) ) then frame:Hide() end
 end
 
 local function teardownConfigFrame(frame)
@@ -702,7 +702,7 @@ local function teardownConfigFrame(frame)
 
 	frame.configMode = nil
 	frame.unitOwner = nil
-	frame.unit = nil
+	frame.unitSUF = nil
 	frame.configUnitID = nil
 	if( frame.isPlaceholderHidden ) then
 		frame.isPlaceholderHidden = nil
@@ -729,7 +729,7 @@ local function teardownConfigFrame(frame)
 	end
 
 	RegisterUnitWatch(frame, frame.hasStateWatch)
-	if( not UnitExists(frame.unit) ) then frame:Hide() end
+	if( not UnitExists(frame.unitSUF) ) then frame:Hide() end
 end
 
 function Movers:Disable(immediate, deferReloads)

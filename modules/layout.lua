@@ -102,7 +102,7 @@ function Layout:Reload(unit)
 
 	-- Now update them
 	for frame in pairs(ShadowUF.Units.frameList) do
-		if( frame.unit and ( not unit or frame.unitType == unit ) and not frame.isHeaderFrame ) then
+		if( frame.unitSUF and ( not unit or frame.unitType == unit ) and not frame.isHeaderFrame ) then
 			frame:SetVisibility()
 			self:Load(frame)
 			frame:FullUpdate()

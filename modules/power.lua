@@ -14,7 +14,7 @@ function Power:OnEnable(frame)
 	frame:RegisterUnitEvent("UNIT_CLASSIFICATION_CHANGED", self, "UpdateClassification")
 
 	-- run an update after returning to life
-	if ( frame.unit == "player" ) then
+	if ( frame.unitSUF == "player" ) then
 		frame:RegisterNormalEvent("PLAYER_UNGHOST", self, "Update")
 	end
 
@@ -32,7 +32,7 @@ end
 
 local altColor = {}
 function Power:UpdateColor(frame)
-	local ok, powerID, currentType, altR, altG, altB = pcall(UnitPowerType, frame.unit)
+	local ok, powerID, currentType, altR, altG, altB = pcall(UnitPowerType, frame.unitSUF)
 	if not ok then return end
 	frame.powerBar.currentType = currentType
 
@@ -51,7 +51,7 @@ function Power:UpdateColor(frame)
 	local color
 	if( frame.powerBar.minusMob ) then
 		color = ShadowUF.db.profile.healthColors.offline
-	elseif( ShadowUF.db.profile.units[frame.unitType].powerBar.colorType == "class" and UnitIsPlayer(frame.unit) ) then
+	elseif( ShadowUF.db.profile.units[frame.unitType].powerBar.colorType == "class" and UnitIsPlayer(frame.unitSUF) ) then
 		local class = frame:UnitClassToken()
 		color = class and ShadowUF.db.profile.classColors[class]
 	end
@@ -74,7 +74,7 @@ function Power:UpdateColor(frame)
 end
 
 function Power:UpdateClassification(frame, event, unit)
-	local classif = UnitClassification(frame.unit)
+	local classif = UnitClassification(frame.unitSUF)
 	local minus = nil
 	if( classif == "minus" ) then
 		minus = true
@@ -98,8 +98,8 @@ function Power:Update(frame, event, unit, powerType)
 	if( frame.powerBar.minusMob ) then return end
 
 	-- Attempt to get power values; pcall guards against compound token errors in PvP
-	local okP, currentPower = pcall(UnitPower, frame.unit)
-	local okM, maxPower = pcall(UnitPowerMax, frame.unit)
+	local okP, currentPower = pcall(UnitPower, frame.unitSUF)
+	local okM, maxPower = pcall(UnitPowerMax, frame.unitSUF)
 	if not okP or not okM then return end
 	frame.powerBar.currentPower = currentPower
 	
@@ -111,6 +111,6 @@ function Power:Update(frame, event, unit, powerType)
 	end
 
 	-- Safe update for Value
-	local val = UnitIsDeadOrGhost(frame.unit) and 0 or not UnitIsConnected(frame.unit) and 0 or frame.powerBar.currentPower
+	local val = UnitIsDeadOrGhost(frame.unitSUF) and 0 or not UnitIsConnected(frame.unitSUF) and 0 or frame.powerBar.currentPower
 	pcall(frame.powerBar.SetValue, frame.powerBar, val)
 end

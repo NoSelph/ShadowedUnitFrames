@@ -741,7 +741,7 @@ local function getContainerSignature(group, config, sections)
 	table.insert(structural, tostring(hideStacks))
 	table.insert(structural, tostring(group.canCancel))
 	table.insert(structural, tostring(ShadowUF.db.profile.auraColors.disableDispel))
-	table.insert(structural, tostring(config.temporary and group.parent.unit == "player" and group.type == "buffs"))
+	table.insert(structural, tostring(config.temporary and group.parent.unitSUF == "player" and group.type == "buffs"))
 	table.insert(runtime, tostring(config.perRow * config.maxRows))
 	local spacingH, spacingV = getAuraSpacing()
 	table.insert(runtime, spacingH .. "x" .. spacingV)
@@ -909,7 +909,7 @@ local function configureGroupContainer(frame, group, config, extraSections)
 		end
 	end
 
-	group.canCancel = (frame.unit == "player" and group.type == "buffs" and not ShadowUF.db.profile.auras.disableCancel) or nil
+	group.canCancel = (frame.unitSUF == "player" and group.type == "buffs" and not ShadowUF.db.profile.auras.disableCancel) or nil
 	local structural, signature = getContainerSignature(group, config, sections)
 
 	if( group.container and group.containerSignature ~= signature ) then
@@ -988,7 +988,7 @@ local function configureGroupContainer(frame, group, config, extraSections)
 		end
 
 		-- Native temp weapon enchants, appended to the flow layout
-		if( config.temporary and frame.unit == "player" and group.type == "buffs" ) then
+		if( config.temporary and frame.unitSUF == "player" and group.type == "buffs" ) then
 			local slots = AuraContainerItemEnchantmentSlot or { MainHand = 0, OffHand = 1 }
 			local enchantSection = { size = config.size, auraType = "buffs" }
 			pcall(container.AddItemEnchantment, container, slots.MainHand, { initializeFrame = makeButtonInitializer(group, config, enchantSection, 0) })
@@ -1175,7 +1175,7 @@ function Auras:UpdateContainerCandidateFilters(frame)
 	local blacklist = frame.auras.blacklist
 	local customFilters = ShadowUF.db.profile.customFilters or {}
 
-	local assist = frame.unit and resolveAssist(frame.unit) or false
+	local assist = frame.unitSUF and resolveAssist(frame.unitSUF) or false
 	frame.auras.sectionsAssist = assist
 	local hasGatedSections = false
 
@@ -1252,8 +1252,8 @@ end
 
 -- Crossing the area of interest boundary swaps the forwarded aura payload, so UNIT_AURA fires exactly when the filters start (or stop) misbehaving
 function Auras:CheckUnitReachable(frame)
-	if( frame.configMode or not frame.unit or frame.auras.containersReachable == nil ) then return end
-	if( frame.auras.containersReachable ~= ShadowUF.IsUnitReachable(frame.unit) ) then
+	if( frame.configMode or not frame.unitSUF or frame.auras.containersReachable == nil ) then return end
+	if( frame.auras.containersReachable ~= ShadowUF.IsUnitReachable(frame.unitSUF) ) then
 		self:UpdateContainers(frame)
 	end
 end
@@ -1266,12 +1266,12 @@ function Auras:UpdateContainers(frame)
 	-- SetUnit early-outs on an unchanged token, so retargets (same token, different unit) need an UpdateAllAuras kick
 	-- Kicking every call makes polled compound units (targettarget...) flash twice a second, so only kick when the resolved identity changed (or on event updates when it's secret)
 	local identity
-	if( frame.unit and not ShadowUF.IsUnitIdentitySecret(frame.unit) ) then
-		local ok, guid = pcall(UnitGUID, frame.unit)
+	if( frame.unitSUF and not ShadowUF.IsUnitIdentitySecret(frame.unitSUF) ) then
+		local ok, guid = pcall(UnitGUID, frame.unitSUF)
 		if( ok ) then identity = guid end
 	end
 
-	local reachable = frame.unit and ShadowUF.IsUnitReachable(frame.unit) or false
+	local reachable = frame.unitSUF and ShadowUF.IsUnitReachable(frame.unitSUF) or false
 	frame.auras.containersReachable = reachable
 
 	for _, auraType in ipairs(AURA_TYPES) do
@@ -1279,8 +1279,8 @@ function Auras:UpdateContainers(frame)
 			local group = frame.auras[auraType .. i]
 			local container = group and group.container
 			if( container and not group.containerMerged and not group.containerDisabled ) then
-				if( frame.unit ) then
-					local ok = pcall(container.SetUnit, container, frame.unit)
+				if( frame.unitSUF ) then
+					local ok = pcall(container.SetUnit, container, frame.unitSUF)
 					if( ok and reachable ) then
 						container:SetEnabled(true)
 						-- Show is blocked in combat (inherited protection)
@@ -1346,7 +1346,7 @@ local function updateGroup(self, groupKey, config, reverseConfig)
 	group.lastTemporary = 0
 	group.groupKey = groupKey
 	group.parent = self
-	if( config.anchorPoint == "FREE" and self.unit == "player" ) then
+	if( config.anchorPoint == "FREE" and self.unitSUF == "player" ) then
 		group.anchorTo = UIParent
 	else
 		group.anchorTo = self
@@ -1611,7 +1611,7 @@ function Auras:UpdateBossDebuffs(frame)
 
 	if not AddPrivateAuraAnchor then return end
 
-	local unit = frame.unit
+	local unit = frame.unitSUF
 	if not unit then
 		self:ClearBossDebuffs(frame)
 		return
@@ -1855,7 +1855,7 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 	-- 12.0: Simplified - always show timers if enabled (ALL) or for player auras (PLAYER)
 	if( not ShadowUF.db.profile.auras.disableCooldown and durationObject and ( config.timers.ALL or ( isPlayerAura and config.timers.PLAYER ) ) ) then
 		-- Requires unit aura access, errors while auras are secret
-		local okDuration, durationInfo = pcall(C_UnitAuras.GetAuraDuration, frame.parent.unit, auraInstanceID)
+		local okDuration, durationInfo = pcall(C_UnitAuras.GetAuraDuration, frame.parent.unitSUF, auraInstanceID)
 		if( okDuration and durationInfo ) then
 			button.cooldown:SetCooldownFromDurationObject(durationInfo)
 			button.cooldown:Show()
@@ -1885,7 +1885,7 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 	button.auraID = index
 	button.auraInstanceID = auraInstanceID
 	button.filter = filter
-	button.unit = frame.parent.unit
+	button.unit = frame.parent.unitSUF
 	button.icon:SetTexture(texture)
 	
 	-- Stack count
@@ -1895,7 +1895,7 @@ local function renderAura(parent, frame, type, config, displayConfig, index, fil
 		else
 			-- Errors while auras are secret (RequiresUnitAuraAccess)
 			-- Never boolean-test countText, it can be a secret string (SetText takes secrets, Lua truth tests don't)
-			local okCount, countText = pcall(C_UnitAuras.GetAuraApplicationDisplayCount, frame.parent.unit, auraInstanceID, 2)
+			local okCount, countText = pcall(C_UnitAuras.GetAuraApplicationDisplayCount, frame.parent.unitSUF, auraInstanceID, 2)
 			if( okCount ) then
 				button.stack:SetText(countText)
 			else
@@ -2013,7 +2013,7 @@ local function scanConfigMode(parent, frame, type, config, displayConfig, filter
 				button.auraID = i
 				button.auraInstanceID = i
 				button.filter = filter
-				button.unit = frame.parent.unit
+				button.unit = frame.parent.unitSUF
 				button.icon:SetTexture(texture)
 
 				-- Stack count
@@ -2104,7 +2104,7 @@ function Auras:Update(frame)
 			end
 
 			-- Reaction flips (retargets, mind control, duels) re-gate the dispel-based debuff sections
-			if( frame.auras.hasReactionGatedSections and frame.unit and frame.auras.sectionsAssist ~= resolveAssist(frame.unit) ) then
+			if( frame.auras.hasReactionGatedSections and frame.unitSUF and frame.auras.sectionsAssist ~= resolveAssist(frame.unitSUF) ) then
 				self:UpdateContainerCandidateFilters(frame)
 			end
 
@@ -2137,7 +2137,7 @@ function Auras:Update(frame)
 				local group = frame.auras[groupKey]
 
 				if( group and frameConfig and frameConfig.enabled and not group.skipScan ) then
-					group.totalAuras = (frameConfig.temporary and frame.unit == "player") and group.temporaryEnchants or 0
+					group.totalAuras = (frameConfig.temporary and frame.unitSUF == "player") and group.temporaryEnchants or 0
 
 					local filterValue = frameConfig.filter or "ALL"
 					local ok, err

@@ -147,7 +147,7 @@ end
 
 
 function Fader:Update(frame, event)
-	local okPT, pt = pcall(UnitPowerType, frame.unit)
+	local okPT, pt = pcall(UnitPowerType, frame.unitSUF)
 	-- In combat, fade back in
 	if( InCombatLockdown() or event == "PLAYER_REGEN_DISABLED" ) then
 		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha)
@@ -155,10 +155,10 @@ function Fader:Update(frame, event)
 	elseif( frame.fader.playerCasting ) then
 		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha, true)
 	-- Ether mana or energy is not at 100%, fade in
-	elseif( okPT and powerDepletes[pt] and ShadowUF:SafeMath(function() return UnitPower(frame.unit) ~= UnitPowerMax(frame.unit) end) ) then
+	elseif( okPT and powerDepletes[pt] and ShadowUF:SafeMath(function() return UnitPower(frame.unitSUF) ~= UnitPowerMax(frame.unitSUF) end) ) then
 		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha)
 	-- Health is not at max, fade in
-	elseif( ShadowUF:SafeMath(function() return UnitHealth(frame.unit) ~= UnitHealthMax(frame.unit) end) ) then
+	elseif( ShadowUF:SafeMath(function() return UnitHealth(frame.unitSUF) ~= UnitHealthMax(frame.unitSUF) end) ) then
 		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha)
 	-- Targetting somebody, fade in
 	elseif( frame.unitType == "player" and UnitExists("target") ) then

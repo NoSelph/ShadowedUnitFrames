@@ -33,17 +33,17 @@ function Empty:UpdateColor(frame)
 	local color
 	local reactionType = ShadowUF.db.profile.units[frame.unitType].emptyBar.reactionType
 
-	if( ( reactionType == "npc" or reactionType == "both" ) and not UnitPlayerControlled(frame.unit) and UnitIsTapDenied(frame.unit) and UnitCanAttack("player", frame.unit) ) then
+	if( ( reactionType == "npc" or reactionType == "both" ) and not UnitPlayerControlled(frame.unitSUF) and UnitIsTapDenied(frame.unitSUF) and UnitCanAttack("player", frame.unitSUF) ) then
 		color = ShadowUF.db.profile.healthColors.tapped
-	elseif( not UnitPlayerOrPetInRaid(frame.unit) and not UnitPlayerOrPetInParty(frame.unit) and ( ( ( reactionType == "player" or reactionType == "both" ) and UnitIsPlayer(frame.unit) and not UnitIsFriend(frame.unit, "player") ) or ( ( reactionType == "npc" or reactionType == "both" ) and not UnitIsPlayer(frame.unit) ) ) ) then
-		if( not UnitIsFriend(frame.unit, "player") and UnitPlayerControlled(frame.unit) ) then
-			if( UnitCanAttack("player", frame.unit) ) then
+	elseif( not UnitPlayerOrPetInRaid(frame.unitSUF) and not UnitPlayerOrPetInParty(frame.unitSUF) and ( ( ( reactionType == "player" or reactionType == "both" ) and UnitIsPlayer(frame.unitSUF) and not UnitIsFriend(frame.unitSUF, "player") ) or ( ( reactionType == "npc" or reactionType == "both" ) and not UnitIsPlayer(frame.unitSUF) ) ) ) then
+		if( not UnitIsFriend(frame.unitSUF, "player") and UnitPlayerControlled(frame.unitSUF) ) then
+			if( UnitCanAttack("player", frame.unitSUF) ) then
 				color = ShadowUF.db.profile.healthColors.hostile
 			else
 				color = ShadowUF.db.profile.healthColors.enemyUnattack
 			end
-		elseif( UnitReaction(frame.unit, "player") ) then
-			local reaction = UnitReaction(frame.unit, "player")
+		elseif( UnitReaction(frame.unitSUF, "player") ) then
+			local reaction = UnitReaction(frame.unitSUF, "player")
 			if( reaction > 4 ) then
 				color = ShadowUF.db.profile.healthColors.friendly
 			elseif( reaction == 4 ) then
@@ -52,8 +52,8 @@ function Empty:UpdateColor(frame)
 				color = ShadowUF.db.profile.healthColors.hostile
 			end
 		end
-	elseif( ShadowUF.db.profile.units[frame.unitType].emptyBar.class and ( UnitIsPlayer(frame.unit) or UnitCreatureFamily(frame.unit) or UnitPlayerOrPetInRaid(frame.unit) or UnitPlayerOrPetInParty(frame.unit) ) ) then
-		local class = UnitCreatureFamily(frame.unit) or frame:UnitClassToken()
+	elseif( ShadowUF.db.profile.units[frame.unitType].emptyBar.class and ( UnitIsPlayer(frame.unitSUF) or UnitCreatureFamily(frame.unitSUF) or UnitPlayerOrPetInRaid(frame.unitSUF) or UnitPlayerOrPetInParty(frame.unitSUF) ) ) then
+		local class = UnitCreatureFamily(frame.unitSUF) or frame:UnitClassToken()
 		if class and not (issecretvalue and issecretvalue(class)) then
 			color = ShadowUF.db.profile.classColors[class]
 		end

@@ -22,7 +22,7 @@ function Priest:OnLayoutApplied(frame)
 end
 
 function Priest:PowerChanged(frame)
-	local visible = UnitPowerType(frame.unit) ~= Enum.PowerType.Mana and not frame.inVehicle
+	local visible = UnitPowerType(frame.unitSUF) ~= Enum.PowerType.Mana and not frame.inVehicle
 	local type = visible and "RegisterUnitEvent" or "UnregisterSingleEvent"
 
 	frame[type](frame, "UNIT_POWER_FREQUENT", self, "Update")
@@ -34,6 +34,6 @@ end
 
 function Priest:Update(frame, event, unit, powerType)
 	if( powerType and powerType ~= "MANA" ) then return end
-	frame.priestBar:SetMinMaxValues(0, UnitPowerMax(frame.unit, Enum.PowerType.Mana))
-	frame.priestBar:SetValue(UnitIsDeadOrGhost(frame.unit) and 0 or not UnitIsConnected(frame.unit) and 0 or UnitPower(frame.unit, Enum.PowerType.Mana))
+	frame.priestBar:SetMinMaxValues(0, UnitPowerMax(frame.unitSUF, Enum.PowerType.Mana))
+	frame.priestBar:SetValue(UnitIsDeadOrGhost(frame.unitSUF) and 0 or not UnitIsConnected(frame.unitSUF) and 0 or UnitPower(frame.unitSUF, Enum.PowerType.Mana))
 end

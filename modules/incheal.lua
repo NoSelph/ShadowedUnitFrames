@@ -66,7 +66,7 @@ function IncHeal:PopulateCalculator(frame)
 	frame.healCalcTime = now
 	frame.healCalcValid = false
 
-	local ok = pcall(UnitGetDetailedHealPrediction, frame.unit, "player", calc)
+	local ok = pcall(UnitGetDetailedHealPrediction, frame.unitSUF, "player", calc)
 	if( not ok ) then
 		calc:ResetPredictedValues()
 		return false
@@ -81,7 +81,7 @@ end
 function IncHeal:EnsureSafetyTicker(frame)
 	if( frame.healSafetyTicker ) then return end
 	frame.healSafetyTicker = C_Timer.NewTicker(0.5, function()
-		if( not frame.unit or not UnitExists(frame.unit) ) then
+		if( not frame.unitSUF or not UnitExists(frame.unitSUF) ) then
 			frame.healSafetyTicker:Cancel()
 			frame.healSafetyTicker = nil
 			return

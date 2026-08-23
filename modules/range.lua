@@ -104,20 +104,20 @@ local function checkRange(self)
 
     -- Check which spell to use
     local spell
-    if UnitCanAssist("player", frame.unit) then
+    if UnitCanAssist("player", frame.unitSUF) then
         spell = rangeSpells.friendly
-    elseif UnitCanAttack("player", frame.unit) then
+    elseif UnitCanAttack("player", frame.unitSUF) then
         spell = rangeSpells.hostile
     end
 
-    if (not UnitIsConnected(frame.unit)) or UnitPhaseReason(frame.unit) then
+    if (not UnitIsConnected(frame.unitSUF)) or UnitPhaseReason(frame.unitSUF) then
         frame:SetRangeAlpha(oorAlpha)
         return
     end
 
     -- Primary: spell-based range check (most accurate)
     if spell then
-        local inRange = SafeIsSpellInRange(spell, frame.unit)
+        local inRange = SafeIsSpellInRange(spell, frame.unitSUF)
         if inRange ~= nil then
             frame:SetRangeAlpha(inRange and inAlpha or oorAlpha)
             return
@@ -127,8 +127,8 @@ local function checkRange(self)
     end
 
     -- Fallback: UnitInRange for group members (handles secret booleans via SetAlphaFromBoolean)
-    if not ShadowUF.IsUnitIdentitySecret(frame.unit) and (UnitInRaid(frame.unit) or UnitInParty(frame.unit)) then
-        local ok, inRange = pcall(UnitInRange, frame.unit)
+    if not ShadowUF.IsUnitIdentitySecret(frame.unitSUF) and (UnitInRaid(frame.unitSUF) or UnitInParty(frame.unitSUF)) then
+        local ok, inRange = pcall(UnitInRange, frame.unitSUF)
         if ok and not frame.disableRangeAlpha then
             if frame.SetAlphaFromBoolean then
                 frame:SetAlphaFromBoolean(inRange, inAlpha, oorAlpha)
@@ -222,7 +222,7 @@ end)
 
 function Range:ForceUpdate(frame)
 	-- UnitIsUnit can return secret values for fake units, boolean test must be inside pcall
-	local ok, isPlayer = pcall(function() return UnitIsUnit(frame.unit, "player") and true or false end)
+	local ok, isPlayer = pcall(function() return UnitIsUnit(frame.unitSUF, "player") and true or false end)
 	if( ok and isPlayer ) then
 		frame:SetRangeAlpha(ShadowUF.db.profile.units[frame.unitType].range.inAlpha)
 		cancelTimer(frame)

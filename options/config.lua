@@ -7019,7 +7019,7 @@ local function loadFilterOptions()
 
 	local function reloadUnitAuras()
 		for _, frame in pairs(ShadowUF.Units.unitFrames) do
-			if( UnitExists(frame.unit) ) then
+			if( UnitExists(frame.unitSUF) ) then
 				ShadowUF.modules.auras:UpdateFilter(frame)
 				frame:FullUpdate()
 			end
@@ -7257,7 +7257,7 @@ local function loadCustomFilterOptions()
 
 	local function reloadUnitAuras()
 		for _, frame in pairs(ShadowUF.Units.unitFrames) do
-			if( UnitExists(frame.unit) ) then
+			if( UnitExists(frame.unitSUF) ) then
 				ShadowUF.modules.auras:UpdateFilter(frame)
 				frame:FullUpdate()
 			end
