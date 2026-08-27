@@ -1356,9 +1356,14 @@ function ShadowUF:HideBlizzardFrames()
 			local function hideRaid()
 				CompactRaidFrameManager:UnregisterAllEvents()
 				CompactRaidFrameContainer:UnregisterAllEvents()
-				if( InCombatLockdown() ) then return end
+				if( InCombatLockdown() ) then
+					ShadowUF:DeferUntilRegen("hideRaid", hideRaid)
+					return
+				end
 
 				CompactRaidFrameManager:Hide()
+				-- The global roster dispatcher re-shows the manager mid-combat where we can't touch it, a hidden parent keeps that from ever being visible
+				CompactRaidFrameManager:SetParent(ShadowUF.hiddenFrame)
 				local shown = CompactRaidFrameManager_GetSetting("IsShown")
 				if( shown and shown ~= "0" ) then
 					CompactRaidFrameManager_SetSetting("IsShown", "0")
