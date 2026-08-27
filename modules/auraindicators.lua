@@ -701,9 +701,8 @@ function Indicators:BuildIndicatorSlots(frame)
 		for spellID, auraConfig in pairs(tracked) do
 			local indicatorConfig = ShadowUF.db.profile.auraIndicators.indicators[auraConfig.indicator]
 			local candidateFilters = { includeSpellIDs = { [spellID] = true } }
-			if( auraConfig.player ) then
-				candidateFilters.isFromPlayerOrPlayerPet = true
-			end
+			-- Self-cast scoping rides the PLAYER token, the isFromPlayerOrPlayerPet candidate only discriminates non-secret auras (legacy OOC path compares the caster itself)
+			local playerToken = auraConfig.player and "|PLAYER" or ""
 
 			-- Blizzard skips spell ID candidate filters for helpful auras on units we can't assist and for harmful ones on units we can (fail-open, every aura passes and lights the slot).
 			-- Each reaction side gets its own slot, only active where the filter is enforced, which also makes DoT tracking on enemies work (enforced there even for secret spells)
@@ -712,7 +711,7 @@ function Indicators:BuildIndicatorSlots(frame)
 					indicator = auraConfig.indicator,
 					priority = auraConfig.priority or 0,
 					key = "spellh" .. spellID,
-					filter = "HELPFUL",
+					filter = "HELPFUL" .. playerToken,
 					activeWhen = "assist",
 					display = { icon = auraConfig.icon, r = auraConfig.r, g = auraConfig.g, b = auraConfig.b, duration = auraConfig.duration, showStack = indicatorConfig.showStack },
 					options = { candidateFilters = candidateFilters },
@@ -723,7 +722,7 @@ function Indicators:BuildIndicatorSlots(frame)
 					indicator = auraConfig.indicator,
 					priority = auraConfig.priority or 0,
 					key = "spelld" .. spellID,
-					filter = "HARMFUL",
+					filter = "HARMFUL" .. playerToken,
 					activeWhen = "noassist",
 					display = { icon = auraConfig.icon, r = auraConfig.r, g = auraConfig.g, b = auraConfig.b, duration = auraConfig.duration, showStack = indicatorConfig.showStack },
 					options = { candidateFilters = candidateFilters },

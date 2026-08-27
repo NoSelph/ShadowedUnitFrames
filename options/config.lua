@@ -7231,7 +7231,7 @@ local function loadFilterOptions()
 						args = {
 							help = {
 								type = "description",
-								name = L["Assign a filter to each unit frame per zone type. Filters are created and edited in the Custom filters tab."],
+								name = L["Assign a filter to each unit frame per zone type. Filters are created and edited in the Custom filters tab."] .. "|n|n" .. string.format(L["The \"%s\" option is ignored for zone assignments; select the filter directly in a unit's Auras tab to use it."], L["Only show self cast auras"]),
 								width = "full",
 							}
 						},
@@ -7327,7 +7327,8 @@ local function loadCustomFilterOptions()
 								local filter = getFilter()
 								if( filter ) then
 									filter.player = value or nil
-									reloadUnitAuras()
+									-- The flag shapes the section filter strings, same rebuild as a mode change
+									ShadowUF.Layout:Reload()
 								end
 							end,
 						},

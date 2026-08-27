@@ -1817,6 +1817,7 @@ L["Text parent"] = "Texto pai"
 L["Text/Tags"] = [=[Texto/Tags
 
 ]=]
+L["The \"%s\" option is ignored for zone assignments; select the filter directly in a unit's Auras tab to use it."] = "A opção \"%s\" é ignorada nas atribuições por zona; selecione o filtro diretamente na aba Auras de uma unidade para usá-la."
 L["The check boxes below will allow you to enable or disable units.|n|n|cffff2020Warning!|r Target of Target units have a higher performance cost compared to other units. If you have performance issues, please disable those units or reduce the features enabled for those units."] = [=[As caixas de seleção abaixo permitirão que você habilite ou desabilite unidades.|n|n|cffff2020Aviso!|r As unidades Target of Target têm um custo de desempenho mais elevado em comparação com outras unidades. Se você tiver problemas de desempenho, desative essas unidades ou reduza os recursos ativados para essas unidades.
 
 ]=]

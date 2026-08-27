@@ -119,6 +119,7 @@ L["Stealable buffs are tinted by dispel type like the others."] = "Las bendicion
 L["Summon Pending"] = "Invocación pendiente"
 L["Test mode"] = "Modo de prueba"
 L["Test mode cannot be toggled while in combat."] = "El modo de prueba no puede alternarse en combate."
+L["The \"%s\" option is ignored for zone assignments; select the filter directly in a unit's Auras tab to use it."] = "La opción \"%s\" se ignora en las asignaciones por zona; selecciona el filtro directamente en la pestaña Auras de una unidad para usarla."
 L["The check boxes below will allow you to enable or disable units.|n|n|cffff2020Warning!|r Target of Target units have a higher performance cost compared to other units. If you have performance issues, please disable those units or reduce the features enabled for those units."] = "Las casillas de abajo permiten activar o desactivar unidades.|n|n|cffff2020¡Atención!|r Las unidades objetivo-del-objetivo tienen un coste de rendimiento mayor que otras unidades. Si tienes problemas de rendimiento, desactívalas o reduce sus funciones activadas."
 L["Timer"] = "Temporizador"
 L["Timer font"] = "Fuente del temporizador"

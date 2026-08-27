@@ -637,6 +637,14 @@ local function buildSections(auraType, config)
 		filterString = base .. "|" .. filterValue
 	end
 
+	-- Self-cast scoping rides the PLAYER token, the isFromPlayerOrPlayerPet candidate can't discriminate on live containers
+	local customFiltersDB = ShadowUF.db.profile.customFilters or {}
+	local function customPlayerToken(name)
+		local custom = name and customFiltersDB[name]
+		return (custom and custom.player) and "|PLAYER" or ""
+	end
+	filterString = filterString .. customPlayerToken(customFilter)
+
 	local sections = {}
 	local largeSize = math.floor(config.size * (config.selfScale or 1.30) + 0.5)
 	local sortMethod = config.sortMethod
@@ -660,6 +668,7 @@ local function buildSections(auraType, config)
 				if( extraFilter ~= "ALL" and not extraCustom ) then
 					fs = fs .. "|" .. extraFilter
 				end
+				fs = fs .. customPlayerToken(extraCustom)
 				table.insert(sections, { filterString = fs, size = extra.size or config.size, auraType = auraType, customFilter = extraCustom, sortMethod = extra.sortMethod, maxCount = extra.maxCount, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(extraFilter) })
 			end
 		end
@@ -676,7 +685,6 @@ local function buildSections(auraType, config)
 		return true
 	end
 
-	local customFiltersDB = ShadowUF.db.profile.customFilters or {}
 	local function isIncludeCustom(section)
 		if( not section.customFilter ) then return false end
 		local custom = customFiltersDB[section.customFilter]
@@ -1197,10 +1205,9 @@ function Auras:UpdateContainerCandidateFilters(frame)
 
 				local carriedExcludes
 				for index, section in ipairs(group.containerSections) do
-					local include, exclude, playerOnly
+					local include, exclude
 					local custom = section.customFilter and customFilters[section.customFilter]
 					if( custom and custom.spells ) then
-						playerOnly = custom.player
 						if( custom.mode == "exclude" ) then
 							exclude = CopyTable(custom.spells)
 							if( allCustomSpells ) then
@@ -1216,7 +1223,6 @@ function Auras:UpdateContainerCandidateFilters(frame)
 						-- Zone-assigned lists apply on their own, the assignment (zone x unit type) is the opt-in
 						include = buildSpellIDMap(whitelist)
 						exclude = buildSpellIDMap(blacklist)
-						playerOnly = frame.auras.whitelistPlayer
 						if( allCustomSpells ) then
 							exclude = exclude and CopyTable(exclude) or {}
 							for spellID in pairs(allCustomSpells) do
@@ -1226,9 +1232,8 @@ function Auras:UpdateContainerCandidateFilters(frame)
 					end
 
 					local filters
-					if( include or exclude or playerOnly ) then
-						-- isFromPlayerOrPlayerPet sits outside the identity gate, enforced even where spell ID lists are not
-						filters = { includeSpellIDs = include, excludeSpellIDs = exclude, isFromPlayerOrPlayerPet = playerOnly or nil }
+					if( include or exclude ) then
+						filters = { includeSpellIDs = include, excludeSpellIDs = exclude }
 					end
 					local gate = sectionReactionGate(section)
 					if( gate ) then
@@ -1813,7 +1818,6 @@ function Auras:UpdateFilter(frame)
 	local whiteList = white and customs[white]
 	local blackList = black and customs[black]
 	frame.auras.whitelist = (whiteList and whiteList.mode ~= "exclude") and whiteList.spells or filterDefault
-	frame.auras.whitelistPlayer = (whiteList and whiteList.mode ~= "exclude") and whiteList.player or nil
 	frame.auras.blacklist = (blackList and blackList.mode == "exclude") and blackList.spells or filterDefault
 
 	-- Push the zone filters onto the containers as candidate filters
