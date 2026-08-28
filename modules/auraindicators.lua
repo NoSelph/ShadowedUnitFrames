@@ -593,7 +593,7 @@ local function makeIndicatorSlotStyler(display, isHarmful)
 		end
 
 		if( display.duration ) then
-			local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+			local cooldown = CreateFrame("Cooldown", nil, button, "SUF_AuraCooldownTemplate")
 			cooldown:SetAllPoints(button)
 			cooldown:SetReverse(true)
 			cooldown:SetHideCountdownNumbers(true)
