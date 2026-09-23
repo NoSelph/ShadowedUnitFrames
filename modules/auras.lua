@@ -111,10 +111,12 @@ end
 
 -- Overlay on the icon, pulsing between zero and the configured alpha
 -- Shown while the aura sits in its pandemic window
+-- OVERLAY sublevel 3 sits above the border (0), dispel border (1) and dispel icon (2), and above the cooldown swipe
+-- now that the aura cooldown shares the button's frame level (see SUF_AuraCooldownTemplate)
 function Auras:CreatePandemicOverlay(button, layer, sublevel)
 	local color = ShadowUF.db.profile.auraColors.pandemic
 
-	local overlay = button:CreateTexture(nil, layer or "ARTWORK", nil, sublevel)
+	local overlay = button:CreateTexture(nil, layer or "OVERLAY", nil, sublevel or 3)
 	overlay:SetAllPoints(button)
 	overlay:SetColorTexture(color and color.r or 1, color and color.g or 1, color and color.b or 1, color and color.a or 0.35)
 
@@ -417,7 +419,7 @@ local function updateButton(id, group, config)
 
 		button = group.buttons[id]
 
-		button.cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+		button.cooldown = CreateFrame("Cooldown", nil, button, "SUF_AuraCooldownTemplate")
 		button.cooldown:SetAllPoints(button)
 		button.cooldown:SetReverse(true)
 		button.cooldown:SetDrawEdge(false)
@@ -860,7 +862,7 @@ local function makeButtonInitializer(group, config, section, sectionIndex)
 			pcall(button.AddPandemicRegion, button, pandemic)
 		end
 
-		local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+		local cooldown = CreateFrame("Cooldown", nil, button, "SUF_AuraCooldownTemplate")
 		cooldown:SetAllPoints(button)
 		cooldown:SetReverse(true)
 		cooldown:SetDrawEdge(false)
@@ -1722,7 +1724,7 @@ function Auras:ShowBossDebuffsPlaceholders(frame)
 			-- Same structure as updateButton: icon, border, cooldown, stack
 			button = CreateFrame("Button", nil, container)
 
-			button.cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+			button.cooldown = CreateFrame("Cooldown", nil, button, "SUF_AuraCooldownTemplate")
 			button.cooldown:SetAllPoints(button)
 			button.cooldown:SetReverse(true)
 			button.cooldown:SetDrawEdge(false)

@@ -5,4 +5,5 @@
 			<Attribute name="_onstate-vehicleui" type="string" value="local unit = self:GetAttribute('unit'); if unit and newstate == 'vehicle' and UnitPlayerOrPetInRaid(unit) and not UnitTargetsVehicleInRaidUI(unit) then self:SetAttribute('toggleForVehicle', false) else self:SetAttribute('toggleForVehicle', true) end" />
 		</Attributes>
 	</Button>
+	<Cooldown name="SUF_AuraCooldownTemplate" virtual="true" inherits="CooldownFrameTemplate" useParentLevel="true"/>
 </Ui>
