@@ -423,6 +423,11 @@ local function checkVehicleData(self, elapsed)
 	end
 end
 
+-- Zone transfers while mounted (battleground end) swallow UNIT_EXITED_VEHICLE, so the world entry re-checks without the event payload
+function Units:CheckVehicleStatusOnWorldEntry(frame)
+	self:CheckVehicleStatus(frame)
+end
+
 -- Check if a unit entered a vehicle
 function Units:CheckVehicleStatus(frame, event, unit)
 	if( event and frame.unitOwner ~= unit ) then return end
@@ -623,6 +628,7 @@ OnAttributeChanged = function(self, name, unit)
 	if( self.unitSUF == "player" or self.unitRealType == "party" or self.unitRealType == "raid" ) then
 		self:RegisterNormalEvent("UNIT_ENTERED_VEHICLE", Units, "CheckVehicleStatus")
 		self:RegisterNormalEvent("UNIT_EXITED_VEHICLE", Units, "CheckVehicleStatus")
+		self:RegisterNormalEvent("PLAYER_ENTERING_WORLD", Units, "CheckVehicleStatusOnWorldEntry")
 		self:RegisterUpdateFunc(Units, "CheckVehicleStatus")
 	end
 

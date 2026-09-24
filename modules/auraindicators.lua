@@ -858,7 +858,8 @@ function Indicators:UpdateIndicators(frame)
 
 			indicator:Show()
 			updatePandemicOverlay(indicator)
-		else
+		elseif( indicator ) then
+			-- A profile swap updates against the old layout, its indicators are only created on the load that follows
 			indicator:Hide()
 			updatePandemicOverlay(indicator)
 		end

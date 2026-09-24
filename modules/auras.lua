@@ -977,6 +977,8 @@ local function configureGroupContainer(frame, group, config, extraSections)
 		group.containerStructural = structural
 		group.containerButtons = {}
 		container:SetFrameLevel(group:GetFrameLevel() + 1)
+		-- The intrinsic starts enabled on the "none" token, groups added in that state register UNIT_AURA for every unit and a later SetUnit doesn't undo it, so it stays silent until UpdateContainers hands it a unit
+		container:SetEnabled(false)
 
 		local maxAuras = config.perRow * config.maxRows
 		local spacingH, spacingV = getAuraSpacing()
@@ -1490,6 +1492,11 @@ function Auras:OnLayoutApplied(frame, config)
 		self:SetupBossDebuffs(frame, config.auras.bossDebuffs)
 	else
 		self:ClearBossDebuffs(frame)
+	end
+
+	-- A (re)created container needs its unit right away and the regen replay has no FullUpdate behind it
+	if( hasContainers and not frame.configMode ) then
+		self:UpdateContainers(frame)
 	end
 end
 
