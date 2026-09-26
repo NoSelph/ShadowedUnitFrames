@@ -1067,6 +1067,7 @@ Tags.defaultTags = {
 		return points and points > 0 and points
 	end]],
 	["cpoints"] = [[function(unit, unitOwner)
+		if( ShadowUF.isForever ) then return GetComboPoints("player", "target") end
 		if( UnitHasVehicleUI("player") and UnitHasVehiclePlayerFrameUI("player") ) then
 			local points = GetComboPoints("vehicle")
 			if( not issecretvalue(points) and points == 0 ) then
