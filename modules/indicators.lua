@@ -1,4 +1,4 @@
-local Indicators = {list = {"status", "pvp", "leader", "resurrect", "sumPending", "masterLoot", "raidTarget", "ready", "role", "lfdRole", "class", "phase", "questBoss", "petBattle", "arenaSpec"}}
+local Indicators = {list = {"status", "pvp", "leader", "resurrect", "sumPending", "masterLoot", "raidTarget", "ready", "role", "lfdRole", "class", "phase", "questBoss", "petBattle", "arenaSpec", "happiness"}}
 
 ShadowUF:RegisterModule(Indicators, "indicators", ShadowUF.L["Indicators"])
 
@@ -305,6 +305,22 @@ function Indicators:UpdatePetBattle(frame)
 	end
 end
 
+-- Hunter pet happiness on Forever, the texture holds the three faces side by side
+local HAPPINESS_COORDS = {[1] = {0.375, 0.5625, 0, 0.359375}, [2] = {0.1875, 0.375, 0, 0.359375}, [3] = {0, 0.1875, 0, 0.359375}}
+function Indicators:UpdateHappiness(frame)
+	if( not frame.indicators.happiness or not frame.indicators.happiness.enabled ) then return end
+
+	local happiness = C_PetInfo.GetPetHappiness()
+	local _, isHunterPet = HasPetUI()
+	local coords = isHunterPet and HAPPINESS_COORDS[happiness]
+	if( coords ) then
+		frame.indicators.happiness:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+		frame.indicators.happiness:Show()
+	else
+		frame.indicators.happiness:Hide()
+	end
+end
+
 -- Non-player units do not give events when they enter or leave combat, so polling is necessary
 -- Shared ticker, one timer iterates all registered frames
 local combatMonitorFrames = {}
@@ -573,6 +589,14 @@ function Indicators:OnEnable(frame)
 	if( config.indicators.petBattle and config.indicators.petBattle.enabled ) then
 		frame:RegisterUpdateFunc(self, "UpdatePetBattle")
 		frame.indicators.petBattle = frame.indicators.petBattle or frame.indicators:CreateTexture(nil, "OVERLAY")
+	end
+
+	if( config.indicators.happiness and config.indicators.happiness.enabled and C_PetInfo and C_PetInfo.GetPetHappiness ) then
+		frame:RegisterNormalEvent("UNIT_HAPPINESS", self, "UpdateHappiness")
+		frame:RegisterUpdateFunc(self, "UpdateHappiness")
+
+		frame.indicators.happiness = frame.indicators.happiness or frame.indicators:CreateTexture(nil, "OVERLAY")
+		frame.indicators.happiness:SetTexture("Interface\\PetPaperDollFrame\\UI-PetHappiness")
 	end
 
 	-- As they all share the function, register it as long as one is active

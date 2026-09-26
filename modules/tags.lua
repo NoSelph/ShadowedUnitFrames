@@ -514,6 +514,22 @@ Tags.abbrevCache = setmetatable({}, {
 		return val
 end})
 
+-- Forever has no realms, UnitName returns the surname second and the player's own first return already reads "First-Surname"
+local SURNAME_SEPARATOR = Constants and Constants.CharacterNameSeparatorConsts and Constants.CharacterNameSeparatorConsts.CHARACTERNAME_SURNAME_SEPARATOR or "-"
+function Tags.UnitFirstName(unit)
+	local name = UnitName(unit)
+	if( not RegionalUniqueNamesEnabled or not name or issecretvalue(name) or not RegionalUniqueNamesEnabled() ) then return name end
+	local split = string.find(name, SURNAME_SEPARATOR, 1, true)
+	return split and string.sub(name, 1, split - 1) or name
+end
+
+function Tags.UnitSurname(unit)
+	if( not RegionalUniqueNamesEnabled or not RegionalUniqueNamesEnabled() ) then return nil end
+	local surname = select(2, UnitName(unit))
+	if( issecretvalue(surname) ) then return surname end
+	return surname ~= "" and surname or nil
+end
+
 -- Going to have to start using an env wrapper for tags I think
 local Druid = {}
 Druid.CatForm = GetSpellName(768)
@@ -608,7 +624,7 @@ Tags.defaultTags = {
 		return ok and name or nil
 	end]],
 	["abbrev:name"] = [[function(unit, unitOwner)
-		local name = UnitName(unitOwner)
+		local name = ShadowUF.Tags.UnitFirstName(unitOwner)
 		if not name then return end
 		if issecretvalue(name) then return name end
 		return string.len(name) > 10 and ShadowUF.Tags.abbrevCache[name] or name
@@ -762,7 +778,7 @@ Tags.defaultTags = {
 		return ShadowUF:FormatLargeNumber(UnitHealth(unit))
 	end]],
 	["colorname"] = [[function(unit, unitOwner)
-		local name = UnitName(unitOwner)
+		local name = ShadowUF.Tags.UnitFirstName(unitOwner)
 		local color = ShadowUF:GetClassColor(unitOwner)
 		if( not color ) then
 			return name
@@ -959,15 +975,15 @@ Tags.defaultTags = {
 		return ShadowUF.tagFunc.name(unit, unitOwner)
 	end]],
 	]==]--
-	["name"] = [[function(unit, unitOwner) return UnitName(unitOwner) end]],
+	["name"] = [[function(unit, unitOwner) return ShadowUF.Tags.UnitFirstName(unitOwner) end]],
 	["nsrt:name"] = [[function(unit, unitOwner)
-		local name = UnitName(unitOwner)
+		local name = ShadowUF.Tags.UnitFirstName(unitOwner)
 		if not name then return end
 		if issecretvalue(name) then return name end
 		return NSAPI and NSAPI:GetName(name, "GlobalNickNames") or name
 	end]],
 	["nsrt:colorname"] = [[function(unit, unitOwner)
-		local name = UnitName(unitOwner)
+		local name = ShadowUF.Tags.UnitFirstName(unitOwner)
 		if not name then return end
 		local nick = name
 		if( not issecretvalue(name) and NSAPI ) then
@@ -978,13 +994,14 @@ Tags.defaultTags = {
 		return string.format("%s%s|r", color, nick)
 	end]],
 	["nsrt:abbrev:name"] = [[function(unit, unitOwner)
-		local name = UnitName(unitOwner)
+		local name = ShadowUF.Tags.UnitFirstName(unitOwner)
 		if not name then return end
 		if issecretvalue(name) then return name end
 		local nick = NSAPI and NSAPI:GetName(name, "GlobalNickNames") or name
 		return string.len(nick) > 10 and ShadowUF.Tags.abbrevCache[nick] or nick
 	end]],
 	["server"] = [[function(unit, unitOwner)
+		if( ShadowUF.isForever ) then return nil end
 		local server = select(2, UnitName(unitOwner))
 		if issecretvalue(server) then return nil end
 		if( UnitRealmRelationship(unitOwner) == LE_REALM_RELATION_VIRTUAL ) then
@@ -993,6 +1010,7 @@ Tags.defaultTags = {
 
 		return server ~= "" and server or nil
 	end]],
+	["surname"] = [[function(unit, unitOwner) return ShadowUF.Tags.UnitSurname(unitOwner) end]],
 	["perhp"] = [[function(unit, unitOwner)
 		if( UnitIsDead(unit) ) then return ShadowUF.L["Dead"]
 		elseif( UnitIsGhost(unit) ) then return ShadowUF.L["Ghost"]
@@ -1107,22 +1125,9 @@ Tags.defaultTags = {
 		return classif == "rare" and "R" or classif == "rareelite" and "R+" or classif == "elite" and "+" or classif == "worldboss" and "B" or classif == "minus" and "M"
 	end]],
 	["group"] = [[function(unit, unitOwner)
-		local inRaid = UnitInRaid(unitOwner)
-		if( issecretvalue(inRaid) or not inRaid ) then return nil end
-		local name, server = UnitName(unitOwner)
-		if issecretvalue(name) then return nil end
-		if( server and server ~= "" ) then
-			name = string.format("%s-%s", name, server)
-		end
-
-		for i=1, GetNumGroupMembers() do
-			local raidName, _, group = GetRaidRosterInfo(i)
-			if( raidName == name ) then
-				return group
-			end
-		end
-
-		return nil
+		local index = UnitInRaid(unitOwner)
+		if( issecretvalue(index) or not index ) then return nil end
+		return (select(3, GetRaidRosterInfo(index)))
 	end]],
 	["druid:curpp"] = [[function(unit, unitOwner)
 		if( ShadowUF.UnitClassToken(unit) ~= "DRUID" ) then return nil end
@@ -1388,6 +1393,7 @@ Tags.defaultEvents = {
 	["name"]                	= "UNIT_NAME_UPDATE",
 	["abbrev:name"]				= "UNIT_NAME_UPDATE",
 	["server"]					= "UNIT_NAME_UPDATE",
+	["surname"]					= "UNIT_NAME_UPDATE",
 	["colorname"]				= "UNIT_NAME_UPDATE",
 	["nsrt:name"]				= "UNIT_NAME_UPDATE",
 	["nsrt:colorname"]			= "UNIT_NAME_UPDATE",
@@ -1468,6 +1474,7 @@ Tags.defaultCategories = {
 	["name"]					= "misc",
 	["abbrev:name"]				= "misc",
 	["server"]					= "misc",
+	["surname"]					= "misc",
 	["perhp"]					= "health",
 	["perpp"]					= "power",
 	["class"]					= "classification",
@@ -1568,6 +1575,7 @@ Tags.defaultHelp = {
 	["missingpp"]				= L["Amount of power missing,  if none is missing nothing is shown. Uses a short format, -13850 is shown as 13.8k, values below 10000 are formatted as is.|n|nIn combat, may show -0 at full power due to secret values."],
 	["name"]					= L["Unit name"],
 	["server"]					= L["Unit server, if they are from your server then nothing is shown."],
+	["surname"]					= L["Unit surname, empty when the game has no surnames."],
 	["perhp"]					= L["Returns current health as a percentage, if the unit is dead or offline than that is shown instead."],
 	["perpp"]					= L["Returns current power as a percentage."],
 	["class"]					= L["Class name without coloring, use [classcolor][class][close] if you want the class name to be colored by class."],
@@ -1670,6 +1678,7 @@ Tags.defaultNames = {
 	["missingpp"]				= L["Missing power (Short)"],
 	["name"]					= L["Unit name"],
 	["server"]					= L["Unit server"],
+	["surname"]					= L["Unit surname"],
 	["perhp"]					= L["Percent HP"],
 	["perpp"]					= L["Percent power"],
 	["class"]					= L["Class"],

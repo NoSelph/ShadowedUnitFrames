@@ -119,13 +119,13 @@ local PAGE_DESC = {
 	["tags"] = L["Advanced tag management, allows you to add your own custom tags."],
 	["filter"] = L["Simple aura filtering by whitelists and blacklists."],
 }
-local INDICATOR_NAMES = {["questBoss"] = L["Quest Boss"], ["leader"] = L["Leader / Assist"], ["lfdRole"] = L["Class Role"], ["masterLoot"] = L["Master Looter"], ["pvp"] = L["PvP Flag"], ["raidTarget"] = L["Raid Target"], ["ready"] = L["Ready Status"], ["role"] = L["Raid Role"], ["status"] = L["Combat Status"], ["class"] = L["Class Icon"], ["resurrect"] = L["Resurrect Status"], ["sumPending"] = L["Summon Pending"], ["phase"] = L["Other Party/Phase Status"], ["petBattle"] = L["Pet Battle"], ["arenaSpec"] = L["Arena Spec"]}
+local INDICATOR_NAMES = {["questBoss"] = L["Quest Boss"], ["leader"] = L["Leader / Assist"], ["lfdRole"] = L["Class Role"], ["masterLoot"] = L["Master Looter"], ["pvp"] = L["PvP Flag"], ["raidTarget"] = L["Raid Target"], ["ready"] = L["Ready Status"], ["role"] = L["Raid Role"], ["status"] = L["Combat Status"], ["class"] = L["Class Icon"], ["resurrect"] = L["Resurrect Status"], ["sumPending"] = L["Summon Pending"], ["phase"] = L["Other Party/Phase Status"], ["petBattle"] = L["Pet Battle"], ["arenaSpec"] = L["Arena Spec"], ["happiness"] = L["Pet Happiness"]}
 local AREA_NAMES = {["arena"] = L["Arenas"],["none"] = L["Everywhere else"], ["party"] = L["Party instances"], ["pvp"] = L["Battleground"], ["raid"] = L["Raid instances"], ["neighborhood"] = L["Neighborhood"]}
 local INDICATOR_DESC = {
 		["leader"] = L["Crown indicator for group leader or assistants."], ["lfdRole"] = L["Role the unit is playing."],
 		["masterLoot"] = L["Bag indicator for master looters."], ["pvp"] = L["PVP flag indicator, Horde for Horde flagged pvpers and Alliance for Alliance flagged pvpers."],
 		["raidTarget"] = L["Raid target indicator."], ["ready"] = L["Ready status of group members."], ["phase"] = L["Shows when a party member is in a different phase or another group."],
-		["questBoss"] = L["Shows that a NPC is a boss for a quest."], ["petBattle"] = L["Shows what kind of pet the unit is for pet battles."],
+		["questBoss"] = L["Shows that a NPC is a boss for a quest."], ["petBattle"] = L["Shows what kind of pet the unit is for pet battles."], ["happiness"] = L["Indicator for the current pet happiness."],
 		["role"] = L["Raid role indicator, adds a shield indicator for main tanks and a sword icon for main assists."], ["status"] = L["Status indicator, shows if the unit is currently in combat. For the player it will also show if you are rested."], ["class"] = L["Class icon for players."],
 		["arenaSpec"] = L["Talent spec of your arena opponents."]
 }
@@ -196,6 +196,8 @@ end
 
 local function isUnitDisabled(info)
 	local unit = info[#(info)]
+	-- Arena units never exist on Forever
+	if( ShadowUF.isForever and ShadowUF.Units.zoneUnits[unit] == "arena" ) then return true end
 	local enabled = ShadowUF.db.profile.units[unit].enabled
 	for _, visibility in pairs(ShadowUF.db.profile.visibility) do
 		if( visibility[unit] ) then
@@ -377,7 +379,7 @@ end
 local function hideRestrictedOption(info)
 	local unit = type(info.arg) == "number" and info[#(info) - info.arg] or info[2]
 	local key = info[#(info)]
-	if( ShadowUF.modules[key] and ShadowUF.modules[key].moduleClass and ShadowUF.modules[key].moduleClass ~= playerClass ) then
+	if( ShadowUF.modules[key] and not ShadowUF:IsModuleAvailable(ShadowUF.modules[key]) ) then
 		return true
 	elseif( ( key == "incHeal" and not ShadowUF.modules.incHeal ) or ( key == "incAbsorb" and not ShadowUF.modules.incAbsorb ) or ( key == "healAbsorb" and not ShadowUF.modules.healAbsorb ) )  then
 		return true
@@ -669,7 +671,7 @@ local function loadGeneralOptions()
 			if Config.parentTable and text.anchorTo and text.anchorTo ~= "" then
 				local parent = string.sub(text.anchorTo, 2)
 				local module = ShadowUF.modules[parent]
-				if not (module and module.moduleClass and module.moduleClass ~= playerClass) then
+				if( not module or ShadowUF:IsModuleAvailable(module) ) then
 					Config.tagWizard[parent] = Config.tagWizard[parent] or Config.parentTable
 					Config.tagWizard[parent].args[tostring(id)] = Config.tagTextTable
 					Config.tagWizard[parent].args[tostring(id) .. ":adv"] = Config.advanceTextTable
@@ -2687,9 +2689,8 @@ local function loadUnitOptions()
 		for parent, list in pairs(parentList) do
 			parent = string.sub(parent, 2)
 			
-			-- Skip modules that have a class restriction not matching the player's class
 			local module = ShadowUF.modules[parent]
-			if not (module and module.moduleClass and module.moduleClass ~= playerClass) then
+			if( not module or ShadowUF:IsModuleAvailable(module) ) then
 				tagWizard[parent] = Config.parentTable
 				Config.parentTable.args.help = nagityNagNagTable
 
@@ -6877,6 +6878,7 @@ local function loadUnitOptions()
 	local enabledUnits = {
 		order = function(info) return unitCatOrder[info[#(info)]] + getUnitOrder(info) end,
 		type = "toggle",
+		hidden = function(info) return ShadowUF.isForever and ShadowUF.Units.zoneUnits[info[#(info)]] == "arena" end,
 		name = getName,
 		set = function(info, value)
 			local unit = info[#(info)]
@@ -6946,6 +6948,7 @@ local function loadUnitOptions()
 			return cat == "playercat" and 50 or cat == "generalcat" and 100 or cat == "partycat" and 200 or cat == "raidcat" and 300 or cat == "raidmisccat" and 400 or cat == "bosscat" and 500 or cat == "arenacat" and 600 or 700
 		end,
 		type = "header",
+		hidden = function(info) return ShadowUF.isForever and info[#(info)] == "arenacat" end,
 		name = function(info)
 			local cat = info[#(info)]
 			return cat == "playercat" and L["Player"] or cat == "generalcat" and L["General"] or cat == "raidcat" and L["Raid"] or cat == "partycat" and L["Party"] or cat == "arenacat" and L["Arena"] or cat == "battlegroundcat" and L["Battlegrounds"] or cat == "raidmisccat" and L["Raid Misc"] or cat == "bosscat" and L["Boss"]

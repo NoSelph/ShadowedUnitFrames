@@ -317,7 +317,7 @@ end
 local function SetVisibility(self)
 	local layoutUpdate
 	local instanceType = select(2, IsInInstance()) or "none"
-	local playerSpec = GetSpecialization()
+	local playerSpec = ShadowUF:GetPlayerSpec()
 	if( instanceType == "scenario" ) then instanceType = "party" end
 	if( instanceType == "interior" ) then instanceType = "neighborhood" end
 
@@ -361,7 +361,7 @@ local function SetVisibility(self)
 			end
 
 			-- Force disable modules for people who aren't the appropriate class
-			if( module.moduleClass and module.moduleClass ~= playerClass ) then
+			if( not ShadowUF:IsModuleAvailable(module) ) then
 				enabled = nil
 			-- Force disable if they aren't the appropriate spec
 			elseif( module.moduleSpec and module.moduleSpec[playerSpec] ~= true ) then
@@ -1783,7 +1783,17 @@ local curableSpells = {
 	["EVOKER"] = {[365585] = {"Poison"}, [360823] = {"Magic", "Poison"}, [374251] = {"Poison", "Curse", "Disease"}}
 }
 
-curableSpells = curableSpells[playerClass]
+-- Forever runs 1.x spell IDs, every rank carries its own ID so all ranks are listed
+local curableSpellsForever = {
+	["DRUID"] = {[8946] = {"Poison"}, [2893] = {"Poison"}, [2782] = {"Curse"}},
+	["PRIEST"] = {[527] = {"Magic"}, [988] = {"Magic"}, [528] = {"Disease"}, [552] = {"Disease"}},
+	["PALADIN"] = {[1152] = {"Disease", "Poison"}, [4987] = {"Disease", "Poison", "Magic"}},
+	["SHAMAN"] = {[526] = {"Poison"}, [2870] = {"Disease"}},
+	["MAGE"] = {[475] = {"Curse"}},
+	["WARLOCK"] = {[19505] = {"Magic"}, [19731] = {"Magic"}, [19734] = {"Magic"}, [19736] = {"Magic"}},
+}
+
+curableSpells = (ShadowUF.isForever and curableSpellsForever or curableSpells)[playerClass]
 
 local function checkCurableSpells()
 	if( not curableSpells ) then return end
@@ -1794,7 +1804,7 @@ local function checkCurableSpells()
 	Units.canCureVersion = (Units.canCureVersion or 0) + 1
 
 	for spellID, cures in pairs(curableSpells) do
-		if( IsPlayerSpell(spellID) or IsSpellKnown(spellID, true) ) then
+		if( C_SpellBook.IsSpellKnown(spellID, Enum.SpellBookSpellBank.Player) or C_SpellBook.IsSpellInSpellBook(spellID, Enum.SpellBookSpellBank.Pet, false) ) then
 			for _, auraType in pairs(cures) do
 				Units.canCure[auraType] = true
 			end

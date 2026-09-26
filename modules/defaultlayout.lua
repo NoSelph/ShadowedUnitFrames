@@ -861,7 +861,8 @@ function ShadowUF:LoadDefaultLayout(useMerge)
 				resurrect = {enabled = true, anchorPoint = "RC", size = 28, x = -39, y = -1, anchorTo = "$parent"},
 				sumPending = {enabled = true, anchorPoint = "C", size = 40, x = 0, y = 0, anchorTo = "$parent"},
 				questBoss = {enabled = true, anchorPoint = "BR", size = 22, x = 9, y = 24, anchorTo = "$parent"},
-				petBattle = {enabled = true, anchorPoint = "BL", size = 18, x = -6, y = 14, anchorTo = "$parent"}
+				petBattle = {enabled = true, anchorPoint = "BL", size = 18, x = -6, y = 14, anchorTo = "$parent"},
+				happiness = ShadowUF.isForever and {enabled = true, anchorPoint = "BL", size = 18, x = -6, y = 14, anchorTo = "$parent"} or nil
 			},
 			auras = {
 				buffs = {enabled = true},

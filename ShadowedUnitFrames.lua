@@ -7,6 +7,10 @@ ShadowUF = select(2, ...)
 local L = ShadowUF.L
 ShadowUF.dbRevision = 73
 ShadowUF.playerUnit = "player"
+-- Forever (game type camelot) reports WOW_PROJECT_MAINLINE, the TOC version is the only reliable discriminator
+local tocVersion = select(4, GetBuildInfo()) or 0
+ShadowUF.isForever = tocVersion >= 16000 and tocVersion < 20000
+local playerClass = select(2, UnitClass("player"))
 ShadowUF.enabledUnits = {}
 ShadowUF.modules = {}
 ShadowUF.moduleOrder = {}
@@ -144,6 +148,21 @@ function ShadowUF.UnitAuraBySpell(unit, spell, filter)
 			auraData.isFromPlayerOrPlayerPet,
 			auraData.nameplateShowAll,
 			auraData.timeMod
+end
+
+-- Forever runs the TalentTab system, C_SpecializationInfo.GetSpecialization then reports a talent tree rather than a specialization
+function ShadowUF:GetPlayerSpec()
+	if( GetSpecializationSystem and Enum.SpecializationSystem and GetSpecializationSystem() ~= Enum.SpecializationSystem.ChrSpecialization ) then return nil end
+	return C_SpecializationInfo.GetSpecialization()
+end
+
+-- Forever has no soul shard or holy power resource, the modules would draw an empty bar
+ShadowUF.foreverDeadModules = {soulShards = true, holyPower = true}
+
+function ShadowUF:IsModuleAvailable(module)
+	if( module.moduleClass and module.moduleClass ~= playerClass ) then return false end
+	if( self.isForever and self.foreverDeadModules[module.moduleKey] ) then return false end
+	return true
 end
 
 -- Identity-guarded Unit APIs (UnitClass, UnitInRaid, roles...) return secrets for these units, so test once upfront instead of guarding every return
@@ -888,6 +907,9 @@ function ShadowUF:LoadUnitDefaults()
 	self.defaults.profile.units.pet.enabled = true
 	self.defaults.profile.units.pet.fader = {enabled = false, combatAlpha = 1.0, inactiveAlpha = 0.60}
 	self.defaults.profile.units.pet.xpBar = {enabled = false}
+	if( self.isForever ) then
+		self.defaults.profile.units.pet.indicators.happiness = {enabled = true, size = 0, x = 0, y = 0}
+	end
     -- FOCUS
 	self.defaults.profile.units.focus.enabled = true
 	self.defaults.profile.units.focus.fader = {enabled = false, combatAlpha = 1.0, inactiveAlpha = 0.60}
@@ -1211,12 +1233,15 @@ local rehideFrame = function(self)
 	end
 end
 
+-- Class resource frames only exist on game types that ship the class
 local function basicHideBlizzardFrames(...)
 	for i=1, select("#", ...) do
 		local frame = select(i, ...)
-		frame:UnregisterAllEvents()
-		frame:HookScript("OnShow", rehideFrame)
-		frame:Hide()
+		if( frame ) then
+			frame:UnregisterAllEvents()
+			frame:HookScript("OnShow", rehideFrame)
+			frame:Hide()
+		end
 	end
 end
 

@@ -56,6 +56,38 @@ local Range = {
 	},
 }
 
+-- Forever runs 1.x spell IDs, the retail lists resolve to nothing there
+local function spellNames(...)
+	local names = {}
+	for i = 1, select("#", ...) do
+		local name = GetSpellName((select(i, ...)))
+		if( name ) then table.insert(names, name) end
+	end
+	return names
+end
+
+if( ShadowUF.isForever ) then
+	Range.friendly = {
+		["PRIEST"] = spellNames(17, 2050, 139), -- Power Word: Shield, Lesser Heal, Renew
+		["DRUID"] = spellNames(774, 5185), -- Rejuvenation, Healing Touch
+		["PALADIN"] = spellNames(635, 19750), -- Holy Light, Flash of Light
+		["SHAMAN"] = spellNames(331, 8004), -- Healing Wave, Lesser Healing Wave
+		["WARLOCK"] = spellNames(5697), -- Unending Breath
+		["MAGE"] = spellNames(1459, 604), -- Arcane Intellect, Dampen Magic
+	}
+	Range.hostile = {
+		["WARRIOR"] = spellNames(355, 100), -- Taunt, Charge
+		["DRUID"] = spellNames(8921), -- Moonfire
+		["HUNTER"] = spellNames(1130, 1978, 75), -- Hunter's Mark, Serpent Sting, Auto Shot
+		["MAGE"] = spellNames(133, 116, 5143), -- Fireball, Frostbolt, Arcane Missiles
+		["PALADIN"] = spellNames(879, 20271), -- Exorcism, Judgement
+		["PRIEST"] = spellNames(585, 589), -- Smite, Shadow Word: Pain
+		["ROGUE"] = spellNames(2764, 1725), -- Throw, Distract
+		["SHAMAN"] = spellNames(403), -- Lightning Bolt
+		["WARLOCK"] = spellNames(686), -- Shadow Bolt
+	}
+end
+
 ShadowUF:RegisterModule(Range, "range", ShadowUF.L["Range indicator"])
 
 local LSR = LibStub("SpellRange-1.0")
