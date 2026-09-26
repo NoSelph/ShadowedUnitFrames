@@ -1042,15 +1042,41 @@ function Indicators:UpdateAuras(frame)
 end
 
 -- A new rank changes the ID set behind the slot filters
+-- The event can fire in bursts, so one coalesced pass out of combat rebuilds every frame
 if( ShadowUF.isForever ) then
-	local spellbookWatcher = CreateFrame("Frame")
-	spellbookWatcher:RegisterEvent("SPELLS_CHANGED")
-	spellbookWatcher:SetScript("OnEvent", function()
+	local dirty, scheduled
+	local function rebuildRankSlots()
+		scheduled = nil
+		if( InCombatLockdown() ) then
+			dirty = true
+			return
+		end
+		dirty = nil
 		spellbookByName = nil
 		for frame in pairs(ShadowUF.Units.frameList) do
 			if( frame.auraIndicators ) then
 				Indicators:BuildIndicatorSlots(frame)
 			end
+		end
+	end
+	local function schedule()
+		if( scheduled ) then return end
+		scheduled = true
+		C_Timer.After(1, rebuildRankSlots)
+	end
+
+	local spellbookWatcher = CreateFrame("Frame")
+	spellbookWatcher:RegisterEvent("SPELLS_CHANGED")
+	spellbookWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+	spellbookWatcher:SetScript("OnEvent", function(_, event)
+		if( event == "SPELLS_CHANGED" ) then
+			if( InCombatLockdown() ) then
+				dirty = true
+			else
+				schedule()
+			end
+		elseif( dirty ) then
+			schedule()
 		end
 	end)
 end

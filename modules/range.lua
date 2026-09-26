@@ -296,3 +296,44 @@ function Range:SpellChecks(frame)
 		self:ForceUpdate(frame)
 	end
 end
+
+-- Forever has no specialization event, a spell learned after login only reaches the cache through the spellbook change
+-- The event can fire in bursts, so one coalesced rebuild out of combat serves every frame
+if( ShadowUF.isForever ) then
+	local dirty, scheduled
+	local function rebuildRangeSpells()
+		scheduled = nil
+		if( InCombatLockdown() ) then
+			dirty = true
+			return
+		end
+		dirty = nil
+		updateSpellCache("friendly")
+		updateSpellCache("hostile")
+		for frame in pairs(rangeFrames) do
+			if( frame:IsVisible() and frame.range and ShadowUF.db.profile.units[frame.unitType].range.enabled ) then
+				Range:ForceUpdate(frame)
+			end
+		end
+	end
+	local function schedule()
+		if( scheduled ) then return end
+		scheduled = true
+		C_Timer.After(1, rebuildRangeSpells)
+	end
+
+	local spellbookWatcher = CreateFrame("Frame")
+	spellbookWatcher:RegisterEvent("SPELLS_CHANGED")
+	spellbookWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+	spellbookWatcher:SetScript("OnEvent", function(_, event)
+		if( event == "SPELLS_CHANGED" ) then
+			if( InCombatLockdown() ) then
+				dirty = true
+			else
+				schedule()
+			end
+		elseif( dirty ) then
+			schedule()
+		end
+	end)
+end
