@@ -1074,6 +1074,11 @@ function ShadowUF:LoadUnitDefaults()
 	for classToken in pairs(RAID_CLASS_COLORS) do
 		self.defaults.profile.auraIndicators.disabled[classToken] = {}
 	end
+
+	-- Forever ships no default indicator auras, the retail healer spells mean nothing there
+	if( self.isForever ) then
+		wipe(self.defaults.profile.auraIndicators.auras)
+	end
 end
 
 -- Module APIs

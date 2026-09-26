@@ -149,6 +149,57 @@ Indicators.auraConfig = setmetatable({}, {
 end})
 
 local playerUnits = {player = true, vehicle = true, pet = true}
+
+-- Forever keeps one spell ID per rank and an aura carries the rank that was cast, so an entry keyed by one ID has to match every rank
+-- The player's spellbook lists every known rank under the same name, that set feeds the slot filters and aliases each rank back to the configured key
+local rankAlias = {}
+local rankSets = {}
+local spellbookByName
+
+local function refreshSpellbookRanks()
+	spellbookByName = {}
+	local bank = Enum.SpellBookSpellBank.Player
+	for line = 1, C_SpellBook.GetNumSpellBookSkillLines() do
+		local lineInfo = C_SpellBook.GetSpellBookSkillLineInfo(line)
+		if( lineInfo ) then
+			for index = lineInfo.itemIndexOffset + 1, lineInfo.itemIndexOffset + lineInfo.numSpellBookItems do
+				local info = C_SpellBook.GetSpellBookItemInfo(index, bank)
+				if( info and info.itemType == Enum.SpellBookItemType.Spell and info.name and info.spellID ) then
+					spellbookByName[info.name] = spellbookByName[info.name] or {}
+					spellbookByName[info.name][info.spellID] = true
+				end
+			end
+		end
+	end
+end
+
+local function refreshRankAliases()
+	wipe(rankAlias)
+	wipe(rankSets)
+	if( not ShadowUF.isForever ) then return end
+	if( not spellbookByName ) then refreshSpellbookRanks() end
+
+	for key in pairs(ShadowUF.db.profile.auraIndicators.auras) do
+		local spellID = tonumber(key)
+		local name = spellID and C_Spell.GetSpellName(spellID) or key
+		local ranks = name and spellbookByName[name]
+		if( ranks ) then
+			rankSets[key] = ranks
+			for id in pairs(ranks) do
+				rankAlias[tostring(id)] = key
+			end
+		end
+	end
+end
+
+local function rankSignature(key)
+	local ranks = rankSets[key]
+	if( not ranks ) then return "" end
+	local ids = {}
+	for id in pairs(ranks) do table.insert(ids, id) end
+	table.sort(ids)
+	return table.concat(ids, ",")
+end
 local backdropTbl = {bgFile = "Interface\\Addons\\ShadowedUnitFrames\\mediabackdrop", edgeFile = "Interface\\Addons\\ShadowedUnitFrames\\media\\backdrop", tile = true, tileSize = 1, edgeSize = 1}
 
 function Indicators:OnProfileChange()
@@ -322,9 +373,11 @@ end
 
 local function checkSpecificAura(frame, type, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, isBossDebuff, auraInstanceID)
 	-- Not relevant
-	if( not ShadowUF.db.profile.auraIndicators.auras[name] and not ShadowUF.db.profile.auraIndicators.auras[tostring(spellID)] ) then return end
+	local auras = ShadowUF.db.profile.auraIndicators.auras
+	local key = (auras[name] and name) or (auras[tostring(spellID)] and tostring(spellID)) or rankAlias[tostring(spellID)]
+	if( not key ) then return end
 
-	local auraConfig = Indicators.auraConfig[name] or Indicators.auraConfig[spellID]
+	local auraConfig = Indicators.auraConfig[key]
 
 	-- Only player auras
 	if( auraConfig.player and not playerUnits[caster] ) then return end
@@ -453,12 +506,13 @@ local function scanConfiguredAuras(frame)
 	for key in pairs(Indicators.auraConfig) do
 		local spellID = tonumber(key)
 		local okData, auraData
-		if( spellID ) then
+		if( spellID and not ShadowUF.isForever ) then
 			okData, auraData = pcall(C_UnitAuras.GetUnitAuraBySpellID, frame.unitSUF, spellID)
 		else
-			okData, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, frame.unitSUF, key, "HELPFUL")
+			local name = spellID and C_Spell.GetSpellName(spellID) or key
+			okData, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, frame.unitSUF, name, "HELPFUL")
 			if( not okData or not auraData ) then
-				okData, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, frame.unitSUF, key, "HARMFUL")
+				okData, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, frame.unitSUF, name, "HARMFUL")
 			end
 		end
 
@@ -630,6 +684,7 @@ function Indicators:BuildIndicatorSlots(frame)
 
 	local auras = ShadowUF.modules.auras
 	if( not (auras and auras.hasContainers) ) then return end
+	refreshRankAliases()
 
 	local unitConfig = ShadowUF.db.profile.units[frame.unitType].auraIndicators
 	local tracked, categorySlots, signatureParts
@@ -647,7 +702,7 @@ function Indicators:BuildIndicatorSlots(frame)
 					tracked = tracked or {}
 					signatureParts = signatureParts or {}
 					tracked[spellID] = auraConfig
-					table.insert(signatureParts, spellID .. "@" .. auraConfig.indicator .. "@" .. tostring(auraConfig.player) .. "@" .. tostring(auraConfig.icon) .. "@" .. tostring(auraConfig.duration) .. "@" .. tostring(indicatorConfig.showStack) .. "@" .. tostring(auraConfig.priority) .. "@" .. tostring(indicatorConfig.friendly) .. "@" .. tostring(indicatorConfig.hostile))
+					table.insert(signatureParts, spellID .. "@" .. rankSignature(key) .. "@" .. auraConfig.indicator .. "@" .. tostring(auraConfig.player) .. "@" .. tostring(auraConfig.icon) .. "@" .. tostring(auraConfig.duration) .. "@" .. tostring(indicatorConfig.showStack) .. "@" .. tostring(auraConfig.priority) .. "@" .. tostring(indicatorConfig.friendly) .. "@" .. tostring(indicatorConfig.hostile))
 				end
 			end
 		end
@@ -702,6 +757,7 @@ function Indicators:BuildIndicatorSlots(frame)
 		for spellID, auraConfig in pairs(tracked) do
 			local indicatorConfig = ShadowUF.db.profile.auraIndicators.indicators[auraConfig.indicator]
 			local candidateFilters = { includeSpellIDs = { [spellID] = true } }
+			for id in pairs(rankSets[tostring(spellID)] or {}) do candidateFilters.includeSpellIDs[id] = true end
 			-- Self-cast scoping rides the PLAYER token, the isFromPlayerOrPlayerPet candidate only discriminates non-secret auras (legacy OOC path compares the caster itself)
 			local playerToken = auraConfig.player and "|PLAYER" or ""
 
@@ -983,4 +1039,18 @@ function Indicators:UpdateAuras(frame)
 
 	-- Now force the indicators to update
 	self:UpdateIndicators(frame)
+end
+
+-- A new rank changes the ID set behind the slot filters
+if( ShadowUF.isForever ) then
+	local spellbookWatcher = CreateFrame("Frame")
+	spellbookWatcher:RegisterEvent("SPELLS_CHANGED")
+	spellbookWatcher:SetScript("OnEvent", function()
+		spellbookByName = nil
+		for frame in pairs(ShadowUF.Units.frameList) do
+			if( frame.auraIndicators ) then
+				Indicators:BuildIndicatorSlots(frame)
+			end
+		end
+	end)
 end

@@ -9011,6 +9011,7 @@ local function loadAuraIndicatorsOptions()
 								width = "full",
 								name = L["Spell"],
 								desc = L["Curated list of class and healer spells. Combat display works for buffs on friendly units; the missing option requires a Blizzard-whitelisted spell."],
+								hidden = function() return ShadowUF.isForever end,
 								values = function()
 									local vals = {}
 									for spellID, info in pairs(Indicators.whitelistedSpells) do
@@ -9071,8 +9072,10 @@ local function loadAuraIndicatorsOptions()
 								desc = L["Group this aura will be listed under. Both a spell and a group are required to add an aura."],
 								values = function()
 									local vals = {}
-									for _, info in pairs(Indicators.whitelistedSpells) do
-										vals[info.group] = info.group
+									if( not ShadowUF.isForever ) then
+										for _, info in pairs(Indicators.whitelistedSpells) do
+											vals[info.group] = info.group
+										end
 									end
 									for key in pairs(ShadowUF.db.profile.auraIndicators.auras) do
 										local config = Indicators.auraConfig[key]
