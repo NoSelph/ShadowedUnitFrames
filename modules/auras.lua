@@ -111,6 +111,13 @@ end
 
 -- Overlay on the icon, pulsing between zero and the configured alpha
 -- Shown while the aura sits in its pandemic window
+-- The template opts containers into Edit Mode preview auras, our placeholders come from config mode instead
+function Auras:ApplyContainerDefaults(container)
+	if( container.SetEditModePreviewEnabled ) then
+		pcall(container.SetEditModePreviewEnabled, container, false)
+	end
+end
+
 function Auras:CreatePandemicOverlay(button, layer, sublevel)
 	local color = ShadowUF.db.profile.auraColors.pandemic
 
@@ -973,6 +980,7 @@ local function configureGroupContainer(frame, group, config, extraSections)
 		if( not ok or not container ) then return end
 
 		group.container = container
+		Auras:ApplyContainerDefaults(container)
 		group.containerSignature = signature
 		group.containerStructural = structural
 		group.containerButtons = {}

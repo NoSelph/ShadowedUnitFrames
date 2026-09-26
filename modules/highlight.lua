@@ -79,6 +79,7 @@ local function createDispelSlots(frame, dispelFilter)
 	pcall(function()
 		-- Parent to the unit frame, NOT frame.highlight, the legacy highlight hides itself whenever it has nothing to show and that would hide us too
 		local container = CreateFrame("AuraContainer", nil, frame, "CustomAuraContainerTemplate")
+		if( ShadowUF.modules.auras.ApplyContainerDefaults ) then ShadowUF.modules.auras:ApplyContainerDefaults(container) end
 		container:SetPoint("TOPLEFT", frame)
 		container:SetSize(1, 1)
 
@@ -100,7 +101,7 @@ local function createDispelSlots(frame, dispelFilter)
 					overlay:SetAlpha(alpha)
 					overlays[edge] = overlay
 					-- PreserveAsset tints our overlay texture by dispel type
-					pcall(button.SetAuraBorder, button, overlay, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, customDispelColorMap = ShadowUF.modules.auras.GetDispelColorMap and ShadowUF.modules.auras:GetDispelColorMap() or nil })
+					pcall(button.AddDispelTypeTexture, button, overlay, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, customDispelColorMap = ShadowUF.modules.auras.GetDispelColorMap and ShadowUF.modules.auras:GetDispelColorMap() or nil })
 					button:SetMouseMotionEnabled(false)
 				end,
 			})

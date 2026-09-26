@@ -3,12 +3,8 @@ ShadowUF:RegisterModule(Health, "healthBar", ShadowUF.L["Health bar"], true)
 
 local function getGradientColor(unit)
 	if not ShadowUF.db or not ShadowUF.db.profile or not ShadowUF.db.profile.healthColors then
-		-- DB not ready yet; safe fallback.
 		return 0, 1, 0
 	end
-
-	-- Cache curve and rebuild only when profile colors change.
-	Health._gradientCurve = Health._gradientCurve or nil
 
 	local hc = ShadowUF.db.profile.healthColors
 	local changed = not Health._gradientCurve
@@ -32,7 +28,7 @@ local function getGradientColor(unit)
 		end
 	end
 
-	-- Curve Interpolation
+	-- UnitHealthPercent evaluates the curve natively, the one route that colors by a possibly secret health fraction
 	if UnitHealthPercent and Health._gradientCurve then
 		local ok, color = pcall(UnitHealthPercent, unit, true, Health._gradientCurve)
 		if ok and type(color) == "table" and color.GetRGB then
@@ -40,7 +36,6 @@ local function getGradientColor(unit)
 		end
 	end
 
-	-- Fallback: solid green
 	return hc.green.r, hc.green.g, hc.green.b
 end
 
@@ -95,6 +90,7 @@ local function createDispelSlot(frame, dispelFilter)
 
 	pcall(function()
 		local container = CreateFrame("AuraContainer", nil, frame.healthBar, "CustomAuraContainerTemplate")
+		if( ShadowUF.modules.auras.ApplyContainerDefaults ) then ShadowUF.modules.auras:ApplyContainerDefaults(container) end
 		container:SetPoint("TOPLEFT", frame.healthBar)
 		container:SetSize(1, 1)
 
@@ -113,7 +109,7 @@ local function createDispelSlot(frame, dispelFilter)
 				-- Keep the health fill readable under the dispel tint
 				overlay:SetAlpha(0.5)
 				-- PreserveAsset tints our overlay texture by dispel type
-				pcall(button.SetAuraBorder, button, overlay, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, customDispelColorMap = ShadowUF.modules.auras.GetDispelColorMap and ShadowUF.modules.auras:GetDispelColorMap() or nil })
+				pcall(button.AddDispelTypeTexture, button, overlay, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, customDispelColorMap = ShadowUF.modules.auras.GetDispelColorMap and ShadowUF.modules.auras:GetDispelColorMap() or nil })
 				button:SetMouseMotionEnabled(false)
 			end,
 		})
@@ -329,27 +325,7 @@ function Health:UpdateColor(frame)
 		frame:SetBarColor("healthBar", color.r, color.g, color.b)
 	else
 		frame.healthBar.hasPercent = true
-		
-		-- 12.0: Check for Curve
-		local curve = getGradientColor(unit) -- Returns Curve or RGB values (multiple returns)
-		if( type(curve) == "userdata" ) then
-		    -- It is a Curve. Bypass SetBarColor to avoid crash.
-		    -- Apply directly.
-		    if( frame.healthBar.SetStatusBarColorCurve ) then
-		        frame.healthBar:SetStatusBarColorCurve(curve)
-		    elseif( frame.healthBar.SetColorCurve ) then
-		        frame.healthBar:SetColorCurve(curve)
-		    end
-		    
-		    -- Set static background (Cannot darken a secret curve)
-		    -- Using a standard dark grey
-		    if( frame.healthBar.background ) then
-		        frame.healthBar.background:SetVertexColor(0.2, 0.2, 0.2, 1)
-		    end
-		else
-		    -- Manual RGB (Legacy Fallback)
-		    frame:SetBarColor("healthBar", getGradientColor(unit))
-		end
+		frame:SetBarColor("healthBar", getGradientColor(unit))
 	end
 end
 
@@ -386,24 +362,6 @@ function Health:Update(frame)
 		self:UpdateColor(frame)
 	-- Color health by percentage
 	elseif( frame.healthBar.hasPercent ) then
-		-- 12.0: Check for Curve
-		local curve = getGradientColor(frame.unitSUF)
-		if( type(curve) == "userdata" ) then
-		    -- Curve Logic
-		    if( frame.healthBar.SetStatusBarColorCurve ) then
-		        frame.healthBar:SetStatusBarColorCurve(curve)
-		    elseif( frame.healthBar.SetColorCurve ) then
-		        frame.healthBar:SetColorCurve(curve)
-		    end
-		    
-		    -- Background update not needed here as UpdateColor handles it, 
-		    -- but to be safe and consistent with non-UpdateColor flows:
-		    if( frame.healthBar.background ) then
-		         frame.healthBar.background:SetVertexColor(0.2, 0.2, 0.2, 1)
-		    end
-		else
-		    -- Manual Logic
-		    frame:SetBarColor("healthBar", getGradientColor(frame.unitSUF))
-		end
+		frame:SetBarColor("healthBar", getGradientColor(frame.unitSUF))
 	end
 end

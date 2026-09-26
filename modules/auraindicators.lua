@@ -586,7 +586,7 @@ local function makeIndicatorSlotStyler(display, isHarmful)
 				dispel:SetPoint("TOPLEFT", button, -1, 1)
 				dispel:SetPoint("BOTTOMRIGHT", button, 1, -1)
 				dispel:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. borderType)
-				pcall(button.SetAuraBorder, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, customDispelColorMap = ShadowUF.modules.auras.GetDispelColorMap and ShadowUF.modules.auras:GetDispelColorMap() or nil })
+				pcall(button.AddDispelTypeTexture, button, dispel, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.PreserveAsset or 3, showWhenHarmful = true, showWhenHelpful = true, customDispelColorMap = ShadowUF.modules.auras.GetDispelColorMap and ShadowUF.modules.auras:GetDispelColorMap() or nil })
 			end
 		else
 			texture:SetColorTexture(display.r or 1, display.g or 1, display.b or 1)
@@ -690,6 +690,7 @@ function Indicators:BuildIndicatorSlots(frame)
 
 	local ok, container = pcall(CreateFrame, "AuraContainer", nil, frame.auraIndicators, "CustomAuraContainerTemplate")
 	if( not ok or not container ) then return end
+	if( ShadowUF.modules.auras.ApplyContainerDefaults ) then ShadowUF.modules.auras:ApplyContainerDefaults(container) end
 	container:SetPoint("TOPLEFT", frame.auraIndicators)
 	container:SetSize(1, 1)
 	container:Hide()
@@ -890,8 +891,11 @@ function Indicators:UpdateAuras(frame)
 					local active = not record.activeWhen
 						or (record.activeWhen == "assist" and state == "assist")
 						or (record.activeWhen == "noassist" and state == "attack")
+					-- Disabling a slot keeps its candidate filters, only the matched auras and the button assignment go
+					if( slotContainer.SetAuraSlotEnabled ) then
+						pcall(slotContainer.SetAuraSlotEnabled, slotContainer, key, active and true or false)
 					-- Category slots have no candidates, nil is a real value here (clears, the filter string alone matches) and must not fall through to the mute
-					if( active ) then
+					elseif( active ) then
 						pcall(slotContainer.SetAuraSlotCandidateFilters, slotContainer, key, record.candidates)
 					else
 						pcall(slotContainer.SetAuraSlotCandidateFilters, slotContainer, key, MUTE_CANDIDATES)

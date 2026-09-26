@@ -851,6 +851,8 @@ end
 
 local function ArenaClassToken(self)
 	local specID = GetArenaOpponentSpec(self.unitID)
+	-- Secret under PvP restrictions, the class then resolves through UnitClass like any other frame
+	if( issecretvalue and issecretvalue(specID) ) then return ClassToken(self) end
 	return specID and select(6, GetSpecializationInfoByID(specID))
 end
 
@@ -1391,7 +1393,7 @@ function Units:LoadZoneHeader(type)
 		-- Arena frames are only allowed to be shown not hidden from the unit existing, or else when a Rogue
 		-- stealths the frame will hide which looks bad. Instead force it to stay open and it has to be manually hidden when the player leaves an arena.
 		if( type == "arena" ) then
-			-- Class comes from the opponent spec, which stays readable when unit identity is secret
+			-- Class comes from the opponent spec so prep-phase frames get their class before the unit exists
 			frame.UnitClassToken = ArenaClassToken
 
 			stateMonitor:WrapScript(frame, "OnAttributeChanged", [[
@@ -1674,18 +1676,33 @@ end
 
 -- Fill health/power bars and show spec name when unit doesn't exist yet (gates closed)
 function Units:ArenaPreparationUpdate(frame)
-	local specID, gender = GetArenaOpponentSpec(frame.unitID)
-	if( not specID or specID == 0 ) then return end
+	local specName, r, g, b
+	-- The delegate answers with secret values under PvP restrictions, its bar color is Blizzard's palette gated by the pvpFramesDisplayClassColor cvar
+	local getInfo = not frame.configMode and UnitFrameUtil and UnitFrameUtil.GetArenaOpponentSpecDisplayInfo
+	local info
+	if( getInfo ) then
+		local ok
+		ok, info = pcall(getInfo, frame.unitID)
+		if( not ok or not info ) then return end
+	end
+	if( info ) then
+		specName, r, g, b = info.specName, info.barColorR, info.barColorG, info.barColorB
+	else
+		local specID, gender = GetArenaOpponentSpec(frame.unitID)
+		if( not specID or specID == 0 ) then return end
 
-	local _, specName, _, _, _, classToken = GetSpecializationInfoByID(specID, gender)
-	if( not classToken ) then return end
+		local _, classToken
+		_, specName, _, _, _, classToken = GetSpecializationInfoByID(specID, gender)
+		if( not classToken ) then return end
+		local color = ShadowUF.db.profile.classColors[classToken]
+		if( color ) then r, g, b = color.r, color.g, color.b end
+	end
 
 	if( frame.healthBar ) then
 		frame.healthBar:SetMinMaxValues(0, 1)
 		frame.healthBar:SetValue(1)
-		local color = ShadowUF.db.profile.classColors[classToken]
-		if( color ) then
-			frame:SetBarColor("healthBar", color.r, color.g, color.b)
+		if( r ) then
+			frame:SetBarColor("healthBar", r, g, b)
 		end
 	end
 
@@ -1702,7 +1719,7 @@ function Units:ArenaPreparationUpdate(frame)
 	-- Set spec name on fontStrings directly (no tags, UnitExists is false)
 	if( frame.fontStrings ) then
 		for _, fontString in pairs(frame.fontStrings) do
-			fontString:SetFormattedText("%s", specName or "")
+			fontString:SetText(specName or "")
 		end
 	end
 

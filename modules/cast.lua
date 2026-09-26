@@ -354,7 +354,7 @@ function Cast:UpdateCurrentCast(frame)
 		self:UpdateCast(frame, frame.unitSUF, false, name, text, texture, startTime, endTime, isTradeSkill, notInterruptible, spellID, castID)
 	elseif( UnitChannelInfo(frame.unitSUF) ) then
 		local name, text, texture, startTime, endTime, isTradeSkill, notInterruptible, spellID, _, _, castBarID = UnitChannelInfo(frame.unitSUF)
-		castID = castBarID or spellID
+		local castID = castBarID or spellID
 		self:UpdateCast(frame, frame.unitSUF, true, name, text, texture, startTime, endTime, isTradeSkill, notInterruptible, spellID, castID)
 	else
 		if( ShadowUF.db.profile.units[frame.unitType].castBar.autoHide ) then
