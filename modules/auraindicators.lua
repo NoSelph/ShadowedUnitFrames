@@ -219,7 +219,17 @@ function Indicators:OnEnable(frame)
 	-- Instance and phase transitions move units in and out of the area of interest
 	frame:RegisterUnitEvent("UNIT_PHASE", self, "UpdateAuras")
 	frame:RegisterUnitEvent("UNIT_CONNECTION", self, "UpdateAuras")
+	frame:RegisterUnitEvent("UNIT_HEALTH", self, "CheckDeadState")
 	frame:RegisterUpdateFunc(self, "UpdateAuras")
+end
+
+-- Death itself raises no aura event once the buffs are gone, so the missing pass would keep its last verdict on a corpse
+function Indicators:CheckDeadState(frame)
+	local dead = UnitIsDeadOrGhost(frame.unitSUF) and true or false
+	if( frame.auraIndicators.wasDead ~= dead ) then
+		frame.auraIndicators.wasDead = dead
+		self:UpdateAuras(frame)
+	end
 end
 
 function Indicators:OnDisable(frame)
@@ -308,7 +318,6 @@ end
 
 local playerClass = select(2, UnitClass("player"))
 local filterMap = {}
-local canCure = ShadowUF.Units.canCure
 for _, key in pairs(Indicators.auraFilters) do filterMap[key] = "filter-" .. key end
 
 -- Fallback for out-of-combat rendering, compute the pandemic window manually here.
@@ -329,13 +338,17 @@ local function getPandemicStart(unit, auraInstanceID, caster, endTime)
 end
 
 local function checkFilterAura(frame, type, isFriendly, name, texture, count, auraType, duration, endTime, caster, isRemovable, nameplateShowPersonal, spellID, canApplyAura, auraInstanceID)
+	-- Both sides ask the engine with the combat slot's token, RAID on a harmful aura means the player can dispel it
+	-- slotsAssist is stamped at the top of every UpdateAuras; units we can't harm (cross-faction warmode off) never take the hostile branch
 	local category
-	if( isFriendly and canCure[auraType] and type == "debuffs" ) then
-		category = "curable"
-	elseif( not isFriendly and type == "buffs" and auraInstanceID and frame.auraIndicators.slotsAssist == "attack" ) then
-		-- Purgeable/soothable buffs on the hostile side, same token as the combat slot
-		-- slotsAssist is stamped at the top of every UpdateAuras; units we can't harm (cross-faction warmode off) never take this branch
-		local ok, filteredOut = pcall(C_UnitAuras.IsAuraFilteredOutByInstanceID, frame.unitSUF, auraInstanceID, "HELPFUL|RAID_PLAYER_DISPELLABLE")
+	local token
+	if( isFriendly and type == "debuffs" ) then
+		token = "HARMFUL|RAID"
+	elseif( not isFriendly and type == "buffs" and frame.auraIndicators.slotsAssist == "attack" ) then
+		token = "HELPFUL|RAID_PLAYER_DISPELLABLE"
+	end
+	if( token and auraInstanceID ) then
+		local ok, filteredOut = pcall(C_UnitAuras.IsAuraFilteredOutByInstanceID, frame.unitSUF, auraInstanceID, token)
 		if( ok and not issecretvalue(filteredOut) and not filteredOut ) then
 			category = "curable"
 		end

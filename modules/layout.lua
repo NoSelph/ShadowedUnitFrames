@@ -550,7 +550,9 @@ function Layout:SetupText(frame, config)
 	for _, fontString in pairs(frame.fontStrings) do
 		local id = fontString.configID
 		if( fontString:IsShown() ) then
-			fontString:SetWidth(fontString.availableWidth * (config.text[id].width / totalWeight[fontString.widthID]))
+			-- Unweighted texts on an anchor keep their natural width, dividing by the zero total is a Lua error on Forever
+			local weight = totalWeight[fontString.widthID]
+			fontString:SetWidth(weight > 0 and fontString.availableWidth * (config.text[id].width / weight) or 0)
 			fontString:SetHeight(ShadowUF.db.profile.font.size + 1)
 
 			frame:RegisterUpdateFunc(fontString, "UpdateTags")
@@ -630,6 +632,8 @@ function Layout:PositionWidgets(frame, config)
 	-- Position and size everything
 	local portraitHeight, xOffset = 0, -clip
 	local availableHeight = frame:GetHeight() - clipDoubled - (math.abs(ShadowUF.db.profile.bars.spacing) * totalBars)
+	-- Every visible bar at weight 0 leaves nothing to share, dividing by the zero total is a Lua error on Forever
+	if( totalWidgetWeight <= 0 ) then totalWidgetWeight = 1 end
 	for id, key in pairs(barOrder) do
 		local bar = frame[key]
 

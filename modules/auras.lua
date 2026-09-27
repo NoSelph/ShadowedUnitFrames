@@ -1,6 +1,5 @@
 ﻿local Auras = {}
 local SML = LibStub("LibSharedMedia-3.0")
-local canCure = ShadowUF.Units.canCure
 ShadowUF:RegisterModule(Auras, "auras", ShadowUF.L["Auras"])
 
 -- Styling placeholders once per config generation is enough

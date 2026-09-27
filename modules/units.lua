@@ -1,4 +1,4 @@
-local Units = {headerFrames = {}, unitFrames = {}, frameList = {}, unitEvents = {}, remappedUnits = {}, canCure = {}}
+local Units = {headerFrames = {}, unitFrames = {}, frameList = {}, unitEvents = {}, remappedUnits = {}}
 Units.childUnits = {["partytarget"] = "party", ["partytargettarget"] = "party", ["partypet"] = "party", ["maintanktarget"] = "maintank", ["mainassisttarget"] = "mainassist", ["bosstarget"] = "boss", ["arenatarget"] = "arena", ["arenatargettarget"] = "arena", ["arenapet"] = "arena", ["battlegroundpet"] = "battleground", ["battlegroundtarget"] = "battleground", ["battlegroundtargettarget"] = "battleground", ["maintanktargettarget"] = "maintank", ["mainassisttargettarget"] = "mainassist", ["bosstargettarget"] = "boss"}
 Units.zoneUnits = {["arena"] = "arena", ["arenapet"] = "arena", ["arenatarget"] = "arena", ["arenatargettarget"] = "arena", ["boss"] = {"party", "raid"}, ["bosstarget"] = {"party", "raid"}, ["battleground"] = "pvp", ["battlegroundtarget"] = "pvp", ["battlegroundtargettarget"] = "pvp", ["battlegroundpet"] = "pvp", ["bosstargettarget"] = {"party", "raid"}}
 Units.remappedUnits = {["battleground"] = "arena", ["battlegroundpet"] = "arenapet", ["battlegroundtarget"] = "arenatarget", ["battlegroundtargettarget"] = "arenatargettarget"}
@@ -1771,47 +1771,6 @@ function Units:CheckPlayerZone(force)
 	end
 end
 
--- Handle figuring out what auras players can cure
-local curableSpells = {
-	["DRUID"] = {[88423] = {"Magic", "Curse", "Poison"}, [2782] = {"Curse", "Poison"}},
-	["PRIEST"] = {[527] = {"Magic", "Disease"}, [32375] = {"Magic"}, [213634] = {"Disease"}},
-	["PALADIN"] = {[4987] = {"Poison", "Disease", "Magic"}, [213644] = {"Poison", "Disease"}},
-	["SHAMAN"] = {[77130] = {"Curse", "Magic"}, [51886] = {"Curse"}, [383013] = {"Poison"}},
-	["MONK"] = {[115450] = {"Poison", "Disease", "Magic"}, [218164] = {"Poison", "Disease"}},
-	["MAGE"] = {[475] = {"Curse"}},
-	["WARLOCK"] = {[89808] = {"Magic"}},
-	["EVOKER"] = {[365585] = {"Poison"}, [360823] = {"Magic", "Poison"}, [374251] = {"Poison", "Curse", "Disease"}}
-}
-
--- Forever runs 1.x spell IDs, every rank carries its own ID so all ranks are listed
-local curableSpellsForever = {
-	["DRUID"] = {[8946] = {"Poison"}, [2893] = {"Poison"}, [2782] = {"Curse"}},
-	["PRIEST"] = {[527] = {"Magic"}, [988] = {"Magic"}, [528] = {"Disease"}, [552] = {"Disease"}},
-	["PALADIN"] = {[1152] = {"Disease", "Poison"}, [4987] = {"Disease", "Poison", "Magic"}},
-	["SHAMAN"] = {[526] = {"Poison"}, [2870] = {"Disease"}},
-	["MAGE"] = {[475] = {"Curse"}},
-	["WARLOCK"] = {[19505] = {"Magic"}, [19731] = {"Magic"}, [19734] = {"Magic"}, [19736] = {"Magic"}},
-}
-
-curableSpells = (ShadowUF.isForever and curableSpellsForever or curableSpells)[playerClass]
-
-local function checkCurableSpells()
-	if( not curableSpells ) then return end
-
-	table.wipe(Units.canCure)
-	
-	-- Bump version so highlight ColorCurve can invalidate its cache
-	Units.canCureVersion = (Units.canCureVersion or 0) + 1
-
-	for spellID, cures in pairs(curableSpells) do
-		if( C_SpellBook.IsSpellKnown(spellID, Enum.SpellBookSpellBank.Player) or C_SpellBook.IsSpellInSpellBook(spellID, Enum.SpellBookSpellBank.Pet, false) ) then
-			for _, auraType in pairs(cures) do
-				Units.canCure[auraType] = true
-			end
-		end
-	end
-end
-
 local centralFrame = CreateFrame("Frame")
 centralFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 centralFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
@@ -1881,10 +1840,8 @@ centralFrame:SetScript("OnEvent", function(self, event, unit, ...)
 			unitFrames.player:FullUpdate()
 		end
 
-	-- Monitor talent changes for curable changes
-	elseif( event == "PLAYER_SPECIALIZATION_CHANGED" or event == "UNIT_PET" or event == "TRAIT_CONFIG_UPDATED") then
-		checkCurableSpells()
-
+	-- Spec changes move spec-gated modules in and out
+	elseif( event == "PLAYER_SPECIALIZATION_CHANGED" or event == "TRAIT_CONFIG_UPDATED") then
 		for frame in pairs(ShadowUF.Units.frameList) do
 			if( frame.unitSUF ) then
 				frame:SetVisibility()
@@ -1896,12 +1853,8 @@ centralFrame:SetScript("OnEvent", function(self, event, unit, ...)
 	    end
 
 	elseif( event == "PLAYER_LOGIN" ) then
-		checkCurableSpells()
 		self:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player", nil)
 		self:RegisterEvent("TRAIT_CONFIG_UPDATED")
-		if( playerClass == "WARLOCK" ) then
-			self:RegisterUnitEvent("UNIT_PET", "player", nil)
-		end
 		
 		-- Register key change events that need immediate FullUpdate if frame is already visible
 		self:RegisterEvent("PLAYER_TARGET_CHANGED")
