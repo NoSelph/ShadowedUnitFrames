@@ -1688,7 +1688,7 @@ local function loadGeneralOptions()
 						name = L["Stagger"],
 						set = setColor,
 						get = getColor,
-						hidden = function() return select(2, UnitClass("player")) ~= "MONK" end,
+						hidden = function() return ShadowUF.isForever or select(2, UnitClass("player")) ~= "MONK" end,
 						args = {
 							STAGGER_GREEN = {
 								order = 0,
@@ -1754,13 +1754,14 @@ local function loadGeneralOptions()
 								type = "color",
 								name = L["Runic Power"],
 								arg = "powerColors.RUNIC_POWER",
+								hidden = function() return ShadowUF.isForever end,
 							},
 							RUNES = {
 								order = 7,
 								type = "color",
 								name = L["Runes"],
 								arg = "powerColors.RUNES",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "DEATHKNIGHT" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "DEATHKNIGHT" end,
 							},
 							AMMOSLOT = {
 								order = 9,
@@ -1794,21 +1795,21 @@ local function loadGeneralOptions()
 								type = "color",
 								name = L["Insanity"],
 								arg = "powerColors.INSANITY",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "PRIEST" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "PRIEST" end,
 							},
 							MAELSTROM = {
 								order = 12,
 								type = "color",
 								name = L["Maelstrom"],
 								arg = "powerColors.MAELSTROM",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "SHAMAN" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "SHAMAN" end,
 							},
 							HOLYPOWER = {
 								order = 12,
 								type = "color",
 								name = L["Holy Power"],
 								arg = "powerColors.HOLYPOWER",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "PALADIN" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "PALADIN" end,
 							},
 							SOULSHARDS = {
 								order = 14,
@@ -1816,7 +1817,7 @@ local function loadGeneralOptions()
 								name = L["Soul Shards"],
 								hasAlpha = true,
 								arg = "powerColors.SOULSHARDS",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "WARLOCK" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "WARLOCK" end,
 							},
 							ARCANECHARGES = {
 								order = 15,
@@ -1824,42 +1825,42 @@ local function loadGeneralOptions()
 								name = L["Arcane Charges"],
 								hasAlpha = true,
 								arg = "powerColors.ARCANECHARGES",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "MAGE" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "MAGE" end,
 							},
 							CHI = {
 								order = 17,
 								type = "color",
 								name = L["Chi"],
 								arg = "powerColors.CHI",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "MONK" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "MONK" end,
 							},
 							FURY = {
 								order = 17,
 								type = "color",
 								name = L["Fury"],
 								arg = "powerColors.FURY",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "DEMONHUNTER" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "DEMONHUNTER" end,
 							},
 							PAIN = {
 								order = 17,
 								type = "color",
 								name = L["Pain"],
 								arg = "powerColors.PAIN",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "DEMONHUNTER" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "DEMONHUNTER" end,
 							},
 							LUNAR_POWER = {
 								order = 17,
 								type = "color",
 								name = L["Astral Power"],
 								arg = "powerColors.LUNAR_POWER",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "DRUID" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "DRUID" end,
 							},
 							STATUE = {
 								order = 17,
 								type = "color",
 								name = L["Statue"],
 								arg = "powerColors.STATUE",
-								hidden = function(info) return select(2, UnitClass("player")) ~= "MONK" end,
+								hidden = function(info) return ShadowUF.isForever or select(2, UnitClass("player")) ~= "MONK" end,
 							},
 							ALTERNATE = {
 								order = 19,
@@ -1867,6 +1868,7 @@ local function loadGeneralOptions()
 								name = L["Alt. Power"],
 								desc = L["Alternate power is used for things like quests and dungeons."],
 								arg = "powerColors.ALTERNATE",
+								hidden = function() return ShadowUF.isForever end,
 							},
 						},
 					},
@@ -1968,7 +1970,7 @@ local function loadGeneralOptions()
 							Curse = {order = 2, type = "color", name = L["Curse"]},
 							Disease = {order = 3, type = "color", name = L["Disease"]},
 							Poison = {order = 4, type = "color", name = L["Poison"]},
-							Bleed = {order = 5, type = "color", name = L["Bleed"]},
+							Bleed = {order = 5, type = "color", name = L["Bleed"], hidden = function() return ShadowUF.isForever end},
 							Enrage = {order = 6, type = "color", name = L["Enrage"]},
 							pandemicColor = {
 								order = 7,
@@ -2211,8 +2213,11 @@ local function loadGeneralOptions()
 		arg = "classColors.$key",
 	}
 
+	-- RAID_CLASS_COLORS lists every class the engine knows, CLASS_SORT_ORDER only the ones this game type ships
+	local shippedClasses = {}
+	for _, classToken in ipairs(CLASS_SORT_ORDER) do shippedClasses[classToken] = true end
 	for classToken in pairs(RAID_CLASS_COLORS) do
-		if ShadowUF.db.profile.classColors[classToken] then
+		if ShadowUF.db.profile.classColors[classToken] and shippedClasses[classToken] then
 			options.args.general.args.color.args.classColors.args[classToken] = Config.classTable
 		end
 	end
@@ -7234,7 +7239,7 @@ local function loadFilterOptions()
 						args = {
 							help = {
 								type = "description",
-								name = L["Assign a filter to each unit frame per zone type. Filters are created and edited in the Custom filters tab."] .. "|n|n" .. string.format(L["The \"%s\" option is ignored for zone assignments; select the filter directly in a unit's Auras tab to use it."], L["Only show self cast auras"]),
+								name = L["Assign a filter to each unit frame per zone type. Filters are created and edited in the Custom filters tab."] .. "|n|n" .. string.format(L["The \"%s\" option is ignored for zone assignments; select the filter directly in a unit's Auras tab to use it."], L["Only show self cast auras"]) .. "|n" .. string.format(L["The \"%s\" option is ignored for zone assignments; select the filter directly in a unit's Auras tab to use it."], L["Also hide"]),
 								width = "full",
 							}
 						},
@@ -7300,6 +7305,7 @@ local function loadCustomFilterOptions()
 								local filter = getFilter()
 								if( filter ) then
 									filter.mode = value
+									if( value ~= "exclude" ) then filter.alsoHide = nil end
 									-- Zone assignments are mode-typed, follow the change
 									local fromKey = value == "exclude" and "zonewhite" or "zoneblack"
 									local toKey = value == "exclude" and "zoneblack" or "zonewhite"
@@ -7331,6 +7337,30 @@ local function loadCustomFilterOptions()
 								if( filter ) then
 									filter.player = value or nil
 									-- The flag shapes the section filter strings, same rebuild as a mode change
+									ShadowUF.Layout:Reload()
+								end
+							end,
+						},
+						alsoHide = {
+							order = 0.6,
+							type = "select",
+							name = L["Also hide"],
+							desc = L["Hides every aura of that origin on top of the listed spells, Sated after Bloodlust comes from a player for example."],
+							values = {["none"] = L["None"], ["players"] = L["Auras applied by players"], ["npcs"] = L["Auras applied by NPCs"]},
+							-- A whitelist would need "listed OR origin", the candidate filters only combine with AND
+							-- Disabled rather than hidden, an inline group does not regrow when an option appears
+							disabled = function()
+								local filter = getFilter()
+								return not filter or filter.mode ~= "exclude"
+							end,
+							get = function()
+								local filter = getFilter()
+								return filter and filter.alsoHide or "none"
+							end,
+							set = function(info, value)
+								local filter = getFilter()
+								if( filter ) then
+									filter.alsoHide = value ~= "none" and value or nil
 									ShadowUF.Layout:Reload()
 								end
 							end,

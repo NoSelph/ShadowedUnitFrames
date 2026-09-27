@@ -1244,6 +1244,11 @@ function Auras:UpdateContainerCandidateFilters(frame)
 					if( include or exclude ) then
 						filters = { includeSpellIDs = include, excludeSpellIDs = exclude }
 					end
+					-- Blacklist addition, isFromPlayerOrPlayerPet flags auras cast by any player or pet so hiding one origin means keeping the other
+					if( custom and custom.mode == "exclude" and custom.alsoHide ) then
+						filters = filters or {}
+						filters.isFromPlayerOrPlayerPet = custom.alsoHide == "npcs"
+					end
 					local gate = sectionReactionGate(section)
 					if( gate ) then
 						hasGatedSections = true

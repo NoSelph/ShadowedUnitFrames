@@ -1337,6 +1337,13 @@ Tags.defaultTags = {
 	]==]--
 }
 
+-- Forever has none of these resources, the tags leave the wizard and render empty in texts imported from retail
+if( ShadowUF.isForever ) then
+	for _, tag in ipairs({"sshards", "hpower", "monk:chipoints", "monk:stagger", "monk:abs:stagger", "rune:timer"}) do
+		Tags.defaultTags[tag] = nil
+	end
+end
+
 -- Default tag events
 Tags.defaultEvents = {
 	["totem:timer"]				= "SUF_TOTEM_TIMER",

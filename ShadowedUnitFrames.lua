@@ -156,8 +156,8 @@ function ShadowUF:GetPlayerSpec()
 	return C_SpecializationInfo.GetSpecialization()
 end
 
--- Forever has no soul shard or holy power resource, the modules would draw an empty bar
-ShadowUF.foreverDeadModules = {soulShards = true, holyPower = true}
+-- Forever has none of these resources, the bars would stay empty or never show while their options clutter the config
+ShadowUF.foreverDeadModules = {soulShards = true, holyPower = true, arcaneCharges = true, altPowerBar = true, priestBar = true, shamanBar = true}
 
 function ShadowUF:IsModuleAvailable(module)
 	if( module.moduleClass and module.moduleClass ~= playerClass ) then return false end
