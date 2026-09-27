@@ -2881,7 +2881,7 @@ local function loadUnitOptions()
 				config.auras[auraType][frameIndex][key] = value
 			end
 		end)
-		if( key == "filter" ) then
+		if( key == "filter" or key == "hideOrigin" ) then
 			reloadUnitAurasFilters(unit)
 		else
 			reloadUnitAuras(unit)
@@ -2941,7 +2941,7 @@ local function loadUnitOptions()
 				cfg.sections[sectionIndex][key] = value
 			end
 		end)
-		if( key == "filter" ) then
+		if( key == "filter" or key == "hideOrigin" ) then
 			reloadUnitAurasFilters(unit)
 		else
 			reloadUnitAuras(unit)
@@ -3121,6 +3121,29 @@ local function loadUnitOptions()
 							end
 						end
 						setAuraFrameValue(info[2], auraType, frameIndex, "filter", value)
+					end,
+					disabled = function(info)
+						local auraType = info[#(info) - 3]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return not (cfg and cfg.enabled)
+					end,
+				},
+				hideOrigin = {
+					order = 2.05,
+					type = "select",
+					name = L["Hide auras applied by"],
+					desc = L["Applies per section, pets count as players. Sated after Bloodlust is applied by a player for example."],
+					hidden = hideWithoutContainers,
+					width = "full",
+					values = {["none"] = L["Nobody"], ["players"] = L["Players"], ["npcs"] = L["NPCs"]},
+					get = function(info)
+						local auraType = info[#(info) - 3]
+						local cfg = getAuraFrameConfig(info[2], auraType, frameIndex)
+						return cfg and cfg.hideOrigin or "none"
+					end,
+					set = function(info, value)
+						local auraType = info[#(info) - 3]
+						setAuraFrameValue(info[2], auraType, frameIndex, "hideOrigin", value ~= "none" and value or nil)
 					end,
 					disabled = function(info)
 						local auraType = info[#(info) - 3]
@@ -3538,6 +3561,24 @@ local function loadUnitOptions()
 						set = function(info, value)
 							local auraType = info[#(info) - 4]
 							setSectionValue(info[2], auraType, frameIndex, sectionIndex, "size", value)
+						end,
+						disabled = sectionDisabled,
+					},
+					hideOrigin = {
+						order = 3,
+						type = "select",
+						hidden = false,
+						name = L["Hide auras applied by"],
+						desc = L["Applies per section, pets count as players. Sated after Bloodlust is applied by a player for example."],
+						values = {["none"] = L["Nobody"], ["players"] = L["Players"], ["npcs"] = L["NPCs"]},
+						get = function(info)
+							local auraType = info[#(info) - 4]
+							local section = getSectionConfig(info[2], auraType, frameIndex, sectionIndex)
+							return section and section.hideOrigin or "none"
+						end,
+						set = function(info, value)
+							local auraType = info[#(info) - 4]
+							setSectionValue(info[2], auraType, frameIndex, sectionIndex, "hideOrigin", value ~= "none" and value or nil)
 						end,
 						disabled = sectionDisabled,
 					},
@@ -7239,7 +7280,7 @@ local function loadFilterOptions()
 						args = {
 							help = {
 								type = "description",
-								name = L["Assign a filter to each unit frame per zone type. Filters are created and edited in the Custom filters tab."] .. "|n|n" .. string.format(L["The \"%s\" option is ignored for zone assignments; select the filter directly in a unit's Auras tab to use it."], L["Only show self cast auras"]) .. "|n" .. string.format(L["The \"%s\" option is ignored for zone assignments; select the filter directly in a unit's Auras tab to use it."], L["Also hide"]),
+								name = L["Assign a filter to each unit frame per zone type. Filters are created and edited in the Custom filters tab."] .. "|n|n" .. string.format(L["The \"%s\" option is ignored for zone assignments; select the filter directly in a unit's Auras tab to use it."], L["Only show self cast auras"]),
 								width = "full",
 							}
 						},
@@ -7305,8 +7346,7 @@ local function loadCustomFilterOptions()
 								local filter = getFilter()
 								if( filter ) then
 									filter.mode = value
-									if( value ~= "exclude" ) then filter.alsoHide = nil end
-									-- Zone assignments are mode-typed, follow the change
+										-- Zone assignments are mode-typed, follow the change
 									local fromKey = value == "exclude" and "zonewhite" or "zoneblack"
 									local toKey = value == "exclude" and "zoneblack" or "zonewhite"
 									for slot, assigned in pairs(ShadowUF.db.profile.filters[fromKey]) do
@@ -7337,30 +7377,6 @@ local function loadCustomFilterOptions()
 								if( filter ) then
 									filter.player = value or nil
 									-- The flag shapes the section filter strings, same rebuild as a mode change
-									ShadowUF.Layout:Reload()
-								end
-							end,
-						},
-						alsoHide = {
-							order = 0.6,
-							type = "select",
-							name = L["Also hide"],
-							desc = L["Hides every aura of that origin on top of the listed spells, Sated after Bloodlust comes from a player for example."],
-							values = {["none"] = L["None"], ["players"] = L["Auras applied by players"], ["npcs"] = L["Auras applied by NPCs"]},
-							-- A whitelist would need "listed OR origin", the candidate filters only combine with AND
-							-- Disabled rather than hidden, an inline group does not regrow when an option appears
-							disabled = function()
-								local filter = getFilter()
-								return not filter or filter.mode ~= "exclude"
-							end,
-							get = function()
-								local filter = getFilter()
-								return filter and filter.alsoHide or "none"
-							end,
-							set = function(info, value)
-								local filter = getFilter()
-								if( filter ) then
-									filter.alsoHide = value ~= "none" and value or nil
 									ShadowUF.Layout:Reload()
 								end
 							end,

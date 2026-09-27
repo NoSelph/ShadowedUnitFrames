@@ -655,13 +655,13 @@ local function buildSections(auraType, config)
 	local largeSize = math.floor(config.size * (config.selfScale or 1.30) + 0.5)
 	local sortMethod = config.sortMethod
 	if( config.enlarge and config.enlarge.PLAYER and not filterString:find("PLAYER", nil, true) ) then
-		table.insert(sections, { filterString = filterString .. "|PLAYER", size = largeSize, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue .. "|PLAYER") })
-		table.insert(sections, { filterString = filterString .. "|!PLAYER", size = config.size, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
+		table.insert(sections, { filterString = filterString .. "|PLAYER", size = largeSize, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, hideOrigin = config.hideOrigin, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue .. "|PLAYER") })
+		table.insert(sections, { filterString = filterString .. "|!PLAYER", size = config.size, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, hideOrigin = config.hideOrigin, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
 	elseif( config.enlarge and config.enlarge.PLAYER ) then
 		-- Filter is already player-only; everything shows enlarged
-		table.insert(sections, { filterString = filterString, size = largeSize, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
+		table.insert(sections, { filterString = filterString, size = largeSize, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, hideOrigin = config.hideOrigin, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
 	else
-		table.insert(sections, { filterString = filterString, size = config.size, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
+		table.insert(sections, { filterString = filterString, size = config.size, auraType = auraType, customFilter = customFilter, sortMethod = sortMethod, hideOrigin = config.hideOrigin, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(filterValue) })
 	end
 
 	if( config.sections ) then
@@ -675,7 +675,7 @@ local function buildSections(auraType, config)
 					fs = fs .. "|" .. extraFilter
 				end
 				fs = fs .. customPlayerToken(extraCustom)
-				table.insert(sections, { filterString = fs, size = extra.size or config.size, auraType = auraType, customFilter = extraCustom, sortMethod = extra.sortMethod, maxCount = extra.maxCount, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(extraFilter) })
+				table.insert(sections, { filterString = fs, size = extra.size or config.size, auraType = auraType, customFilter = extraCustom, sortMethod = extra.sortMethod, maxCount = extra.maxCount, hideOrigin = extra.hideOrigin, pandemic = ShadowUF.db.profile.auras.pandemic, tokens = splitTokens(extraFilter) })
 			end
 		end
 	end
@@ -1244,10 +1244,10 @@ function Auras:UpdateContainerCandidateFilters(frame)
 					if( include or exclude ) then
 						filters = { includeSpellIDs = include, excludeSpellIDs = exclude }
 					end
-					-- Blacklist addition, isFromPlayerOrPlayerPet flags auras cast by any player or pet so hiding one origin means keeping the other
-					if( custom and custom.mode == "exclude" and custom.alsoHide ) then
+					-- isFromPlayerOrPlayerPet flags auras cast by any player or pet, so hiding one origin means keeping the other (checked outside the identity gate, friendly debuffs included)
+					if( section.hideOrigin ) then
 						filters = filters or {}
-						filters.isFromPlayerOrPlayerPet = custom.alsoHide == "npcs"
+						filters.isFromPlayerOrPlayerPet = section.hideOrigin == "npcs"
 					end
 					local gate = sectionReactionGate(section)
 					if( gate ) then
