@@ -305,16 +305,17 @@ function Indicators:UpdatePetBattle(frame)
 	end
 end
 
--- Hunter pet happiness on Forever, the texture holds the three faces side by side
-local HAPPINESS_COORDS = {[1] = {0.375, 0.5625, 0, 0.359375}, [2] = {0.1875, 0.375, 0, 0.359375}, [3] = {0, 0.1875, 0, 0.359375}}
+-- Hunter pet happiness on Forever, one atlas per mood
+local HAPPINESS_ATLAS = {[1] = "UI-PetMad", [2] = "UI-PetNeutral", [3] = "UI-PetHappiness"}
 function Indicators:UpdateHappiness(frame)
 	if( not frame.indicators.happiness or not frame.indicators.happiness.enabled ) then return end
 
-	local happiness = C_PetInfo.GetPetHappiness()
-	local _, isHunterPet = HasPetUI()
-	local coords = isHunterPet and HAPPINESS_COORDS[happiness]
-	if( coords ) then
-		frame.indicators.happiness:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+	-- Both APIs ignore the unit argument, the placeholder env keys its fakes on it
+	local happiness = C_PetInfo.GetPetHappiness(frame.unitSUF)
+	local _, isHunterPet = HasPetUI(frame.unitSUF)
+	local atlas = isHunterPet and HAPPINESS_ATLAS[happiness]
+	if( atlas ) then
+		frame.indicators.happiness:SetAtlas(atlas)
 		frame.indicators.happiness:Show()
 	else
 		frame.indicators.happiness:Hide()
@@ -592,11 +593,10 @@ function Indicators:OnEnable(frame)
 	end
 
 	if( config.indicators.happiness and config.indicators.happiness.enabled and C_PetInfo and C_PetInfo.GetPetHappiness ) then
-		frame:RegisterNormalEvent("UNIT_HAPPINESS", self, "UpdateHappiness")
+		frame:RegisterUnitEvent("UNIT_HAPPINESS", self, "UpdateHappiness")
 		frame:RegisterUpdateFunc(self, "UpdateHappiness")
 
 		frame.indicators.happiness = frame.indicators.happiness or frame.indicators:CreateTexture(nil, "OVERLAY")
-		frame.indicators.happiness:SetTexture("Interface\\PetPaperDollFrame\\UI-PetHappiness")
 	end
 
 	-- As they all share the function, register it as long as one is active

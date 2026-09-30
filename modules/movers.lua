@@ -24,6 +24,16 @@ local function createConfigEnv()
 		GetRaidTargetIndex = function(unit) return getValue("GetRaidTargetIndex", unit, math.random(1, 8)) end,
 		GetLootMethod = function(unit) return "master", 0, 0 end,
 		GetComboPoints = function() return MAX_COMBO_POINTS end,
+		HasPetUI = function() return true, true end,
+		C_PetInfo = (C_PetInfo and C_PetInfo.GetPetHappiness) and setmetatable({
+			-- Table fakes skip the test env's unit gate, so this one keeps the gate itself
+			GetPetHappiness = function(unit)
+				if( Movers.isEnabled or Movers.testModeUnits[unit] ) then
+					return getValue("GetPetHappiness", "pet", math.random(1, 3)), 100, 0
+				end
+				return _G.C_PetInfo.GetPetHappiness()
+			end,
+		}, { __index = _G.C_PetInfo }) or nil,
 		UnitInRaid = function() return true end,
 		UnitInParty = function() return true end,
 		UnitIsUnit = function(unitA, unitB) return unitB == "player" and true or false end,

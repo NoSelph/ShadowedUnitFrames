@@ -862,7 +862,6 @@ function ShadowUF:LoadDefaultLayout(useMerge)
 				sumPending = {enabled = true, anchorPoint = "C", size = 40, x = 0, y = 0, anchorTo = "$parent"},
 				questBoss = {enabled = true, anchorPoint = "BR", size = 22, x = 9, y = 24, anchorTo = "$parent"},
 				petBattle = {enabled = true, anchorPoint = "BL", size = 18, x = -6, y = 14, anchorTo = "$parent"},
-				happiness = ShadowUF.isForever and {enabled = true, anchorPoint = "BL", size = 18, x = -6, y = 14, anchorTo = "$parent"} or nil
 			},
 			auras = {
 				buffs = {enabled = true},
@@ -886,6 +885,9 @@ function ShadowUF:LoadDefaultLayout(useMerge)
 			healthBar = {reactionType = "none"},
 			portrait = {enabled = false, fullAfter = 50},
 			castBar = {order = 60},
+			indicators = ShadowUF.isForever and {
+				happiness = {enabled = true, anchorPoint = "RC", size = 18, x = 0, y = 0, anchorTo = "$parent"},
+			} or nil,
 			auras = {
 				buffs = {
 					[1] = {anchorPoint = "TOPLEFT", growV = "TOP"},

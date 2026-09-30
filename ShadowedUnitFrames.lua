@@ -5,7 +5,7 @@
 ShadowUF = select(2, ...)
 
 local L = ShadowUF.L
-ShadowUF.dbRevision = 73
+ShadowUF.dbRevision = 74
 ShadowUF.playerUnit = "player"
 -- Forever (game type camelot) reports WOW_PROJECT_MAINLINE, the TOC version is the only reliable discriminator
 local tocVersion = select(4, GetBuildInfo()) or 0
@@ -253,6 +253,15 @@ function ShadowUF:CheckUpgrade()
 	auraColors.removable = auraColors.removable or {r = 1, g = 0.70, b = 0.10}
 	auraColors.pandemic = auraColors.pandemic or {r = 1, g = 1, b = 1, a = 0.35}
 
+	if( revision <= 73 and self.isForever ) then
+		-- The pet happiness badge gets its anchor from the default layout only, the indicator options never write anchorTo
+		local badge = self.db.profile.units.pet.indicators.happiness
+		if( badge and not badge.anchorTo ) then
+			badge.anchorTo = "$parent"
+			badge.anchorPoint = badge.anchorPoint or "RC"
+			if( (badge.size or 0) == 0 ) then badge.size = 18 end
+		end
+	end
 	if( revision <= 72 ) then
 		-- Dispel display modes are now stored as filter mode strings
 		for _, unitCfg in pairs(self.db.profile.units) do
