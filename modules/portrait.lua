@@ -11,6 +11,20 @@ local function resetGUID(self)
 	self._nextSecretUpdate = nil
 end
 
+-- Crops the square portrait image to fill the area without stretching, the ratio is cached at layout time because sizes read back secret once the bars anchoring the portrait carry secret values
+local function applyCover(frame, texture)
+	local ratio = frame.portrait.coverRatio
+	if( not ratio ) then
+		texture:SetTexCoord(0.10, 0.90, 0.10, 0.90)
+	elseif( ratio >= 1 ) then
+		local half = 0.40 / ratio
+		texture:SetTexCoord(0.10, 0.90, 0.50 - half, 0.50 + half)
+	else
+		local half = 0.40 * ratio
+		texture:SetTexCoord(0.50 - half, 0.50 + half, 0.10, 0.90)
+	end
+end
+
 function Portrait:OnEnable(frame)
 	frame:RegisterUnitEvent("UNIT_PORTRAIT_UPDATE", self, "UpdateFunc")
 	frame:RegisterUnitEvent("UNIT_MODEL_CHANGED", self, "Update")
@@ -48,6 +62,24 @@ function Portrait:OnPreLayoutApply(frame, config)
 		frame.portrait:Show()
 
 		ShadowUF.Layout:ToggleVisibility(frame.portraitModel, false)
+	end
+end
+
+function Portrait:OnLayoutWidgets(frame)
+	if( not frame.visibility.portrait or not frame.portrait ) then return end
+
+	local width, height = frame.portrait:GetSize()
+	if( issecretvalue(width) or issecretvalue(height) or width <= 0 or height <= 0 ) then
+		frame.portrait.coverRatio = nil
+	else
+		frame.portrait.coverRatio = width / height
+	end
+
+	local type = ShadowUF.db.profile.units[frame.unitType].portrait.type
+	if( type == "2D" ) then
+		applyCover(frame, frame.portrait)
+	elseif( type == "3D" ) then
+		applyCover(frame, frame.portraitModel.fallbackTexture)
 	end
 end
 
@@ -108,7 +140,7 @@ function Portrait:Update(frame, event)
 		end
 	-- Use 2D character image
 	elseif( type == "2D" ) then
-		frame.portrait:SetTexCoord(0.10, 0.90, 0.10, 0.90)
+		applyCover(frame, frame.portrait)
 		SetPortraitTexture(frame.portrait, frame.unitOwner)
 	-- Using 3D portrait, but the players not in range so swap to question mark
 	elseif( not UnitIsVisible(frame.unitOwner) or not UnitIsConnected(frame.unitOwner) ) then
@@ -125,7 +157,7 @@ function Portrait:Update(frame, event)
 			-- Unit identity is classified — SetUnit won't work, fallback to 2D
 			frame.portrait:ClearModel()
 			local fb = frame.portraitModel.fallbackTexture
-			fb:SetTexCoord(0.10, 0.90, 0.10, 0.90)
+			applyCover(frame, fb)
 			SetPortraitTexture(fb, frame.unitOwner)
 			fb:Show()
 		else

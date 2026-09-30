@@ -2,12 +2,11 @@
 ## Title: Shadowed Unit Frames
 ## Notes: Moooooooooooooooooo
 ## Author: Shadowed
-## Version: v4.6.10
+## Version: v4.6.11
 ## SavedVariables: ShadowedUFDB
-## X-Website: https://www.curseforge.com/wow/addons/shadowed-unit-frames
+## X-Website: https://www.curseforge.com/wow/addons/shadowed-unit-frames-redux
 ## OptionalDeps: Ace3, LibSharedMedia-3.0, AceGUI-3.0-SharedMediaWidgets, LibDualSpec-1.0, LibSpellRange-1.0, UTF8, Clique
 ## X-Curse-Project-ID: 1449430
-## X-WoWI-ID: 13494
 ## Category: Unit Frames
 ## Category-deDE: Einheitenfenster
 ## Category-esES: Marcos de unidades
