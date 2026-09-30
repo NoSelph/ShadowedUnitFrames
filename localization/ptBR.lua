@@ -255,6 +255,7 @@ L["Alternate power is used for things like quests and dungeons."] = [=[O poder a
 
 ]=]
 L["Alternate Spell Name"] = "Nome de feitiço alternativo"
+L["Alternative hostile spell to use to check range."] = "Feitiço hostil alternativo para verificar o alcance."
 L["Alternatively friendly spell to use to check range."] = "Alternativamente, feitiço amigável para usar para verificar o alcance."
 L["Ammo"] = "Munições"
 L["Amount of health missing, if none is missing nothing is shown. Uses a short format, -18500 is shown as -18.5k, values below 10000 are formatted as is.|n|nIn combat, may show -0 at full health due to secret values."] = "Quantidade de vida em falta, se há 0 em falta nada é mostrado. Utiliza um formato curto, -18500 é mostrado como -18.5k, valores abaixo de 10000 são formatados assim mesmo.|n|nEm combate, pode mostrar -0 com vida cheia devido a valores secretos."
@@ -1208,6 +1209,7 @@ L["Unit name replaced by NSRT nickname if available. Falls back to the regular n
 L["NSRT nickname colored by class. Falls back to the regular name if NSRT is not installed or no nickname is set.|n|nIn combat, shows uncolored name on enemy units."] = "Apelido NSRT colorido pela classe. Mostra o nome normal se o NSRT não estiver instalado ou nenhum apelido estiver definido.|n|nEm combate, mostra o nome sem cor em unidades inimigas."
 L["Abbreviated NSRT nickname (if longer than 10 characters). Falls back to the regular name if NSRT is not installed or no nickname is set.|n|nIn combat, shows full (non-abbreviated) name on enemy units."] = "Apelido NSRT abreviado (se tiver mais de 10 caracteres). Mostra o nome normal se o NSRT não estiver instalado ou nenhum apelido estiver definido.|n|nEm combate, mostra o nome completo em unidades inimigas."
 L["Name of a friendly spell to check range."] = "Nome de um feitiço amigável para verificar o alcance."
+L["Name of a hostile spell to check range."] = "Nome de um feitiço hostil para verificar o alcance."
 L["Neutral"] = "Neutro"
 L["Never (Disabled)"] = "Never (desabilitado)"
 L["New aura group"] = [=[Novo grupo de aura
