@@ -928,6 +928,12 @@ end
 
 -- Reload a header completely
 function Units:ReloadHeader(type)
+	-- Header attributes and anchors are protected, the options reach here mid-fight too
+	if( InCombatLockdown() ) then
+		ShadowUF:DeferUntilRegen("reloadHeader" .. type, function() self:ReloadHeader(type) end, ShadowUF.L["Unit changes will be applied after combat."])
+		return
+	end
+
 	if( ShadowUF.db.profile.units[type].frameSplit ) then
 		if( headerFrames.raid ) then
 			self:InitializeFrame("raid")
