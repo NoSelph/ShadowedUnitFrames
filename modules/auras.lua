@@ -173,6 +173,9 @@ do
 end
 Auras.hasContainers = hasContainers
 
+-- Forever stores shaman imbues as a second enchant type that the container's item enchantment path never reads, the Blizzard buff frame lists every type through C_Item.GetWeaponEnchantInfo
+local hasWeaponEnchantAPI = ShadowUF.isForever and C_Item and C_Item.GetWeaponEnchantInfo and true or false
+
 function Auras:OnEnable(frame)
 	frame.auras = frame.auras or {}
 
@@ -186,6 +189,11 @@ function Auras:OnEnable(frame)
 	frame:RegisterUnitEvent("UNIT_CONNECTION", self, "Update")
 	frame:RegisterUnitEvent("UNIT_AURA", self, "CheckUnitReachable")
 	frame:RegisterUpdateFunc(self, "Update")
+	if( hasWeaponEnchantAPI and frame.unitType == "player" ) then
+		frame:RegisterNormalEvent("WEAPON_ENCHANT_CHANGED", self, "UpdateWeaponEnchants")
+		frame:RegisterNormalEvent("WEAPON_SLOT_CHANGED", self, "UpdateWeaponEnchants")
+		frame:RegisterUpdateFunc(self, "UpdateWeaponEnchants")
+	end
 
 	self:UpdateFilter(frame)
 end
@@ -202,6 +210,10 @@ function Auras:DisableContainers(frame)
 	for _, auraType in ipairs(AURA_TYPES) do
 		for i = 1, 6 do
 			local group = frame.auras[auraType .. i]
+			if( group and group.enchantRow ) then
+				group.enchantRow.config = nil
+				group.enchantRow:Hide()
+			end
 			if( group and group.container ) then
 				group.container:SetEnabled(false)
 				group.container:Hide()
@@ -914,6 +926,187 @@ local function columnRelativePoint(point, growV)
 	end
 end
 
+-- The row trails the container so nothing protected depends on it and it keeps moving in combat
+local WEAPON_ENCHANT_SLOTS = {
+	{ weaponSlot = Enum.WeaponSlot and Enum.WeaponSlot.MainHand or 0, invSlot = INVSLOT_MAINHAND },
+	{ weaponSlot = Enum.WeaponSlot and Enum.WeaponSlot.OffHand or 1, invSlot = INVSLOT_OFFHAND },
+	{ weaponSlot = Enum.WeaponSlot and Enum.WeaponSlot.Ranged or 2, invSlot = INVSLOT_RANGED or 18 },
+}
+
+local function weaponEnchantOnEnter(self)
+	local tooltipMode = ShadowUF.db.profile.tooltipCombat
+	if( (tooltipMode == true or tooltipMode == "all") and InCombatLockdown() ) then return end
+	-- GameTooltip carries no forbidden aspect, so it can't hang off these buttons, the cursor anchor keeps it independent
+	GameTooltip:SetOwner(UIParent, "ANCHOR_CURSOR")
+	GameTooltip:SetInventoryItem("player", self.invSlot)
+	GameTooltip:Show()
+end
+
+local function weaponEnchantOnLeave(self)
+	GameTooltip:Hide()
+end
+
+-- The cancel call is restricted in combat
+local function weaponEnchantOnClick(self, mouseButton)
+	if( mouseButton ~= "RightButton" or InCombatLockdown() or ShadowUF.db.profile.auras.disableCancel ) then return end
+	pcall(C_Spell.CancelItemTempEnchantment, self.weaponSlot, self.enchantType)
+end
+
+local function createWeaponEnchantButton(row)
+	local button = CreateFrame("Button", nil, row, "DisableUntrustedLayoutScriptsTemplate")
+	button:RegisterForClicks("RightButtonUp")
+	button.icon = button:CreateTexture(nil, "BACKGROUND")
+	button.icon:SetAllPoints(button)
+	button.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+	button.border = button:CreateTexture(nil, "OVERLAY")
+	button.border:SetPoint("CENTER", button)
+	button.border:SetVertexColor(0.6, 0.6, 0.6)
+	button.cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate, DisableUntrustedLayoutScriptsTemplate")
+	button.cooldown:SetAllPoints(button)
+	button.cooldown:SetReverse(true)
+	button.cooldown:SetDrawEdge(false)
+	button.cooldown:SetDrawSwipe(true)
+	button.stack = button:CreateFontString(nil, "OVERLAY")
+	button.stack:SetJustifyV("BOTTOM")
+	button.stack:SetJustifyH("RIGHT")
+	button:SetScript("OnEnter", weaponEnchantOnEnter)
+	button:SetScript("OnLeave", weaponEnchantOnLeave)
+	button:SetScript("OnClick", weaponEnchantOnClick)
+	return button
+end
+
+local function styleWeaponEnchantButton(button, config)
+	local size = config.size
+	local borderType = ShadowUF.db.profile.auras.borderType
+	button:SetSize(size, size)
+	if( borderType == "" ) then
+		button.border:Hide()
+	elseif( borderType == "blizzard" ) then
+		button.border:SetTexture("Interface\\Buttons\\UI-Debuff-Overlays")
+		button.border:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
+		button.border:SetSize(size, size)
+		button.border:Show()
+		button.cooldown:SetSwipeTexture("Interface\\HUD\\UI-HUD-CoolDownManager-Icon-Swipe")
+	else
+		button.border:SetTexture("Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\border-" .. borderType)
+		button.border:SetTexCoord(0, 1, 0, 1)
+		button.border:SetSize(size + 1, size + 1)
+		button.border:Show()
+	end
+	applyBlizzardIconMask(button, button.icon, borderType == "blizzard")
+
+	local textCfg = textConfig(config)
+	local hideCC = textCfg and textCfg.disableBlizzardCC
+	if( hideCC == nil ) then hideCC = ShadowUF.db.profile.blizzardcc end
+	button.cooldown:SetHideCountdownNumbers(hideCC)
+	button:EnableMouse(ShadowUF.db.profile.locked and true or false)
+	Auras:UpdateCooldownText(button, config)
+	Auras:UpdateStackText(button, config, size)
+end
+
+-- flowConfig carries the growth of the container the row trails, the buffs config of a merged child still sizes the buttons
+local function configureWeaponEnchantRow(frame, group, config, container, flowConfig)
+	local row = group.enchantRow
+	if( not (hasWeaponEnchantAPI and config.temporary and frame.unitSUF == "player" and group.type == "buffs" and container) ) then
+		if( row ) then
+			row.config = nil
+			row:Hide()
+		end
+		return
+	end
+
+	-- The container forbids untrusted layout scripts on anything anchored to it, the template opts the row and its buttons into that aspect up front
+	if( not row ) then
+		row = CreateFrame("Frame", nil, group, "DisableUntrustedLayoutScriptsTemplate")
+		row.buttons = {}
+		group.enchantRow = row
+	end
+	-- The swipe texture only changes with the border style, stale buttons are cheaper to drop than to unstyle
+	local borderType = ShadowUF.db.profile.auras.borderType
+	if( row.borderType and row.borderType ~= borderType ) then
+		for _, button in ipairs(row.buttons) do button:Hide() end
+		row.buttons = {}
+	end
+	row.borderType = borderType
+	row.config = config
+
+	local growH = flowConfig.growH or "RIGHT"
+	local trailing = (growH == "LEFT")
+	local vertical = ((flowConfig.growV or "BOTTOM") == "TOP") and "BOTTOM" or "TOP"
+	local spacingH = (getAuraSpacing())
+	row.size = config.size
+	row.spacingH = spacingH
+	row.step = (trailing and -1 or 1) * (config.size + spacingH)
+	row.point = vertical .. (trailing and "RIGHT" or "LEFT")
+	row:ClearAllPoints()
+	row:SetPoint(row.point, container, vertical .. (trailing and "LEFT" or "RIGHT"), trailing and -spacingH or spacingH, 0)
+	row:SetHeight(config.size)
+	for _, button in ipairs(row.buttons) do
+		styleWeaponEnchantButton(button, config)
+	end
+	Auras:UpdateWeaponEnchants(frame)
+end
+
+function Auras:UpdateWeaponEnchants(frame)
+	if( not frame.auras ) then return end
+	for i = 1, 6 do
+		local group = frame.auras["buffs" .. i]
+		local row = group and group.enchantRow
+		if( row and row.config ) then
+			local showEnchantIcon = C_CVar.GetCVarBool("displayTemporaryEnchantIcon")
+			local shown = 0
+			for _, slot in ipairs(WEAPON_ENCHANT_SLOTS) do
+				local ok, enchants = pcall(C_Item.GetWeaponEnchantInfo, slot.weaponSlot)
+				if( ok and type(enchants) == "table" ) then
+					for _, enchant in ipairs(enchants) do
+						if( enchant.hasEnchant ) then
+							shown = shown + 1
+							local button = row.buttons[shown]
+							if( not button ) then
+								button = createWeaponEnchantButton(row)
+								row.buttons[shown] = button
+								styleWeaponEnchantButton(button, row.config)
+							end
+							button.weaponSlot = slot.weaponSlot
+							button.invSlot = slot.invSlot
+							button.enchantType = enchant.enchantType
+							button.icon:SetTexture(showEnchantIcon and enchant.enchantIconID or GetInventoryItemTexture("player", slot.invSlot))
+
+							-- Only the remaining time is known, a refresh of the same enchant keeps the running swipe, a new expiration restarts it from what is left
+							local remaining = (enchant.timeLeft or 0) / 1000
+							local expiration = GetTime() + remaining
+							if( remaining > 0 and not ShadowUF.db.profile.auras.disableCooldown ) then
+								if( not button.expiration or math.abs(button.expiration - expiration) > 1 ) then
+									button.cooldown:SetCooldown(GetTime(), remaining)
+								end
+								button.expiration = expiration
+								button.cooldown:Show()
+							else
+								button.expiration = nil
+								button.cooldown:Hide()
+							end
+							button.stack:SetText((enchant.charges or 0) > 0 and enchant.charges or "")
+
+							button:ClearAllPoints()
+							button:SetPoint(row.point, row, row.point, (shown - 1) * row.step, 0)
+							button:Show()
+						end
+					end
+				end
+			end
+			for index = shown + 1, #row.buttons do
+				row.buttons[index]:Hide()
+			end
+			if( shown > 0 ) then
+				row:SetWidth(shown * row.size + (shown - 1) * row.spacingH)
+				row:Show()
+			else
+				row:Hide()
+			end
+		end
+	end
+end
+
 -- extraSections come from a SEQUENTIAL-anchored partner group
 local function configureGroupContainer(frame, group, config, extraSections)
 	local sections = buildSections(group.type, config)
@@ -1005,7 +1198,7 @@ local function configureGroupContainer(frame, group, config, extraSections)
 		end
 
 		-- Native temp weapon enchants, appended to the flow layout
-		if( config.temporary and frame.unitSUF == "player" and group.type == "buffs" ) then
+		if( config.temporary and frame.unitSUF == "player" and group.type == "buffs" and not hasWeaponEnchantAPI ) then
 			local slots = AuraContainerItemEnchantmentSlot or { MainHand = 0, OffHand = 1 }
 			local enchantSection = { size = config.size, auraType = "buffs" }
 			pcall(container.AddItemEnchantment, container, slots.MainHand, { initializeFrame = makeButtonInitializer(group, config, enchantSection, 0) })
@@ -1050,6 +1243,7 @@ local function configureGroupContainer(frame, group, config, extraSections)
 	pcall(setMaximumLineSize, container, config.perRow * (config.size + lineSpacingH) + 2)
 
 	container:Show()
+	configureWeaponEnchantRow(frame, group, config, container, config)
 
 	-- Buttons are forbidden while auras are secret (any restriction, not just combat lockdown), skip the re-style and replay it through the rebuild queue
 	if( aurasAreSecret() ) then
@@ -1141,6 +1335,10 @@ function Auras:ConfigureContainers(frame, config)
 				end
 			end
 		end
+	end
+
+	for child, pair in pairs(mergedPairs) do
+		configureWeaponEnchantRow(frame, child, pair.childConfig, pair.parent.container, pair.parentConfig)
 	end
 
 	-- Column pairs anchor the child's container to the parent's, containers auto-resize so the column tracks the parent's visible footprint
