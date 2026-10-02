@@ -5,7 +5,7 @@
 ShadowUF = select(2, ...)
 
 local L = ShadowUF.L
-ShadowUF.dbRevision = 74
+ShadowUF.dbRevision = 75
 ShadowUF.playerUnit = "player"
 -- Forever (game type camelot) reports WOW_PROJECT_MAINLINE, the TOC version is the only reliable discriminator
 local tocVersion = select(4, GetBuildInfo()) or 0
@@ -165,6 +165,11 @@ function ShadowUF:IsModuleAvailable(module)
 	return true
 end
 
+-- Arena units never exist on Forever, arena1-5 only carry battleground flag carriers there
+function ShadowUF:IsUnitAvailable(unit)
+	return not (self.isForever and self.Units.zoneUnits[unit] == "arena")
+end
+
 -- Identity-guarded Unit APIs (UnitClass, UnitInRaid, roles...) return secrets for these units, so test once upfront instead of guarding every return
 function ShadowUF.IsUnitIdentitySecret(unit)
 	if( not (C_Secrets and C_Secrets.ShouldUnitIdentityBeSecret) ) then return false end
@@ -253,6 +258,13 @@ function ShadowUF:CheckUpgrade()
 	auraColors.removable = auraColors.removable or {r = 1, g = 0.70, b = 0.10}
 	auraColors.pandemic = auraColors.pandemic or {r = 1, g = 1, b = 1, a = 0.35}
 
+	if( revision <= 74 and self.isForever ) then
+		for unit, zone in pairs(self.Units.zoneUnits) do
+			if( zone == "arena" ) then
+				self.db.profile.units[unit].enabled = false
+			end
+		end
+	end
 	if( revision <= 73 and self.isForever ) then
 		-- The pet happiness badge gets its anchor from the default layout only, the indicator options never write anchorTo
 		local badge = self.db.profile.units.pet.indicators.happiness
@@ -774,7 +786,7 @@ function ShadowUF:LoadUnits()
 	if( not instanceType ) then instanceType = "none" end
 
 	for _, type in pairs(self.unitList) do
-		local enabled = self.db.profile.units[type].enabled
+		local enabled = self.db.profile.units[type].enabled and self:IsUnitAvailable(type)
 		if( ShadowUF.Units.zoneUnits[type] ) then
 			enabled = enabled and zoneEnabled(instanceType, ShadowUF.Units.zoneUnits[type])
 		elseif( instanceType ~= "none" ) then

@@ -580,7 +580,7 @@ function Movers:Enable()
 		seenHeader[key] = true
 	end
 	for type in pairs(ShadowUF.Units.zoneUnits) do
-		if( ShadowUF.db.profile.units[type].enabled and not seenHeader[type] ) then
+		if( ShadowUF.db.profile.units[type].enabled and ShadowUF:IsUnitAvailable(type) and not seenHeader[type] ) then
 			headerKeys[#headerKeys + 1] = type
 			seenHeader[type] = true
 		end

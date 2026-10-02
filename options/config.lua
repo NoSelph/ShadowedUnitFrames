@@ -196,8 +196,7 @@ end
 
 local function isUnitDisabled(info)
 	local unit = info[#(info)]
-	-- Arena units never exist on Forever
-	if( ShadowUF.isForever and ShadowUF.Units.zoneUnits[unit] == "arena" ) then return true end
+	if( not ShadowUF:IsUnitAvailable(unit) ) then return true end
 	local enabled = ShadowUF.db.profile.units[unit].enabled
 	for _, visibility in pairs(ShadowUF.db.profile.visibility) do
 		if( visibility[unit] ) then
@@ -6924,7 +6923,7 @@ local function loadUnitOptions()
 	local enabledUnits = {
 		order = function(info) return unitCatOrder[info[#(info)]] + getUnitOrder(info) end,
 		type = "toggle",
-		hidden = function(info) return ShadowUF.isForever and ShadowUF.Units.zoneUnits[info[#(info)]] == "arena" end,
+		hidden = function(info) return not ShadowUF:IsUnitAvailable(info[#(info)]) end,
 		name = getName,
 		set = function(info, value)
 			local unit = info[#(info)]

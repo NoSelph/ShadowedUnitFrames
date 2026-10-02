@@ -498,7 +498,7 @@ function ShadowUF:LoadDefaultLayout(useMerge)
 			},
 		},
 		arena = {
-			enabled = true,
+			enabled = not ShadowUF.isForever,
 			width = 170,
 			height = 45,
 			scale = 1.0,
