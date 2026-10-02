@@ -514,15 +514,8 @@ Tags.abbrevCache = setmetatable({}, {
 		return val
 end})
 
--- Forever has no realms, UnitName returns the surname second and the player's own first return already reads "First-Surname"
--- The tags call UnitName themselves so the config mode placeholders keep their fake names, these only shape the result
-local SURNAME_SEPARATOR = Constants and Constants.CharacterNameSeparatorConsts and Constants.CharacterNameSeparatorConsts.CHARACTERNAME_SURNAME_SEPARATOR or "-"
-function Tags.FirstName(name)
-	if( not RegionalUniqueNamesEnabled or not name or issecretvalue(name) or not RegionalUniqueNamesEnabled() ) then return name end
-	local split = string.find(name, SURNAME_SEPARATOR, 1, true)
-	return split and string.sub(name, 1, split - 1) or name
-end
-
+-- Forever has no realms, UnitName returns the surname second
+-- The tags call UnitName themselves so the config mode placeholders keep their fake names, this only shapes the result
 function Tags.Surname(surname)
 	if( not RegionalUniqueNamesEnabled or not RegionalUniqueNamesEnabled() ) then return nil end
 	if( issecretvalue(surname) ) then return surname end
@@ -623,7 +616,7 @@ Tags.defaultTags = {
 		return ok and name or nil
 	end]],
 	["abbrev:name"] = [[function(unit, unitOwner)
-		local name = ShadowUF.Tags.FirstName(UnitName(unitOwner))
+		local name = (UnitName(unitOwner))
 		if not name then return end
 		if issecretvalue(name) then return name end
 		return string.len(name) > 10 and ShadowUF.Tags.abbrevCache[name] or name
@@ -777,7 +770,7 @@ Tags.defaultTags = {
 		return ShadowUF:FormatLargeNumber(UnitHealth(unit))
 	end]],
 	["colorname"] = [[function(unit, unitOwner)
-		local name = ShadowUF.Tags.FirstName(UnitName(unitOwner))
+		local name = (UnitName(unitOwner))
 		local color = ShadowUF:GetClassColor(unitOwner)
 		if( not color ) then
 			return name
@@ -974,15 +967,15 @@ Tags.defaultTags = {
 		return ShadowUF.tagFunc.name(unit, unitOwner)
 	end]],
 	]==]--
-	["name"] = [[function(unit, unitOwner) return ShadowUF.Tags.FirstName(UnitName(unitOwner)) end]],
+	["name"] = [[function(unit, unitOwner) return (UnitName(unitOwner)) end]],
 	["nsrt:name"] = [[function(unit, unitOwner)
-		local name = ShadowUF.Tags.FirstName(UnitName(unitOwner))
+		local name = (UnitName(unitOwner))
 		if not name then return end
 		if issecretvalue(name) then return name end
 		return NSAPI and NSAPI:GetName(name, "GlobalNickNames") or name
 	end]],
 	["nsrt:colorname"] = [[function(unit, unitOwner)
-		local name = ShadowUF.Tags.FirstName(UnitName(unitOwner))
+		local name = (UnitName(unitOwner))
 		if not name then return end
 		local nick = name
 		if( not issecretvalue(name) and NSAPI ) then
@@ -993,7 +986,7 @@ Tags.defaultTags = {
 		return string.format("%s%s|r", color, nick)
 	end]],
 	["nsrt:abbrev:name"] = [[function(unit, unitOwner)
-		local name = ShadowUF.Tags.FirstName(UnitName(unitOwner))
+		local name = (UnitName(unitOwner))
 		if not name then return end
 		if issecretvalue(name) then return name end
 		local nick = NSAPI and NSAPI:GetName(name, "GlobalNickNames") or name
