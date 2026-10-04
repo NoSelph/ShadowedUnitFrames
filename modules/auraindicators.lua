@@ -1013,8 +1013,8 @@ function Indicators:UpdateAuras(frame)
 		end
 	end
 
-	-- If they are dead, don't bother showing any indicators yet
-	if( UnitIsDeadOrGhost(frame.unitSUF) or not UnitIsConnected(frame.unitSUF) ) then
+	-- Dead, offline or out of the area of interest there is no aura data to judge, and the missing pass would flag every tracked aura as absent
+	if( UnitIsDeadOrGhost(frame.unitSUF) or not UnitIsConnected(frame.unitSUF) or (not frame.configMode and not ShadowUF.IsUnitReachable(frame.unitSUF)) ) then
 		self:UpdateIndicators(frame)
 		return
 	end
