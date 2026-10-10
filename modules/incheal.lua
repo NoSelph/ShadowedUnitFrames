@@ -166,6 +166,14 @@ function IncHeal:OnLayoutApplied(frame)
 	end
 end
 
+-- Bar toggles (cast bar, class bars, totems) resize the health bar through PositionWidgets without a layout pass, the numeric cropper geometry has to follow
+function IncHeal:OnLayoutWidgets(frame)
+	local bar = frame[self.frameKey]
+	if( not bar ) then return end
+	bar.anchorsDirty = true
+	if( bar.total ) then self:UpdateFrame(frame) end
+end
+
 function IncHeal:PositionBar(frame, incAmount, maxHealth)
 	local bar = frame[self.frameKey]
 	local calc = frame.healCalc
