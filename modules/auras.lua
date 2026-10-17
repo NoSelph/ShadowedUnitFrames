@@ -946,15 +946,8 @@ local function weaponEnchantOnLeave(self)
 	GameTooltip:Hide()
 end
 
--- The cancel call is restricted in combat
-local function weaponEnchantOnClick(self, mouseButton)
-	if( mouseButton ~= "RightButton" or InCombatLockdown() or ShadowUF.db.profile.auras.disableCancel ) then return end
-	pcall(C_Spell.CancelItemTempEnchantment, self.weaponSlot, self.enchantType)
-end
-
 local function createWeaponEnchantButton(row)
 	local button = CreateFrame("Button", nil, row, "DisableUntrustedLayoutScriptsTemplate")
-	button:RegisterForClicks("RightButtonUp")
 	button.icon = button:CreateTexture(nil, "BACKGROUND")
 	button.icon:SetAllPoints(button)
 	button.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
@@ -971,7 +964,6 @@ local function createWeaponEnchantButton(row)
 	button.stack:SetJustifyH("RIGHT")
 	button:SetScript("OnEnter", weaponEnchantOnEnter)
 	button:SetScript("OnLeave", weaponEnchantOnLeave)
-	button:SetScript("OnClick", weaponEnchantOnClick)
 	return button
 end
 
@@ -1067,9 +1059,7 @@ function Auras:UpdateWeaponEnchants(frame)
 								row.buttons[shown] = button
 								styleWeaponEnchantButton(button, row.config)
 							end
-							button.weaponSlot = slot.weaponSlot
 							button.invSlot = slot.invSlot
-							button.enchantType = enchant.enchantType
 							button.icon:SetTexture(showEnchantIcon and enchant.enchantIconID or GetInventoryItemTexture("player", slot.invSlot))
 
 							-- Only the remaining time is known, a refresh of the same enchant keeps the running swipe, a new expiration restarts it from what is left
