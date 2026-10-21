@@ -1923,6 +1923,13 @@ local function loadGeneralOptions()
 								desc = L["Color used when a cast cannot be interrupted, this is only used for PvE mobs."],
 								arg = "castColors.uninterruptible",
 							},
+							important = {
+								order = 6,
+								type = "color",
+								name = L["Important cast"],
+								desc = L["Color used when the game flags a cast as important, for example a spell that is lethal if not interrupted."],
+								arg = "castColors.important",
+							},
 						},
 					},
 					auras = {

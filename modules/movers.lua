@@ -413,7 +413,31 @@ local function disarmTestLock()
 	end
 end
 
-local function setupConfigHeader(header)
+-- Split and single raid headers both survive a mode switch, only the set the config asks for may be shown
+local function isHeaderConfigured(header)
+	if( header.splitParent ) then
+		local config = ShadowUF.db.profile.units[header.splitParent]
+		return config.frameSplit and config.filters[header.groupID] and true or false
+	elseif( header.unitType == "raid" ) then
+		return not ShadowUF.db.profile.units.raid.frameSplit
+	end
+
+	return true
+end
+
+-- Raid may be spread over one header per group, the alias key is skipped so each header comes up once
+local function getUnitHeaders(unitType, configuredOnly)
+	local headers = {}
+	for key, header in pairs(ShadowUF.Units.headerFrames) do
+		if( key ~= "raidParent" and header.unitType == unitType and ( not configuredOnly or isHeaderConfigured(header) ) ) then
+			headers[#headers + 1] = header
+		end
+	end
+
+	return headers
+end
+
+local function setupConfigHeader(header, movable)
 	-- Force show headers hidden by state monitors
 	-- so SecureGroupHeaderTemplate creates children with negative startingIndex
 	if( ShadowUF.db.profile.units[header.unitType].enabled and not header:IsShown() ) then
@@ -445,7 +469,7 @@ local function setupConfigHeader(header)
 	end
 
 	header.startingIndex = header:GetAttribute("startingIndex")
-	header:SetMovable(true)
+	if( movable ) then header:SetMovable(true) end
 	prepareChildUnits(header, header:GetChildren())
 end
 
@@ -576,8 +600,10 @@ function Movers:Enable()
 	-- One step per header: zone headers are force created here, then the secure template spawns its children
 	local headerKeys, seenHeader = {}, {}
 	for key in pairs(ShadowUF.Units.headerFrames) do
-		headerKeys[#headerKeys + 1] = key
-		seenHeader[key] = true
+		if( key ~= "raidParent" ) then
+			headerKeys[#headerKeys + 1] = key
+			seenHeader[key] = true
+		end
 	end
 	for type in pairs(ShadowUF.Units.zoneUnits) do
 		if( ShadowUF.db.profile.units[type].enabled and ShadowUF:IsUnitAvailable(type) and not seenHeader[type] ) then
@@ -592,7 +618,7 @@ function Movers:Enable()
 			if( isZone ) then ShadowUF.Units:InitializeFrame(key) end
 
 			local header = ShadowUF.Units.headerFrames[key]
-			if( header ) then setupConfigHeader(header) end
+			if( header and isHeaderConfigured(header) ) then setupConfigHeader(header, true) end
 		end)
 	end
 
@@ -918,35 +944,8 @@ function Movers:EnableTestMode(unitType)
 				ShadowUF.Units:InitializeFrame(unitType)
 			end
 
-			local header = ShadowUF.Units.headerFrames[unitType]
-			if( header ) then
-				if( not header:IsShown() ) then
-					header:Show()
-				end
-
-				for key in pairs(attributeBlacklist) do
-					header:SetAttribute(key, nil)
-				end
-
-				local config = ShadowUF.db.profile.units[unitType]
-				if( config.frameSplit ) then
-					header:SetAttribute("startingIndex", -4)
-				elseif( config.maxColumns ) then
-					local maxUnits = MAX_RAID_MEMBERS
-					if( config.filters ) then
-						for _, enabled in pairs(config.filters) do
-							if( not enabled ) then maxUnits = maxUnits - 5 end
-						end
-					end
-					header:SetAttribute("startingIndex", -math.min(config.maxColumns * config.unitsPerColumn, maxUnits) + 1)
-				elseif( ShadowUF[unitType .. "Units"] ) then
-					-- Party gets an extra slot to host the placeholder player frame
-					local extra = (unitType == "party") and 1 or 0
-					header:SetAttribute("startingIndex", -#(ShadowUF[unitType .. "Units"]) + 1 - extra)
-				end
-
-				header.startingIndex = header:GetAttribute("startingIndex")
-				prepareChildUnits(header, header:GetChildren())
+			for _, header in ipairs(getUnitHeaders(unitType, true)) do
+				setupConfigHeader(header)
 			end
 		end
 	end)
@@ -1014,15 +1013,16 @@ function Movers:DisableTestMode(unitType, immediate, deferReloads)
 	end
 	queueStage(frameStep)
 
-	-- Restore header for header-based units
+	-- Restore every header of the unit type, a parked one may still carry the placeholders of an earlier mode
 	queueStage(function()
-		local header = ShadowUF.Units.headerFrames[unitType]
-		if( header ) then
+		local headers = getUnitHeaders(unitType)
+		for _, header in ipairs(headers) do
 			header:SetAttribute("startingIndex", 1)
 			header:SetAttribute("initial-unitWatch", true)
-			if( header.unitType == unitType ) then
-				ShadowUF.Units:ReloadHeader(unitType)
-			end
+		end
+
+		if( headers[1] ) then
+			ShadowUF.Units:ReloadHeader(unitType)
 		end
 	end)
 

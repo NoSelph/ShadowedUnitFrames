@@ -934,17 +934,18 @@ function Units:ReloadHeader(type)
 		return
 	end
 
-	if( ShadowUF.db.profile.units[type].frameSplit ) then
-		if( headerFrames.raid ) then
+	if( type == "raid" ) then
+		-- Both raid header sets survive a mode switch within the session, the config decides which one gets rebuilt and which one stays parked
+		if( ShadowUF.enabledUnits.raid ) then
 			self:InitializeFrame("raid")
-		else
-			self:SetHeaderAttributes(headerFrames.raidParent, type)
-			ShadowUF.Layout:AnchorFrame(UIParent, headerFrames.raidParent, ShadowUF.db.profile.positions[type])
-			ShadowUF:FireModuleEvent("OnLayoutReload", type)
 		end
-	elseif( type == "raid" and not ShadowUF.db.profile.units[type].frameSplit and headerFrames.raidParent ) then
-		self:InitializeFrame("raid")
 
+		-- The split loader applies its own attributes, the single header is only reshown by its loader
+		if( not ShadowUF.db.profile.units.raid.frameSplit and headerFrames.raid ) then
+			self:SetHeaderAttributes(headerFrames.raid, type)
+			ShadowUF.Layout:AnchorFrame(UIParent, headerFrames.raid, ShadowUF.db.profile.positions[type])
+		end
+		ShadowUF:FireModuleEvent("OnLayoutReload", type)
 	elseif( headerFrames[type] ) then
 		self:SetHeaderAttributes(headerFrames[type], type)
 		ShadowUF.Layout:AnchorFrame(UIParent, headerFrames[type], ShadowUF.db.profile.positions[type])
@@ -1170,7 +1171,7 @@ local function setupRaidStateMonitor(id, headerFrame)
 	stateMonitor.raids[id]:SetFrameRef("raidHeader", headerFrame)
 	stateMonitor.raids[id]:SetAttribute("hideSemiRaid", ShadowUF.db.profile.units.raid.hideSemiRaid)
 	stateMonitor.raids[id]:WrapScript(stateMonitor.raids[id], "OnAttributeChanged", [[
-		if( name ~= "state-raidmonitor" and name ~= "raiddisabled" and name ~= "hidesemiraid" ) then
+		if( name ~= "state-raidmonitor" and name ~= "raiddisabled" and name ~= "hidesemiraid" and name ~= "recheck" ) then
 			return
 		end
 
@@ -1194,14 +1195,8 @@ function Units:LoadSplitGroupHeader(type)
 	if( headerFrames.raid ) then headerFrames.raid:Hide() end
 	headerFrames.raidParent = nil
 
-	for id, monitor in pairs(stateMonitor.raids) do
-		monitor:SetAttribute("hideSemiRaid", ShadowUF.db.profile.units.raid.hideSemiRaid)
-		monitor:SetAttribute("raidDisabled", id == -1 and true or nil)
-		monitor:SetAttribute("recheck", time())
-	end
-
 	local config = ShadowUF.db.profile.units[type]
-	for id, enabled in pairs(ShadowUF.db.profile.units[type].filters) do
+	for id, enabled in pairs(config.filters) do
 		local frame = headerFrames["raid" .. id]
 		if( enabled ) then
 			if( not frame ) then
@@ -1247,6 +1242,13 @@ function Units:LoadSplitGroupHeader(type)
 		end
 	end
 
+	-- Monitors run after the direct Show so the semi raid rule wins, unchecked groups stay parked or the next roster change would show them again
+	for id, monitor in pairs(stateMonitor.raids) do
+		monitor:SetAttribute("hideSemiRaid", config.hideSemiRaid)
+		monitor:SetAttribute("raidDisabled", (id == -1 or not config.filters[id]) and true or nil)
+		monitor:SetAttribute("recheck", time())
+	end
+
 	if( headerFrames.raidParent ) then
 		self:SetHeaderAttributes(headerFrames.raidParent, type)
 		ShadowUF.Layout:AnchorFrame(UIParent, headerFrames.raidParent, ShadowUF.db.profile.positions.raid)
@@ -1255,6 +1257,16 @@ end
 
 -- Load a header unit, party or raid
 function Units:LoadGroupHeader(type)
+	-- The single raid header takes over from the split set, which stays parked until the mode comes back
+	if( type == "raid" and headerFrames.raidParent ) then
+		for _, frame in pairs(headerFrames) do
+			if( frame.splitParent == type ) then
+				frame:Hide()
+			end
+		end
+		headerFrames.raidParent = nil
+	end
+
 	-- Already created, so just reshow and we out
 	if( headerFrames[type] ) then
 		headerFrames[type]:Show()
@@ -1335,15 +1347,6 @@ function Units:LoadGroupHeader(type)
 		setupRaidStateMonitor(-1, headerFrame)
 	else
 		headerFrame:Show()
-	end
-
-	-- Any frames that were split out in this group need to be hidden
-	if( headerFrames.raidParent ) then
-		for _, f in pairs(headerFrames) do
-			if( f.splitParent == type ) then
-				f:Hide()
-			end
-		end
 	end
 end
 
@@ -1610,8 +1613,11 @@ function Units:ProfileChanged()
 		end
 	end
 
+	-- Split raid groups share one header type, one reload covers the whole set
+	local reloaded = {}
 	for _, frame in pairs(headerFrames) do
-		if( ShadowUF.db.profile.units[frame.unitType].enabled ) then
+		if( not reloaded[frame.unitType] and ShadowUF.db.profile.units[frame.unitType].enabled ) then
+			reloaded[frame.unitType] = true
 			self:ReloadHeader(frame.unitType)
 		end
 	end

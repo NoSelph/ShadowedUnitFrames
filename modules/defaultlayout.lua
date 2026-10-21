@@ -204,6 +204,7 @@ function ShadowUF:LoadDefaultLayout(useMerge)
 		interrupted = {r = 1, g = 0, b = 0},
 		uninterruptible = {r = 0.71, g = 0, b = 1},
 		finished = {r = 0.10, g = 1.0, b = 0.10},
+		important = {r = 1.0, g = 0.15, b = 0.6},
 	}
 	config.xpColors = {
 		normal = {r = 0.58, g = 0.0, b = 0.55},

@@ -3,8 +3,8 @@ local L = ShadowUF.L
 local FADE_TIME = 0.30
 
 -- ColorMixin cache for SetVertexColorFromBoolean, rebuilt whenever the layout is applied
-local fillUninterruptible, fillCast, fillChannel
-local bgUninterruptible, bgCast, bgChannel
+local fillUninterruptible, fillCast, fillChannel, fillImportant
+local bgUninterruptible, bgCast, bgChannel, bgImportant
 
 local function refreshCastColors()
 	local colors = ShadowUF.db.profile.castColors
@@ -14,10 +14,12 @@ local function refreshCastColors()
 	fillUninterruptible = CreateColor(colors.uninterruptible.r, colors.uninterruptible.g, colors.uninterruptible.b, alpha)
 	fillCast = CreateColor(colors.cast.r, colors.cast.g, colors.cast.b, alpha)
 	fillChannel = CreateColor(colors.channel.r, colors.channel.g, colors.channel.b, alpha)
+	fillImportant = CreateColor(colors.important.r, colors.important.g, colors.important.b, alpha)
 
 	bgUninterruptible = CreateColor(colors.uninterruptible.r, colors.uninterruptible.g, colors.uninterruptible.b, bgAlpha)
 	bgCast = CreateColor(colors.cast.r, colors.cast.g, colors.cast.b, bgAlpha)
 	bgChannel = CreateColor(colors.channel.r, colors.channel.g, colors.channel.b, bgAlpha)
+	bgImportant = CreateColor(colors.important.r, colors.important.g, colors.important.b, bgAlpha)
 end
 
 ShadowUF:RegisterModule(Cast, "castBar", L["Cast bar"], true)
@@ -238,6 +240,28 @@ local function setBarColor(self, r, g, b)
 	self.parent:SetBlockColor(self, "castBar", r, g, b)
 end
 
+-- Important wins over the interruptible state (duh), both flags may be secret so the base color is resolved natively before the second pick
+local function setCastStateColor(frame, cast, notInterruptible)
+	local fillBase, bgBase = fillCast, bgCast
+	if( cast.isChannelled ) then
+		fillBase, bgBase = fillChannel, bgChannel
+	end
+
+	local important = cast.important
+	if( not issecretvalue(important) and not important ) then
+		frame:SetBlockColorFromBoolean(cast, "castBar", notInterruptible, fillUninterruptible, fillBase, bgUninterruptible, bgBase)
+		return
+	end
+
+	-- notInterruptible is nilable and C_CurveUtil wants a real boolean
+	if( not issecretvalue(notInterruptible) ) then
+		notInterruptible = notInterruptible and true or false
+	end
+	local fill = C_CurveUtil.EvaluateColorFromBoolean(notInterruptible, fillUninterruptible, fillBase)
+	local bg = C_CurveUtil.EvaluateColorFromBoolean(notInterruptible, bgUninterruptible, bgBase)
+	frame:SetBlockColorFromBoolean(cast, "castBar", important, fillImportant, fill, bgImportant, bg)
+end
+
 -- Cast OnUpdates
 local function fadeOnUpdate(self, elapsed)
 	self.fadeElapsed = self.fadeElapsed - elapsed
@@ -438,6 +462,7 @@ function Cast:EventStopCast(frame, event, unit, castID, spellID, ...)
 	
 	cast.spellName = nil
 	cast.spellID = nil
+	cast.important = false
 	cast.castID = nil
 	cast.fadeElapsed = FADE_TIME
 	cast.fadeStart = FADE_TIME
@@ -468,6 +493,7 @@ function Cast:EventInterruptCast(frame, event, unit, castID, spellID, ...)
 	end
 	
 	cast.spellID = nil
+	cast.important = false
 	cast.fadeElapsed = FADE_TIME + 0.20
 	cast.fadeStart = cast.fadeElapsed
 	cast:SetScript("OnUpdate", fadeOnUpdate)
@@ -488,16 +514,11 @@ end
 
 -- Interruptible status changed
 function Cast:EventInterruptible(frame)
-	local cast = frame.castBar.bar
-	if( cast.isChannelled ) then
-		setBarColor(cast, ShadowUF.db.profile.castColors.channel.r, ShadowUF.db.profile.castColors.channel.g, ShadowUF.db.profile.castColors.channel.b)
-	else
-		setBarColor(cast, ShadowUF.db.profile.castColors.cast.r, ShadowUF.db.profile.castColors.cast.g, ShadowUF.db.profile.castColors.cast.b)
-	end
+	setCastStateColor(frame, frame.castBar.bar, false)
 end
 
 function Cast:EventUninterruptible(frame)
-	setBarColor(frame.castBar.bar, ShadowUF.db.profile.castColors.uninterruptible.r, ShadowUF.db.profile.castColors.uninterruptible.g, ShadowUF.db.profile.castColors.uninterruptible.b)
+	setCastStateColor(frame, frame.castBar.bar, true)
 end
 
 function Cast:UpdateDelay(frame, spell, displayName, icon, startTime, endTime)
@@ -620,12 +641,11 @@ function Cast:UpdateCast(frame, unit, channelled, spell, displayName, icon, star
 		cast:SetScript("OnUpdate", castOnUpdate)
 	end
 	
-	-- notInterruptible is secret in combat, so the color choice is resolved natively
-	if( cast.isChannelled ) then
-		frame:SetBlockColorFromBoolean(cast, "castBar", notInterruptible, fillUninterruptible, fillChannel, bgUninterruptible, bgChannel)
-	else
-		frame:SetBlockColorFromBoolean(cast, "castBar", notInterruptible, fillUninterruptible, fillCast, bgUninterruptible, bgCast)
+	cast.important = false
+	if( spellID ) then
+		cast.important = C_Spell.IsSpellImportant(spellID)
 	end
+	setCastStateColor(frame, cast, notInterruptible)
 end
 
 -- Trigger checks on fake cast
