@@ -5,7 +5,7 @@
 ShadowUF = select(2, ...)
 
 local L = ShadowUF.L
-ShadowUF.dbRevision = 75
+ShadowUF.dbRevision = 76
 ShadowUF.playerUnit = "player"
 -- Forever (game type camelot) reports WOW_PROJECT_MAINLINE, the TOC version is the only reliable discriminator
 local tocVersion = select(4, GetBuildInfo()) or 0
@@ -179,8 +179,9 @@ end
 
 -- Reaction tri-state for the dispel displays, "assist" = can be helped, "attack" = can be harmed, "none" = neither (cross-faction with warmode off, friendly neutrals)
 -- UnitCanAssist/UnitCanAttack are authoritative but can return secret booleans on restricted maps, the reaction pair never does and covers duels (friend AND enemy) as hostile
+-- The two trailing flags keep immune and uninteractable units (far away, loading, in a vehicle) assistable, otherwise a distant group member reads as neither side
 function ShadowUF.GetUnitReactionState(unit)
-	local ok, value = pcall(UnitCanAssist, "player", unit)
+	local ok, value = pcall(UnitCanAssist, "player", unit, true, true)
 	if( ok and not issecretvalue(value) ) then
 		if( value ) then return "assist" end
 		local okAttack, attack = pcall(UnitCanAttack, "player", unit)
@@ -259,6 +260,24 @@ function ShadowUF:CheckUpgrade()
 	auraColors.pandemic = auraColors.pandemic or {r = 1, g = 1, b = 1, a = 0.35}
 	self.db.profile.castColors.important = self.db.profile.castColors.important or {r = 1.0, g = 0.15, b = 0.6}
 
+	if( revision <= 75 ) then
+		-- The group dispel mode folds into the player one, on debuff frames the token becomes the player dispel filter
+		for _, unitCfg in pairs(self.db.profile.units) do
+			if( unitCfg.highlight and unitCfg.highlight.debuff == "RAID_PLAYER_DISPELLABLE" ) then
+				unitCfg.highlight.debuff = "PLAYER_DISPELLABLE"
+			end
+			if( unitCfg.healthBar and unitCfg.healthBar.colorDispel == "RAID_PLAYER_DISPELLABLE" ) then
+				unitCfg.healthBar.colorDispel = "PLAYER_DISPELLABLE"
+			end
+			if( unitCfg.auras and type(unitCfg.auras.debuffs) == "table" ) then
+				for _, auraFrame in pairs(unitCfg.auras.debuffs) do
+					if( type(auraFrame) == "table" and auraFrame.filter == "RAID_PLAYER_DISPELLABLE" ) then
+						auraFrame.filter = "RAID"
+					end
+				end
+			end
+		end
+	end
 	if( revision <= 74 and self.isForever ) then
 		for unit, zone in pairs(self.Units.zoneUnits) do
 			if( zone == "arena" ) then
@@ -610,7 +629,7 @@ function ShadowUF:CheckUpgrade()
 						config.auras[key] = {
 							[1] = newFrame,
 							[2] = {enabled = false, filter = "PLAYER", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
-							[3] = {enabled = false, filter = key == "debuffs" and "RAID_PLAYER_DISPELLABLE" or "RAID", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
+							[3] = {enabled = false, filter = key == "debuffs" and "DISPELLABLE" or "RAID", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 							[4] = {enabled = false, filter = "RAID", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 							[5] = {enabled = false, filter = key == "debuffs" and "CROWD_CONTROL" or "BIG_DEFENSIVE", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
 							[6] = {enabled = false, filter = "IMPORTANT", perRow = 10, maxRows = 2, size = 16, selfScale = 1.30, anchorPoint = newFrame.anchorPoint, x = 0, y = 0, enlarge = {}, timers = {ALL = true}},
@@ -847,7 +866,7 @@ function ShadowUF:LoadUnitDefaults()
 				debuffs = {
 					[1] = {enabled = not aurasBlocked, filter = "ALL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
 					[2] = {enabled = false, filter = "PLAYER", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
-					[3] = {enabled = false, filter = "RAID_PLAYER_DISPELLABLE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
+					[3] = {enabled = false, filter = "DISPELLABLE", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
 					[4] = {enabled = false, filter = "RAID", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
 					[5] = {enabled = false, filter = "CROWD_CONTROL", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},
 					[6] = {enabled = false, filter = "IMPORTANT", anchorMode = "COLUMN", perRow = 10, maxRows = 1, size = 16, selfScale = 1.30, anchorPoint = "BOTTOMLEFT", growH = "RIGHT", growV = "TOP", x = 0, y = 0, enlarge = {PLAYER = true}, timers = {ALL = true}},

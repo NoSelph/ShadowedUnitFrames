@@ -68,7 +68,6 @@ end
 -- There is no player-scoped token for buffs, harmful+raid for debuffs
 local DISPEL_FILTERS = {
 	PLAYER_DISPELLABLE = { assist = "HARMFUL|RAID", noassist = "HELPFUL|RAID_PLAYER_DISPELLABLE" },
-	RAID_PLAYER_DISPELLABLE = { assist = "HARMFUL|RAID_PLAYER_DISPELLABLE", noassist = "HELPFUL|RAID_PLAYER_DISPELLABLE" },
 	DISPELLABLE = { assist = "HARMFUL|DISPELLABLE", noassist = "HELPFUL|DISPELLABLE" },
 }
 
@@ -126,10 +125,7 @@ function Health:UpdateDispelSlot(frame)
 	local filters = getDispelFilters(ShadowUF.db.profile.units[frame.unitType].healthBar.colorDispel)
 	if( not filters ) then
 		local container = frame.healthBar.dispelSlot
-		if( container ) then
-			container:SetEnabled(false)
-			if( not InCombatLockdown() ) then container:Hide() end
-		end
+		if( container ) then container:SetEnabled(false) end
 		return
 	end
 
@@ -149,7 +145,6 @@ function Health:UpdateDispelSlot(frame)
 	if( not frame.healthBar.dispelSlot and not createDispelSlot(frame, filters.assist) ) then return end
 
 	local container = frame.healthBar.dispelSlot
-	local inCombat = InCombatLockdown()
 
 	-- Pick the side matching the unit's reaction, mute when neither side applies
 	local dispelFilter = frame.healthBar.dispelSlotFilter or filters.assist
@@ -178,18 +173,13 @@ function Health:UpdateDispelSlot(frame)
 			frame.healthBar.dispelSlotMuted = muted
 		end
 	end
+	-- The container is protected so Show and Hide are off limits in combat, SetEnabled alone clears and restores the slot
 	if( frame.unitSUF and not frame.configMode ) then
 		local ok = pcall(container.SetUnit, container, frame.unitSUF)
 		container:SetEnabled(ok and true or false)
-		if( ok ) then
-			if( not inCombat ) then container:Show() end
-			pcall(container.UpdateAllAuras, container)
-		elseif( not inCombat ) then
-			container:Hide()
-		end
+		if( ok ) then pcall(container.UpdateAllAuras, container) end
 	else
 		container:SetEnabled(false)
-		if( not inCombat ) then container:Hide() end
 	end
 end
 
@@ -220,7 +210,6 @@ function Health:OnEnable(frame)
 		elseif( frame.healthBar.dispelSlot ) then
 			-- Option turned off, silence the existing slot container
 			frame.healthBar.dispelSlot:SetEnabled(false)
-			if( not InCombatLockdown() ) then frame.healthBar.dispelSlot:Hide() end
 		end
 	end
 
@@ -232,7 +221,6 @@ function Health:OnDisable(frame)
 	frame:UnregisterAll(self)
 	if( frame.healthBar and frame.healthBar.dispelSlot ) then
 		frame.healthBar.dispelSlot:SetEnabled(false)
-		frame.healthBar.dispelSlot:Hide()
 	end
 end
 

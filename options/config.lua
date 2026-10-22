@@ -2812,7 +2812,7 @@ local function loadUnitOptions()
 			["PLAYER|BIG_DEFENSIVE"] = L["Only shows major defensive cooldowns that you activated yourself."],
 			["EXTERNAL_DEFENSIVE"] = L["Only shows defensive buffs received from another player (Pain Suppression, Ironbark, Life Cocoon, etc.)."],
 			["PLAYER|EXTERNAL_DEFENSIVE"] = L["Only shows external defensives that you cast on someone."],
-			["RAID_PLAYER_DISPELLABLE"] = L["Only shows buffs that someone in your group can purge, steal or dispel."],
+			["RAID_PLAYER_DISPELLABLE"] = L["Only shows buffs that you can purge or steal."],
 			["DISPELLABLE"] = L["Only shows auras that have a dispel type, whether or not anyone in your group can dispel them."],
 			["RAID_IN_COMBAT"] = L["Buffs flagged by Blizzard to show on raid frames in combat, HoTs mostly."],
 			["PLAYER|RAID_IN_COMBAT"] = L["Your buffs flagged to show on raid frames in combat."],
@@ -2822,7 +2822,6 @@ local function loadUnitOptions()
 			["ALL"] = L["Shows all debuffs on the unit without any filtering."],
 			["PLAYER"] = L["Only shows debuffs you applied yourself."],
 			["RAID"] = L["Only shows debuffs that you can dispel."],
-			["RAID_PLAYER_DISPELLABLE"] = L["Only shows debuffs that someone in your group can dispel (you, when solo)."],
 			["DISPELLABLE"] = L["Only shows auras that have a dispel type, whether or not anyone in your group can dispel them."],
 			["CROWD_CONTROL"] = L["Only shows crowd control effects (Stun, Root, Silence, Fear, Polymorph, Cyclone, etc.)."],
 			["IMPORTANT"] = L["Only shows debuffs marked as important by Blizzard. Server-maintained list."],
@@ -2849,7 +2848,6 @@ local function loadUnitOptions()
 			["ALL"] = L["All Auras"],
 			["PLAYER"] = L["My Auras"],
 			["RAID"] = L["Dispellable by me"],
-			["RAID_PLAYER_DISPELLABLE"] = L["Dispellable by group"],
 			["DISPELLABLE"] = L["Any dispellable"],
 			["CROWD_CONTROL"] = L["Crowd control effects"],
 			["IMPORTANT"] = L["Important auras"],
@@ -4511,7 +4509,7 @@ local function loadUnitOptions()
 								type = "select",
 								name = L["On curable debuff"],
 								desc = L["Highlight units that are debuffed with something you can cure."],
-								values = {[""] = L["Disabled"], ["PLAYER_DISPELLABLE"] = L["Dispellable by me"], ["RAID_PLAYER_DISPELLABLE"] = L["Dispellable by my group"], ["DISPELLABLE"] = L["Any dispellable"]},
+								values = {[""] = L["Disabled"], ["PLAYER_DISPELLABLE"] = L["Dispellable by me"], ["DISPELLABLE"] = L["Any dispellable"]},
 								arg = "highlight.debuff",
 								get = function(info)
 									local value = getUnit(info)
@@ -6003,7 +6001,7 @@ local function loadUnitOptions()
 								type = "select",
 								name = L["Color on curable debuff"],
 								desc = L["Changes the health bar to the color of any curable debuff."],
-								values = {[""] = L["Disabled"], ["PLAYER_DISPELLABLE"] = L["Dispellable by me"], ["RAID_PLAYER_DISPELLABLE"] = L["Dispellable by my group"], ["DISPELLABLE"] = L["Any dispellable"]},
+								values = {[""] = L["Disabled"], ["PLAYER_DISPELLABLE"] = L["Dispellable by me"], ["DISPELLABLE"] = L["Any dispellable"]},
 								arg = "healthBar.colorDispel",
 								get = function(info)
 									local value = getUnit(info)

@@ -143,10 +143,7 @@ function Highlight:UpdateDispelSlots(frame)
 	local filters = getDispelFilters(ShadowUF.db.profile.units[frame.unitType].highlight.debuff)
 	if( not filters ) then
 		local container = frame.highlight.dispelSlots
-		if( container ) then
-			container:SetEnabled(false)
-			if( not InCombatLockdown() ) then container:Hide() end
-		end
+		if( container ) then container:SetEnabled(false) end
 		return
 	end
 
@@ -168,7 +165,6 @@ function Highlight:UpdateDispelSlots(frame)
 	if( not frame.highlight.dispelSlots and not createDispelSlots(frame, filters.assist) ) then return end
 
 	local container = frame.highlight.dispelSlots
-	local inCombat = InCombatLockdown()
 
 	-- Pick the side matching the unit's reaction, mute when neither side applies
 	local dispelFilter = frame.highlight.dispelSlotFilter or filters.assist
@@ -205,18 +201,13 @@ function Highlight:UpdateDispelSlots(frame)
 			frame.highlight.dispelSlotMuted = muted
 		end
 	end
+	-- The container is protected so Show and Hide are off limits in combat, SetEnabled alone clears and restores the slots
 	if( frame.unitSUF and not frame.configMode ) then
 		local ok = pcall(container.SetUnit, container, frame.unitSUF)
 		container:SetEnabled(ok and true or false)
-		if( ok ) then
-			if( not inCombat ) then container:Show() end
-			pcall(container.UpdateAllAuras, container)
-		elseif( not inCombat ) then
-			container:Hide()
-		end
+		if( ok ) then pcall(container.UpdateAllAuras, container) end
 	else
 		container:SetEnabled(false)
-		if( not inCombat ) then container:Hide() end
 	end
 end
 
@@ -316,7 +307,6 @@ function Highlight:OnEnable(frame)
 		elseif( frame.highlight.dispelSlots ) then
 			-- Option turned off, silence the existing slot container
 			frame.highlight.dispelSlots:SetEnabled(false)
-			if( not InCombatLockdown() ) then frame.highlight.dispelSlots:Hide() end
 		end
 	end
 
@@ -350,7 +340,6 @@ function Highlight:OnDisable(frame)
 
 	if( frame.highlight.dispelSlots ) then
 		frame.highlight.dispelSlots:SetEnabled(false)
-		frame.highlight.dispelSlots:Hide()
 	end
 
 	frame.highlight:Hide()
