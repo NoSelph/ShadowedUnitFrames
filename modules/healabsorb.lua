@@ -24,7 +24,7 @@ end
 
 -- OnLayoutApplied inherited from IncHeal
 
-function HealAbsorb:UpdateFrame(frame)
+function HealAbsorb:UpdateFrame(frame, event)
 	if( not frame.visibility[self.frameKey] or not frame.visibility.healthBar ) then return end
 
 	if( not self:PopulateCalculator(frame) ) then
@@ -37,5 +37,5 @@ function HealAbsorb:UpdateFrame(frame)
 	local amount = calc:GetTotalHealAbsorbs()
 	local maxHealth = calc:GetMaximumHealth()
 
-	self:PositionBar(frame, amount, maxHealth)
+	self:PositionBar(frame, amount, maxHealth, event)
 end

@@ -877,7 +877,7 @@ L["Heal absorbs"] = [=[Curar absorve
 ]=]
 L["Healing absorb"] = "Cura absorver"
 L["Health"] = "Vida"
-L["Health and power bars ease toward their new value instead of snapping to it."] = "As barras de vida e de poder deslizam até o novo valor em vez de pular diretamente para ele."
+L["Health, power and heal prediction bars ease toward their new value instead of snapping to it."] = "As barras de vida, de poder e de previsão de cura deslizam até o novo valor em vez de pular diretamente para ele."
 L["Health bar"] = "Barra de Vida"
 L["Health bar color for friendly units."] = [=[Cor da barra de saúde para unidades amigáveis.
 

@@ -1514,7 +1514,7 @@ local function loadGeneralOptions()
 								order = 5,
 								type = "toggle",
 								name = L["Smooth bars"],
-								desc = L["Health and power bars ease toward their new value instead of snapping to it."],
+								desc = L["Health, power and heal prediction bars ease toward their new value instead of snapping to it."],
 								set = function(info, value) ShadowUF.db.profile.bars.smooth = value end,
 								get = function(info) return ShadowUF.db.profile.bars.smooth end,
 							},

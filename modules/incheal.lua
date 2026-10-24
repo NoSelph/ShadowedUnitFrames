@@ -87,10 +87,11 @@ function IncHeal:EnsureSafetyTicker(frame)
 			return
 		end
 		frame.healCalcTime = nil
+		-- The poll stands in for an event so the bars ease toward the refreshed amount instead of snapping
 		local m = ShadowUF.modules
-		if( frame.incHeal and frame.incHeal.total ) then m.incHeal:UpdateFrame(frame) end
-		if( frame.healAbsorb and frame.healAbsorb.total ) then m.healAbsorb:UpdateFrame(frame) end
-		if( frame.incAbsorb and frame.incAbsorb.total ) then m.incAbsorb:UpdateFrame(frame) end
+		if( frame.incHeal and frame.incHeal.total ) then m.incHeal:UpdateFrame(frame, "SAFETY_TICK") end
+		if( frame.healAbsorb and frame.healAbsorb.total ) then m.healAbsorb:UpdateFrame(frame, "SAFETY_TICK") end
+		if( frame.incAbsorb and frame.incAbsorb.total ) then m.incAbsorb:UpdateFrame(frame, "SAFETY_TICK") end
 	end)
 end
 
@@ -174,43 +175,45 @@ function IncHeal:OnLayoutWidgets(frame)
 	if( bar.total ) then self:UpdateFrame(frame) end
 end
 
-function IncHeal:PositionBar(frame, incAmount, maxHealth)
+function IncHeal:PositionBar(frame, incAmount, maxHealth, event)
 	local bar = frame[self.frameKey]
 	local calc = frame.healCalc
 
-	-- Hide check: if calculator has no secrets, we can safely test < 1
-	-- (health values are integers; a sub-1 residual is never a real heal)
-	if( calc and not calc:HasSecretValues() ) then
-		if( incAmount < 1 or maxHealth <= 0 ) then
-			bar.total = nil
-			bar:Hide()
-			local overflowKey = self.frameKey .. "Overflow"
-			if( frame[overflowKey] ) then frame[overflowKey]:Hide() end
-			self:CancelSafetyTicker(frame)
-			return
-		end
+	-- The bar never hides, an empty amount sits at zero and draws nothing, which is all the secret path can do anyway
+	-- The plain test only gates the safety ticker, health values are integers so a sub-1 residual is never a real heal
+	local tracking = true
+	if( calc and not calc:HasSecretValues() and ( incAmount < 1 or maxHealth <= 0 ) ) then
+		tracking = false
+		incAmount = 0
+		if( maxHealth <= 0 ) then maxHealth = 1 end
 	end
 
-	if( not bar.total ) then bar:Show() end
-	bar.total = incAmount
-	self:EnsureSafetyTicker(frame)
+	bar:Show()
 	if( bar.background ) then bar.background:Hide() end
+	if( tracking ) then
+		bar.total = incAmount
+		self:EnsureSafetyTicker(frame)
+	else
+		bar.total = nil
+		self:CancelSafetyTicker(frame)
+	end
 
 	local anchorMode = ShadowUF.db.profile.units[frame.unitType][self.frameKey].anchorMode or "healthBar"
+	local interpolation = ShadowUF.Units:GetBarInterpolation(frame, event)
 
 	if( anchorMode == "overlay" ) then
-		self:PositionBarOverlayMode(frame, bar, incAmount, maxHealth)
+		self:PositionBarOverlayMode(frame, bar, incAmount, maxHealth, interpolation)
 	elseif( anchorMode == "healthBarOverflow" ) then
-		self:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth)
+		self:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth, interpolation)
 	elseif( anchorMode == "frame" ) then
-		self:PositionBarFrameMode(frame, bar, incAmount, maxHealth)
+		self:PositionBarFrameMode(frame, bar, incAmount, maxHealth, interpolation)
 	else
-		self:PositionBarHealthMode(frame, bar, incAmount, maxHealth)
+		self:PositionBarHealthMode(frame, bar, incAmount, maxHealth, interpolation)
 	end
 end
 
 -- Overlay mode: reverse fill overlay on the health texture
-function IncHeal:PositionBarOverlayMode(frame, bar, incAmount, maxHealth)
+function IncHeal:PositionBarOverlayMode(frame, bar, incAmount, maxHealth, interpolation)
 	-- anchors sit on the health texture object and track the fill on their own
 	if( bar.anchorsDirty ) then
 		-- Hide cropper and overflow if they exist
@@ -240,12 +243,12 @@ function IncHeal:PositionBarOverlayMode(frame, bar, incAmount, maxHealth)
 		bar.anchorsDirty = nil
 	end
 
-	bar:SetMinMaxValues(0, maxHealth)
-	bar:SetValue(incAmount)
+	bar:SetMinMaxValues(0, maxHealth, interpolation)
+	bar:SetValue(incAmount, interpolation)
 end
 
 -- Health bar with overflow: forward fill for missing health, reverse overlay for overflow
-function IncHeal:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth)
+function IncHeal:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth, interpolation)
 	if( bar.anchorsDirty ) then
 		local healthTexture = frame.healthBar:GetStatusBarTexture()
 		-- Keep anchorsDirty set so the next update retries the anchor pass
@@ -343,21 +346,21 @@ function IncHeal:PositionBarHealthOverflowMode(frame, bar, incAmount, maxHealth)
 	end
 
 	-- SetMinMaxValues/SetValue accept secrets natively
-	bar:SetMinMaxValues(0, maxHealth)
-	bar:SetValue(incAmount)
+	bar:SetMinMaxValues(0, maxHealth, interpolation)
+	bar:SetValue(incAmount, interpolation)
 
 	local overflowBar = frame[self.frameKey .. "Overflow"]
 	local clipFrame = frame[self.frameKey .. "OverflowClip"]
 	if( not overflowBar or not clipFrame ) then return end
 
-	overflowBar:SetMinMaxValues(0, maxHealth)
-	overflowBar:SetValue(incAmount)
-	-- the sub-1 hide path hides only the overflow bar, it must be re-shown here without a layout pass
+	overflowBar:SetMinMaxValues(0, maxHealth, interpolation)
+	overflowBar:SetValue(incAmount, interpolation)
+	-- The other anchor modes hide it in their anchor pass, so it is re-shown here without a layout pass
 	overflowBar:Show()
 end
 
 -- Frame anchor mode: fill from chosen frame edge, real values
-function IncHeal:PositionBarFrameMode(frame, bar, incAmount, maxHealth)
+function IncHeal:PositionBarFrameMode(frame, bar, incAmount, maxHealth, interpolation)
 	if( bar.anchorsDirty ) then
 		-- Hide cropper and overflow if they exist
 		if( bar.cropper ) then bar.cropper:Hide() end
@@ -384,12 +387,12 @@ function IncHeal:PositionBarFrameMode(frame, bar, incAmount, maxHealth)
 	end
 
 	-- Real values — secrets accepted natively by SetMinMaxValues/SetValue
-	bar:SetMinMaxValues(0, maxHealth)
-	bar:SetValue(incAmount)
+	bar:SetMinMaxValues(0, maxHealth, interpolation)
+	bar:SetValue(incAmount, interpolation)
 end
 
 -- Health bar anchor mode: forward fill from health edge with cropper cap
-function IncHeal:PositionBarHealthMode(frame, bar, incAmount, maxHealth)
+function IncHeal:PositionBarHealthMode(frame, bar, incAmount, maxHealth, interpolation)
 	if( bar.anchorsDirty ) then
 		bar:ClearAllPoints()
 		bar:SetReverseFill(frame.healthBar:GetReverseFill())
@@ -479,11 +482,11 @@ function IncHeal:PositionBarHealthMode(frame, bar, incAmount, maxHealth)
 	end
 
 	-- SetMinMaxValues/SetValue accept secrets natively (AllowedWhenTainted)
-	bar:SetMinMaxValues(0, maxHealth)
-	bar:SetValue(incAmount)
+	bar:SetMinMaxValues(0, maxHealth, interpolation)
+	bar:SetValue(incAmount, interpolation)
 end
 
-function IncHeal:UpdateFrame(frame)
+function IncHeal:UpdateFrame(frame, event)
 	if( not frame.visibility[self.frameKey] or not frame.visibility.healthBar ) then return end
 
 	if( not self:PopulateCalculator(frame) ) then
@@ -502,5 +505,5 @@ function IncHeal:UpdateFrame(frame)
 		amount = amount + calc:GetTotalHealAbsorbs()
 	end
 
-	self:PositionBar(frame, amount, maxHealth)
+	self:PositionBar(frame, amount, maxHealth, event)
 end
