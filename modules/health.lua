@@ -317,7 +317,7 @@ function Health:UpdateColor(frame)
 	end
 end
 
-function Health:Update(frame)
+function Health:Update(frame, event)
 	local unit = frame.unitSUF
 	if( not unit or not UnitExists(unit) ) then return end
 
@@ -328,8 +328,9 @@ function Health:Update(frame)
 	local okM, maxHealth = pcall(UnitHealthMax, unit)
 	if( not okH or not okM ) then return end
 
+	local interpolation = ShadowUF.Units:GetBarInterpolation(frame, event)
 	frame.healthBar.currentHealth = currentHealth
-	frame.healthBar:SetMinMaxValues(0, maxHealth)
+	frame.healthBar:SetMinMaxValues(0, maxHealth, interpolation)
 
 	-- Safe SetValue
 	local isDead = UnitIsDeadOrGhost(unit)
@@ -337,7 +338,7 @@ function Health:Update(frame)
 	local val = isDead and 0 or not isConnected and 0 or frame.healthBar.currentHealth
 	
 	-- Try to set the value directly (even if secret).
-	pcall(frame.healthBar.SetValue, frame.healthBar, val)
+	pcall(frame.healthBar.SetValue, frame.healthBar, val, interpolation)
 
 	-- Unit is offline, fill bar up + grey it
 	if( isOffline ) then

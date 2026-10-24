@@ -1623,6 +1623,15 @@ function Units:ProfileChanged()
 	end
 end
 
+-- Easing only follows value changes on a unit the frame already shows, a repaint (identity change, show, layout) snaps so the previous occupant's fill never slides into the new one
+-- The fake unit poll ticker is value tracking rather than a repaint, so it eases too
+function Units:GetBarInterpolation(frame, event)
+	if( ShadowUF.db.profile.bars.smooth and ( event or frame.pollingUpdate ) ) then
+		return Enum.StatusBarInterpolation.ExponentialEaseOut
+	end
+	return Enum.StatusBarInterpolation.Immediate
+end
+
 -- Small helper function for creating bars with
 function Units:CreateBar(parent)
 	local bar = CreateFrame("StatusBar", nil, parent)

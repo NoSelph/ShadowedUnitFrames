@@ -1337,6 +1337,11 @@ if( ShadowUF.isForever ) then
 	end
 end
 
+-- Retail names carry a realm in that slot instead of a surname, the tag leaves the wizard and renders empty in texts imported from Forever
+if( not ShadowUF.isForever ) then
+	Tags.defaultTags["surname"] = nil
+end
+
 -- Default tag events
 Tags.defaultEvents = {
 	["totem:timer"]				= "SUF_TOTEM_TIMER",

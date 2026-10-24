@@ -102,9 +102,10 @@ function Power:Update(frame, event, unit, powerType)
 	local okM, maxPower = pcall(UnitPowerMax, frame.unitSUF)
 	if not okP or not okM then return end
 	frame.powerBar.currentPower = currentPower
+	local interpolation = ShadowUF.Units:GetBarInterpolation(frame, event)
 	
 	-- Safe update for MinMax
-	local success = pcall(frame.powerBar.SetMinMaxValues, frame.powerBar, 0, maxPower)
+	local success = pcall(frame.powerBar.SetMinMaxValues, frame.powerBar, 0, maxPower, interpolation)
 	if( not success ) then
 		-- Fallback for secret values if set fails: try 0-1, or hide execution
 		frame.powerBar:SetMinMaxValues(0, 1)
@@ -112,5 +113,5 @@ function Power:Update(frame, event, unit, powerType)
 
 	-- Safe update for Value
 	local val = UnitIsDeadOrGhost(frame.unitSUF) and 0 or not UnitIsConnected(frame.unitSUF) and 0 or frame.powerBar.currentPower
-	pcall(frame.powerBar.SetValue, frame.powerBar, val)
+	pcall(frame.powerBar.SetValue, frame.powerBar, val, interpolation)
 end

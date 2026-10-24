@@ -1510,6 +1510,14 @@ local function loadGeneralOptions()
 								values = getMediaData,
 								arg = "bars.texture",
 							},
+							smooth = {
+								order = 5,
+								type = "toggle",
+								name = L["Smooth bars"],
+								desc = L["Health and power bars ease toward their new value instead of snapping to it."],
+								set = function(info, value) ShadowUF.db.profile.bars.smooth = value end,
+								get = function(info) return ShadowUF.db.profile.bars.smooth end,
+							},
 							spacing = {
 								order = -0.5,
 								type = "range",
@@ -1929,6 +1937,13 @@ local function loadGeneralOptions()
 								name = L["Important cast"],
 								desc = L["Color used when the game flags a cast as important, for example a spell that is lethal if not interrupted."],
 								arg = "castColors.important",
+							},
+							importantUninterruptible = {
+								order = 7,
+								type = "color",
+								name = L["Important cast uninterruptible"],
+								desc = L["Color used when an important cast cannot be interrupted."],
+								arg = "castColors.importantUninterruptible",
 							},
 						},
 					},
@@ -9625,6 +9640,12 @@ end
 
 local defaultToggles
 function Config:Open()
+	-- The full options build does not fit the combat script budget, the first open waits for regen
+	if( not registered and InCombatLockdown() ) then
+		ShadowUF:DeferUntilRegen("openConfig", function() Config:Open() end, L["The configuration will open after combat."])
+		return
+	end
+
 	AceDialog = AceDialog or LibStub("AceConfigDialog-3.0")
 	AceRegistry = AceRegistry or LibStub("AceConfigRegistry-3.0")
 	registerSpellEditBox()

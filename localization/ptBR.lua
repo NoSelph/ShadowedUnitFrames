@@ -41,6 +41,7 @@ L["Cancelable Auras"] = "Auras canceláveis"
 L["Class auras (group, raid)"] = "Auras de classe (grupo, raide)"
 L["Clip"] = "Cortar"
 L["Color and opacity of the overlay pulsing on your own auras inside their pandemic window. Enabled in the general aura settings."] = "Cor e opacidade da sobreposição que pulsa nas suas próprias auras dentro da janela de pandemia. Ativada nas configurações gerais de auras."
+L["Color used when an important cast cannot be interrupted."] = "Cor usada quando um lançamento importante não pode ser interrompido."
 L["Color used when the game flags a cast as important, for example a spell that is lethal if not interrupted."] = "Cor usada quando o jogo marca um lançamento como importante, por exemplo um feitiço letal se não for interrompido."
 L["Colors used for dispel type coloring: aura borders, health bar tinting and dispel highlighting."] = "Cores usadas na coloração por tipo de dissipação: bordas de auras, tingimento da barra de vida e borda em destaque."
 L["Contextual auras (group, raid)"] = "Auras contextuais (grupo, raide)"
@@ -78,6 +79,7 @@ L["Hide matching spells"] = "Ocultar os feitiços listados"
 L["Hides the stack count text on all Shadowed Unit Frame auras."] = "Oculta o texto de pilhas em todas as auras do Shadowed Unit Frames."
 L["HoTs & raid frames buffs"] = "HoTs e buffs de quadros de raide"
 L["Important cast"] = "Lançamento importante"
+L["Important cast uninterruptible"] = "Lançamento importante ininterrupto"
 L["Horizontal spacing"] = "Espaçamento horizontal"
 L["How auras in this frame are ordered. Sorting is per section."] = "Como as auras deste quadro são ordenadas. A ordenação é por seção."
 L["Important only"] = "Apenas importantes"
@@ -133,6 +135,7 @@ L["Test mode cannot be toggled while in combat."] = "O modo de teste não pode s
 L["Timer"] = "Temporizador"
 L["Timer font"] = "Fonte do temporizador"
 L["Unit changes will be applied after combat."] = "Mudanças de unidade serão aplicadas após o combate."
+L["The configuration will open after combat."] = "A configuração será aberta após o combate."
 L["Unit frame debuff order"] = "Ordem de debuffs dos quadros de unidade"
 L["Unit frames cannot be unlocked while in combat."] = "Os quadros de unidade não podem ser desbloqueados em combate."
 L["Unknown spell. Enter a spell ID, a spell link or an exact spell name."] = "Feitiço desconhecido. Insira um ID de feitiço, um link de feitiço ou o nome exato."
@@ -874,6 +877,7 @@ L["Heal absorbs"] = [=[Curar absorve
 ]=]
 L["Healing absorb"] = "Cura absorver"
 L["Health"] = "Vida"
+L["Health and power bars ease toward their new value instead of snapping to it."] = "As barras de vida e de poder deslizam até o novo valor em vez de pular diretamente para ele."
 L["Health bar"] = "Barra de Vida"
 L["Health bar color for friendly units."] = [=[Cor da barra de saúde para unidades amigáveis.
 
@@ -1721,6 +1725,7 @@ L["Smart number formating for [curmaxhp], numbers below 1,000,000 are left as is
 L["Smart number formating for [curmaxpp], numbers below 1,000,000 are left as is, numbers above 1,000,000 will use the short version such as 1m."] = [=[Formatação de número inteligente para [curmaxpp], números abaixo de 1.000.000 são deixados como estão, números acima de 1.000.000 usarão a versão curta, como 1m.
 
 ]=]
+L["Smooth bars"] = "Barras suaves"
 L["Solid color to use in the indicator, only used if you do not have use aura icon enabled."] = [=[Cor sólida para usar no indicador, usado somente se você não tiver o ícone de aura de uso ativado.
 
 ]=]

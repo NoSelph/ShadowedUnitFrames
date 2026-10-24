@@ -3,8 +3,8 @@ local L = ShadowUF.L
 local FADE_TIME = 0.30
 
 -- ColorMixin cache for SetVertexColorFromBoolean, rebuilt whenever the layout is applied
-local fillUninterruptible, fillCast, fillChannel, fillImportant
-local bgUninterruptible, bgCast, bgChannel, bgImportant
+local fillUninterruptible, fillCast, fillChannel, fillImportant, fillImportantUninterruptible
+local bgUninterruptible, bgCast, bgChannel, bgImportant, bgImportantUninterruptible
 
 local function refreshCastColors()
 	local colors = ShadowUF.db.profile.castColors
@@ -15,11 +15,13 @@ local function refreshCastColors()
 	fillCast = CreateColor(colors.cast.r, colors.cast.g, colors.cast.b, alpha)
 	fillChannel = CreateColor(colors.channel.r, colors.channel.g, colors.channel.b, alpha)
 	fillImportant = CreateColor(colors.important.r, colors.important.g, colors.important.b, alpha)
+	fillImportantUninterruptible = CreateColor(colors.importantUninterruptible.r, colors.importantUninterruptible.g, colors.importantUninterruptible.b, alpha)
 
 	bgUninterruptible = CreateColor(colors.uninterruptible.r, colors.uninterruptible.g, colors.uninterruptible.b, bgAlpha)
 	bgCast = CreateColor(colors.cast.r, colors.cast.g, colors.cast.b, bgAlpha)
 	bgChannel = CreateColor(colors.channel.r, colors.channel.g, colors.channel.b, bgAlpha)
 	bgImportant = CreateColor(colors.important.r, colors.important.g, colors.important.b, bgAlpha)
+	bgImportantUninterruptible = CreateColor(colors.importantUninterruptible.r, colors.importantUninterruptible.g, colors.importantUninterruptible.b, bgAlpha)
 end
 
 ShadowUF:RegisterModule(Cast, "castBar", L["Cast bar"], true)
@@ -240,7 +242,7 @@ local function setBarColor(self, r, g, b)
 	self.parent:SetBlockColor(self, "castBar", r, g, b)
 end
 
--- Important wins over the interruptible state (duh), both flags may be secret so the base color is resolved natively before the second pick
+-- Important and interruptible states combine, both flags may be secret so each side is resolved natively before the final pick
 local function setCastStateColor(frame, cast, notInterruptible)
 	local fillBase, bgBase = fillCast, bgCast
 	if( cast.isChannelled ) then
@@ -259,7 +261,9 @@ local function setCastStateColor(frame, cast, notInterruptible)
 	end
 	local fill = C_CurveUtil.EvaluateColorFromBoolean(notInterruptible, fillUninterruptible, fillBase)
 	local bg = C_CurveUtil.EvaluateColorFromBoolean(notInterruptible, bgUninterruptible, bgBase)
-	frame:SetBlockColorFromBoolean(cast, "castBar", important, fillImportant, fill, bgImportant, bg)
+	local importantFill = C_CurveUtil.EvaluateColorFromBoolean(notInterruptible, fillImportantUninterruptible, fillImportant)
+	local importantBg = C_CurveUtil.EvaluateColorFromBoolean(notInterruptible, bgImportantUninterruptible, bgImportant)
+	frame:SetBlockColorFromBoolean(cast, "castBar", important, importantFill, fill, importantBg, bg)
 end
 
 -- Cast OnUpdates

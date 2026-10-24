@@ -259,6 +259,7 @@ function ShadowUF:CheckUpgrade()
 	auraColors.removable = auraColors.removable or {r = 1, g = 0.70, b = 0.10}
 	auraColors.pandemic = auraColors.pandemic or {r = 1, g = 1, b = 1, a = 0.35}
 	self.db.profile.castColors.important = self.db.profile.castColors.important or {r = 1.0, g = 0.15, b = 0.6}
+	self.db.profile.castColors.importantUninterruptible = self.db.profile.castColors.importantUninterruptible or {r = 0.439, g = 0.349, b = 0.627}
 
 	if( revision <= 75 ) then
 		-- The group dispel mode folds into the player one, on debuff frames the token becomes the player dispel filter
