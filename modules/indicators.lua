@@ -1,4 +1,4 @@
-local Indicators = {list = {"status", "pvp", "leader", "resurrect", "sumPending", "masterLoot", "raidTarget", "ready", "role", "lfdRole", "class", "phase", "questBoss", "petBattle", "arenaSpec", "happiness"}}
+local Indicators = {list = {"status", "pvp", "leader", "resurrect", "sumPending", "masterLoot", "raidTarget", "ready", "role", "lfdRole", "class", "phase", "questBoss", "petBattle", "arenaSpec", "happiness", "dispel"}}
 
 ShadowUF:RegisterModule(Indicators, "indicators", ShadowUF.L["Indicators"])
 
@@ -26,6 +26,222 @@ local PVP_TEXTURES = {
 	pvpIconHorde = "Interface\\TargetingFrame\\UI-PVP-Horde", prestigePortraitHorde = "Interface\\TargetingFrame\\UI-PVP-Horde",
 	pvpIconAlliance = "Interface\\TargetingFrame\\UI-PVP-Alliance", prestigePortraitAlliance = "Interface\\TargetingFrame\\UI-PVP-Alliance",
 }
+
+-- Dispel type indicator, a slot shows Blizzard's icon for whichever dispellable aura comes first (purgeable buffs on enemies), or one cell per type
+-- The indicator texture is cell 1 and the others hang off it, the slot buttons just copy the cell rects, so anchor/size/x/y still work on buttons we can't touch once they exist
+local DISPEL_CELL_TYPES = {"Magic", "Curse", "Disease", "Poison", "Bleed", "Enrage"}
+-- No Enrage icon in the raid frame set, the combat timeline glyph looks like it belongs so it does the job
+local DISPEL_ASSETS = {
+	Magic = { asset = "RaidFrame-Icon-DebuffMagic" },
+	Curse = { asset = "RaidFrame-Icon-DebuffCurse" },
+	Disease = { asset = "RaidFrame-Icon-DebuffDisease" },
+	Poison = { asset = "RaidFrame-Icon-DebuffPoison" },
+	Bleed = { asset = "RaidFrame-Icon-DebuffBleed" },
+	Enrage = { asset = "icons_64x64_enrage" },
+}
+local DISPEL_CELL_SPACING = 1
+local DISPEL_GROWTH = {
+	LEFT = {point = "RIGHT", relativePoint = "LEFT", x = -DISPEL_CELL_SPACING, y = 0},
+	RIGHT = {point = "LEFT", relativePoint = "RIGHT", x = DISPEL_CELL_SPACING, y = 0},
+	UP = {point = "BOTTOM", relativePoint = "TOP", x = 0, y = DISPEL_CELL_SPACING},
+	DOWN = {point = "TOP", relativePoint = "BOTTOM", x = 0, y = -DISPEL_CELL_SPACING},
+}
+local MUTE_CANDIDATES = { includeDispelTypes = {} }
+
+local function containersAvailable()
+	local auras = ShadowUF.modules.auras
+	return auras and auras.hasContainers
+end
+
+local function getDispelFilters(mode)
+	local health = ShadowUF.modules.healthBar
+	return health and health.GetDispelFilters and health.GetDispelFilters(mode)
+end
+
+local pendingDispel = {}
+local dispelRegenWatcher
+local function queueDispel(frame)
+	pendingDispel[frame] = true
+	if( not dispelRegenWatcher ) then
+		dispelRegenWatcher = CreateFrame("Frame")
+		dispelRegenWatcher:RegisterEvent("PLAYER_REGEN_ENABLED")
+		dispelRegenWatcher:SetScript("OnEvent", function()
+			for pendingFrame in pairs(pendingDispel) do
+				pendingDispel[pendingFrame] = nil
+				Indicators:UpdateDispel(pendingFrame)
+			end
+		end)
+	end
+end
+
+local function getDispelCells(frame)
+	if( not frame.indicators.dispelCells ) then
+		frame.indicators.dispelCells = { frame.indicators.dispel }
+	end
+	return frame.indicators.dispelCells
+end
+
+local function layoutDispelCells(frame, config)
+	local cells = getDispelCells(frame)
+	local count = config.perType and #DISPEL_CELL_TYPES or 1
+	local growth = DISPEL_GROWTH[config.growth] or DISPEL_GROWTH.LEFT
+	for index = 2, count do
+		local cell = cells[index]
+		if( not cell ) then
+			cell = frame.indicators:CreateTexture(nil, "OVERLAY")
+			cells[index] = cell
+		end
+		cell:SetSize(config.size, config.size)
+		cell:ClearAllPoints()
+		cell:SetPoint(growth.point, cells[index - 1], growth.relativePoint, growth.x, growth.y)
+	end
+end
+
+local function hideDispelCells(frame)
+	for _, cell in ipairs(getDispelCells(frame)) do
+		cell:Hide()
+	end
+end
+
+local function retireDispelContainer(frame)
+	local container = frame.indicators.dispelContainer
+	if( not container ) then return end
+	container:SetEnabled(false)
+	container:Hide()
+	frame.indicators.dispelContainer = nil
+	frame.indicators.dispelSlots = nil
+	frame.indicators.dispelFilter = nil
+	frame.indicators.dispelMuted = nil
+end
+
+local function makeDispelSlotStyler(frame, cell)
+	return function(button)
+		button:ClearAllPoints()
+		button:SetAllPoints(cell)
+		button:SetFrameLevel(frame.indicators:GetFrameLevel() + 1)
+
+		local icon = button:CreateTexture(nil, "OVERLAY")
+		icon:SetAllPoints(button)
+		pcall(button.AddDispelTypeTexture, button, icon, { style = Enum.CustomAuraButtonDispelTypeTextureStyle and Enum.CustomAuraButtonDispelTypeTextureStyle.CustomAsset or 4, showWhenHarmful = true, showWhenHelpful = true, customDispelAssetMap = DISPEL_ASSETS })
+		button:SetMouseMotionEnabled(false)
+	end
+end
+
+local function createDispelContainer(frame, config, filter, signature)
+	if( InCombatLockdown() ) then
+		queueDispel(frame)
+		return false
+	end
+
+	local auras = ShadowUF.modules.auras
+	layoutDispelCells(frame, config)
+	local cells = getDispelCells(frame)
+	pcall(function()
+		local container = CreateFrame("AuraContainer", nil, frame.indicators, "CustomAuraContainerTemplate")
+		if( auras.ApplyContainerDefaults ) then auras:ApplyContainerDefaults(container) end
+		container:SetPoint("TOPLEFT", frame)
+		container:SetSize(1, 1)
+
+		-- Keep each slot's own candidates around, muting swaps them out and unmuting needs them back
+		local slots = {}
+		if( config.perType ) then
+			for index, dispelType in ipairs(DISPEL_CELL_TYPES) do
+				local candidates = { includeDispelTypes = { [dispelType] = true } }
+				container:AddAuraSlot("dispel-" .. dispelType, filter, { candidateFilters = candidates, initializeFrame = makeDispelSlotStyler(frame, cells[index]) })
+				slots["dispel-" .. dispelType] = candidates
+			end
+		else
+			container:AddAuraSlot("dispel", filter, { initializeFrame = makeDispelSlotStyler(frame, cells[1]) })
+			slots.dispel = false
+		end
+
+		frame.indicators.dispelContainer = container
+		frame.indicators.dispelSlots = slots
+		frame.indicators.dispelFilter = filter
+		frame.indicators.dispelSignature = signature
+	end)
+	return frame.indicators.dispelContainer ~= nil
+end
+
+-- Slots stay quiet in config mode, plain atlases fill in so the thing can still be dragged around
+local function showDispelPlaceholders(frame, config)
+	local cells = getDispelCells(frame)
+	for index = 1, (config.perType and #DISPEL_CELL_TYPES or 1) do
+		local cell = cells[index]
+		if( cell ) then
+			cell:SetAtlas(DISPEL_ASSETS[DISPEL_CELL_TYPES[index]].asset)
+			cell:Show()
+		end
+	end
+end
+
+function Indicators:UpdateDispel(frame)
+	local indicator = frame.indicators.dispel
+	if( not indicator ) then return end
+	local config = ShadowUF.db.profile.units[frame.unitType].indicators.dispel
+	local filters = indicator.enabled and config and getDispelFilters(config.mode)
+	local container = frame.indicators.dispelContainer
+
+	if( not filters or frame.configMode or not containersAvailable() ) then
+		if( container ) then container:SetEnabled(false) end
+		if( filters and frame.configMode ) then
+			showDispelPlaceholders(frame, config)
+		else
+			hideDispelCells(frame)
+		end
+		return
+	end
+	hideDispelCells(frame)
+
+	-- Can't add or drop slots afterwards, so a change throws the container away and builds a fresh one, out of restrictions only
+	local auras = ShadowUF.modules.auras
+	local signature = tostring(config.perType)
+	if( container and frame.indicators.dispelSignature ~= signature ) then
+		if( InCombatLockdown() or (auras.AurasAreSecret and auras.AurasAreSecret()) ) then
+			queueDispel(frame)
+		else
+			retireDispelContainer(frame)
+			container = nil
+		end
+	end
+	if( not container ) then
+		if( not createDispelContainer(frame, config, filters.assist, signature) ) then return end
+		container = frame.indicators.dispelContainer
+	end
+
+	local dispelFilter = frame.indicators.dispelFilter or filters.assist
+	local muted = frame.indicators.dispelMuted
+	local state = ShadowUF.GetUnitReactionState(frame.unitSUF)
+	if( state == "assist" ) then
+		dispelFilter = filters.assist
+		muted = false
+	elseif( state == "attack" ) then
+		dispelFilter = filters.noassist
+		muted = false
+	else
+		muted = true
+	end
+
+	local slots = frame.indicators.dispelSlots
+	if( frame.indicators.dispelFilter ~= dispelFilter ) then
+		local switched = true
+		for key in pairs(slots) do
+			switched = pcall(container.SetAuraSlotFilterString, container, key, dispelFilter) and switched
+		end
+		if( switched ) then frame.indicators.dispelFilter = dispelFilter end
+	end
+	if( muted ~= frame.indicators.dispelMuted ) then
+		local switched = true
+		for key, candidates in pairs(slots) do
+			switched = pcall(container.SetAuraSlotCandidateFilters, container, key, muted and MUTE_CANDIDATES or candidates or nil) and switched
+		end
+		if( switched ) then frame.indicators.dispelMuted = muted end
+	end
+
+	local ok = pcall(container.SetUnit, container, frame.unitSUF)
+	container:SetEnabled(ok and true or false)
+	if( ok ) then pcall(container.UpdateAllAuras, container) end
+end
 
 -- roleIconTexture is an empty string while the icon is hidden, which the setter may reject, so alpha alone carries the (possibly secret) visibility
 -- A crop left by the legacy sheet stays in force under an atlas, so the coordinates go back to full before the atlas lands
@@ -599,6 +815,15 @@ function Indicators:OnEnable(frame)
 		frame.indicators.happiness = frame.indicators.happiness or frame.indicators:CreateTexture(nil, "OVERLAY")
 	end
 
+	if( config.indicators.dispel and config.indicators.dispel.enabled ) then
+		frame:RegisterUpdateFunc(self, "UpdateDispel")
+		frame:RegisterUnitEvent("UNIT_FACTION", self, "UpdateDispel")
+
+		frame.indicators.dispel = frame.indicators.dispel or frame.indicators:CreateTexture(nil, "OVERLAY")
+	elseif( frame.indicators.dispelContainer ) then
+		frame.indicators.dispelContainer:SetEnabled(false)
+	end
+
 	-- As they all share the function, register it as long as one is active
 	if( frame.indicators.leader or frame.indicators.masterLoot or frame.indicators.role or ( frame.unitSUF ~= "player" and frame.indicators.lfdRole ) ) then
 		frame:RegisterNormalEvent("GROUP_ROSTER_UPDATE", self, "GroupRosterUpdate")
@@ -620,6 +845,10 @@ function Indicators:OnDisable(frame)
 		end
 	end
 	if( frame.indicators.pvpPrestige ) then frame.indicators.pvpPrestige:Hide() end
+
+	pendingDispel[frame] = nil
+	if( frame.indicators.dispelContainer ) then frame.indicators.dispelContainer:SetEnabled(false) end
+	if( frame.indicators.dispel ) then hideDispelCells(frame) end
 end
 
 function Indicators:OnLayoutApplied(frame, config)
@@ -638,6 +867,11 @@ function Indicators:OnLayoutApplied(frame, config)
 				indicator.enabled = nil
 				indicator:Hide()
 			end
+		end
+
+		local dispelConfig = config.indicators.dispel
+		if( frame.indicators.dispel and dispelConfig and dispelConfig.enabled and dispelConfig.size ) then
+			layoutDispelCells(frame, dispelConfig)
 		end
 
 		-- Disable the polling

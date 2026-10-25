@@ -58,6 +58,8 @@ L["Disable right-click cancel"] = "Desativar cancelamento com clique direito"
 L["Disable stack counts"] = "Desativar contador de pilhas"
 L["Disable stealable coloring"] = "Desativar cor de buffs roubáveis"
 L["Disease"] = "Doença"
+L["Dispel Type"] = "Tipo de dissipação"
+L["Dispel filter"] = "Filtro de dissipação"
 L["Dispellable Auras"] = "Auras dissipáveis"
 L["DND"] = "DND"
 L["DND:%s"] = "DND:%s"
@@ -69,6 +71,7 @@ L["Expiration"] = "Expiração"
 L["Expiration (yours first)"] = "Expiração (suas primeiro)"
 L["F"] = "F"
 L["Filter"] = "Filtro"
+L["Fixed icon slots for Magic, Curse, Disease, Poison, Bleed and Enrage instead of a single icon for the first dispellable aura."] = "Espaços de ícone fixos para Magia, Maldição, Doença, Veneno, Sangramento e Fúria em vez de um único ícone para a primeira aura dissipável."
 L["Frame changes are deferred while in combat and will apply afterwards."] = "Mudanças de quadro são adiadas em combate e aplicadas depois."
 L["Gap in pixels between aura icons on the same row, negative values overlap them."] = "Espaço em pixels entre os ícones de aura na mesma fileira, valores negativos os sobrepõem."
 L["Gap in pixels between aura rows, negative values overlap them."] = "Espaço em pixels entre as fileiras de auras, valores negativos as sobrepõem."
@@ -376,6 +379,7 @@ L["BG ToT"] = [=[BG ToT
 ]=]
 L["Blacklists"] = "Lista negra"
 L["Blizzard"] = "Blizzard"
+L["Blizzard icon for the dispel type of the first dispellable aura, debuffs on friendly units and purgeable buffs on hostile ones."] = "Ícone da Blizzard do tipo de dissipação da primeira aura dissipável, penalidades em unidades amigas e bônus purgáveis em unidades hostis."
 L["Border"] = "Borda"
 L["Border alpha"] = "Alpha da aresta"
 L["Border color"] = "Cor da borda"
@@ -1253,6 +1257,7 @@ L["On mouseover"] = [=[Ao passar o mouse
 
 ]=]
 L["On rare mobs"] = "Em mobs raros"
+L["One icon per dispel type"] = "Um ícone por tipo de dissipação"
 L["Only active this aura inside an indicator if the group member does not have the aura."] = [=[Somente ative essa aura dentro de um indicador se o membro do grupo não tiver a aura.
 
 ]=]

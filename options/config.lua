@@ -119,7 +119,7 @@ local PAGE_DESC = {
 	["tags"] = L["Advanced tag management, allows you to add your own custom tags."],
 	["filter"] = L["Simple aura filtering by whitelists and blacklists."],
 }
-local INDICATOR_NAMES = {["questBoss"] = L["Quest Boss"], ["leader"] = L["Leader / Assist"], ["lfdRole"] = L["Class Role"], ["masterLoot"] = L["Master Looter"], ["pvp"] = L["PvP Flag"], ["raidTarget"] = L["Raid Target"], ["ready"] = L["Ready Status"], ["role"] = L["Raid Role"], ["status"] = L["Combat Status"], ["class"] = L["Class Icon"], ["resurrect"] = L["Resurrect Status"], ["sumPending"] = L["Summon Pending"], ["phase"] = L["Other Party/Phase Status"], ["petBattle"] = L["Pet Battle"], ["arenaSpec"] = L["Arena Spec"], ["happiness"] = L["Pet Happiness"]}
+local INDICATOR_NAMES = {["questBoss"] = L["Quest Boss"], ["leader"] = L["Leader / Assist"], ["lfdRole"] = L["Class Role"], ["masterLoot"] = L["Master Looter"], ["pvp"] = L["PvP Flag"], ["raidTarget"] = L["Raid Target"], ["ready"] = L["Ready Status"], ["role"] = L["Raid Role"], ["status"] = L["Combat Status"], ["class"] = L["Class Icon"], ["resurrect"] = L["Resurrect Status"], ["sumPending"] = L["Summon Pending"], ["phase"] = L["Other Party/Phase Status"], ["petBattle"] = L["Pet Battle"], ["arenaSpec"] = L["Arena Spec"], ["happiness"] = L["Pet Happiness"], ["dispel"] = L["Dispel Type"]}
 local AREA_NAMES = {["arena"] = L["Arenas"],["none"] = L["Everywhere else"], ["party"] = L["Party instances"], ["pvp"] = L["Battleground"], ["raid"] = L["Raid instances"], ["neighborhood"] = L["Neighborhood"]}
 local INDICATOR_DESC = {
 		["leader"] = L["Crown indicator for group leader or assistants."], ["lfdRole"] = L["Role the unit is playing."],
@@ -127,7 +127,8 @@ local INDICATOR_DESC = {
 		["raidTarget"] = L["Raid target indicator."], ["ready"] = L["Ready status of group members."], ["phase"] = L["Shows when a party member is in a different phase or another group."],
 		["questBoss"] = L["Shows that a NPC is a boss for a quest."], ["petBattle"] = L["Shows what kind of pet the unit is for pet battles."], ["happiness"] = L["Indicator for the current pet happiness."],
 		["role"] = L["Raid role indicator, adds a shield indicator for main tanks and a sword icon for main assists."], ["status"] = L["Status indicator, shows if the unit is currently in combat. For the player it will also show if you are rested."], ["class"] = L["Class icon for players."],
-		["arenaSpec"] = L["Talent spec of your arena opponents."]
+		["arenaSpec"] = L["Talent spec of your arena opponents."],
+		["dispel"] = L["Blizzard icon for the dispel type of the first dispellable aura, debuffs on friendly units and purgeable buffs on hostile ones."]
 }
 local TAG_GROUPS = {["classification"] = L["Classifications"], ["health"] = L["Health"], ["misc"] = L["Miscellaneous"], ["playerthreat"] = L["Player threat"], ["power"] = L["Power"], ["status"] = L["Status"], ["threat"] = L["Threat"], --[==[["raid"] = L["Raid"],]==] ["classspec"] = L["Class Specific"], ["classtimer"] = L["Class Timer"]}
 
@@ -4260,6 +4261,30 @@ local function loadUnitOptions()
 				name = L["Enable indicator"],
 				hidden = false,
 				arg = "indicators.$parent.enabled",
+			},
+			mode = {
+				order = 0.2,
+				type = "select",
+				name = L["Dispel filter"],
+				values = {["PLAYER_DISPELLABLE"] = L["Dispellable by me"], ["DISPELLABLE"] = L["Any dispellable"]},
+				hidden = function(info) return info[#(info) - 1] ~= "dispel" end,
+				arg = "indicators.$parent.mode",
+			},
+			perType = {
+				order = 0.4,
+				type = "toggle",
+				name = L["One icon per dispel type"],
+				desc = L["Fixed icon slots for Magic, Curse, Disease, Poison, Bleed and Enrage instead of a single icon for the first dispellable aura."],
+				hidden = function(info) return info[#(info) - 1] ~= "dispel" end,
+				arg = "indicators.$parent.perType",
+			},
+			growth = {
+				order = 0.5,
+				type = "select",
+				name = L["Growth"],
+				values = {["LEFT"] = L["Left"], ["RIGHT"] = L["Right"], ["UP"] = L["Up"], ["DOWN"] = L["Down"]},
+				hidden = function(info) return info[#(info) - 1] ~= "dispel" or not getVariable(info[2], "indicators", "dispel", "perType") end,
+				arg = "indicators.$parent.growth",
 			},
 			sep1 = {
 				order = 1,

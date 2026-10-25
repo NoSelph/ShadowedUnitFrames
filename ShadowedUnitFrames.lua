@@ -917,6 +917,10 @@ function ShadowUF:LoadUnitDefaults()
 			self.defaults.profile.units[unit].indicators.pvp = {enabled = true, size = 0}
 		end
 
+		if( not self.fakeUnits[unit] ) then
+			self.defaults.profile.units[unit].indicators.dispel = {enabled = false, anchorTo = "$parent", anchorPoint = "TR", size = 14, x = -3, y = -16, mode = "PLAYER_DISPELLABLE", perType = false, growth = "LEFT"}
+		end
+
 		self.defaults.profile.units[unit].altPowerBar = {enabled = not ShadowUF.fakeUnits[unit]}
 	end
 
