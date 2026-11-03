@@ -4475,6 +4475,14 @@ local function loadUnitOptions()
 								hidden = false,
 								isPercent = true,
 							},
+							healthAware = {
+								order = 3,
+								type = "toggle",
+								name = L["Don't fade while the unit is wounded"],
+								desc = L["Below full health the frame keeps its combat alpha instead of fading out."],
+								hidden = false,
+								arg = "fader.healthAware",
+							},
 						}
 					},
 					range = {

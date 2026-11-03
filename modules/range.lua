@@ -109,18 +109,6 @@ local UnitPhaseReason = function(unit)
 	return phase
 end
 
-local function SafeAlphaFromBool(v, inAlpha, oorAlpha)
-    local ok, alpha = pcall(function()
-        return v and inAlpha or oorAlpha
-    end)
-    if ok then
-        return alpha
-    end
-    -- If v is a secret boolean (or otherwise forbidden), we can't branch on it.
-    -- Default to "in range" so we don't dim incorrectly and don't error.
-    return inAlpha
-end
-
 local scrub = scrubsecretvalues or function(v) return v end
 
 
@@ -147,7 +135,7 @@ local function checkRange(self)
     end
 
     if (not UnitIsConnected(frame.unitSUF)) or UnitPhaseReason(frame.unitSUF) then
-        frame:SetRangeAlpha(oorAlpha)
+        frame:SetRangeState(false, inAlpha, oorAlpha)
         return
     end
 
@@ -155,26 +143,21 @@ local function checkRange(self)
     if spell then
         local inRange = SafeIsSpellInRange(spell, frame.unitSUF)
         if inRange ~= nil then
-            frame:SetRangeAlpha(inRange and inAlpha or oorAlpha)
+            frame:SetRangeState(inRange, inAlpha, oorAlpha)
             return
         end
         -- nil = inconclusive (e.g. C_Spell.IsSpellInRange returns nil for raidN tokens)
         -- Fall through to UnitInRange for group members
     end
 
-    -- Fallback: UnitInRange for group members (handles secret booleans via SetAlphaFromBoolean)
+    -- Fallback: UnitInRange for group members, a secret boolean passes through and the frame or the fader resolves it natively
     if not ShadowUF.IsUnitIdentitySecret(frame.unitSUF) and (UnitInRaid(frame.unitSUF) or UnitInParty(frame.unitSUF)) then
         local ok, inRange = pcall(UnitInRange, frame.unitSUF)
-        if ok and not frame.disableRangeAlpha then
-            if frame.SetAlphaFromBoolean then
-                frame:SetAlphaFromBoolean(inRange, inAlpha, oorAlpha)
-            else
-                frame:SetRangeAlpha(SafeAlphaFromBool(inRange, inAlpha, oorAlpha))
-            end
-        elseif not ok then
-            frame:SetRangeAlpha(inAlpha)
+        if ok and type(inRange) == "boolean" then
+            frame:SetRangeState(inRange, inAlpha, oorAlpha)
+        else
+            frame:SetRangeState(true, inAlpha, oorAlpha)
         end
-        -- When disableRangeAlpha (fader active): skip, next tick after release will reapply.
         return
     end
 
@@ -182,12 +165,12 @@ local function checkRange(self)
     if reaction == "attack" or not InCombatLockdown() then
         local ok, inRange = pcall(CheckInteractDistance, frame.unitSUF, 4)
         if ok and inRange ~= nil and not (issecretvalue and issecretvalue(inRange)) then
-            frame:SetRangeAlpha(inRange and inAlpha or oorAlpha)
+            frame:SetRangeState(inRange, inAlpha, oorAlpha)
             return
         end
     end
 
-    frame:SetRangeAlpha(inAlpha)
+    frame:SetRangeState(true, inAlpha, oorAlpha)
 end
 
 local function updateSpellCache(category)
@@ -268,7 +251,8 @@ function Range:ForceUpdate(frame)
 	-- UnitIsUnit can return secret values for fake units, boolean test must be inside pcall
 	local ok, isPlayer = pcall(function() return UnitIsUnit(frame.unitSUF, "player") and true or false end)
 	if( ok and isPlayer ) then
-		frame:SetRangeAlpha(ShadowUF.db.profile.units[frame.unitType].range.inAlpha)
+		local cfg = ShadowUF.db.profile.units[frame.unitType].range
+		frame:SetRangeState(true, cfg.inAlpha, cfg.oorAlpha)
 		cancelTimer(frame)
 	else
 		createTimer(frame)
@@ -296,7 +280,7 @@ function Range:OnDisable(frame)
 
 	if( frame.range ) then
 		cancelTimer(frame)
-		frame:SetRangeAlpha(1.0)
+		frame:ClearRangeState()
 	end
 end
 

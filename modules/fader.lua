@@ -2,75 +2,137 @@ local Fader = {}
 local powerDepletes = {[Enum.PowerType.Mana] = true, [Enum.PowerType.Energy] = true, [Enum.PowerType.Focus] = true}
 ShadowUF:RegisterModule(Fader, "fader", ShadowUF.L["Combat fader"])
 
--- TODO: Remove once Blizzard fixes cooldown wheels not taking parents alpha
-local function tempAuraFader(frame, alpha)
-	if( not frame.auras ) then return end
+local canCurve = C_CurveUtil and C_CurveUtil.CreateCurve and C_CurveUtil.EvaluateColorValueFromBoolean and UnitHealthPercent and true or false
 
-	local childAlpha = (ShadowUF.db.profile.auras.cooldownSwipeAlpha or 0.8) * alpha
-	if( frame.auras.buffs ) then
-		for id, button in pairs(frame.auras.buffs.buttons) do
-			button.cooldown:SetSwipeColor(0, 0, 0, childAlpha)
-		end
-	end
+local function newCurve()
+	local curve = C_CurveUtil.CreateCurve()
+	curve:SetType(Enum.LuaCurveType.Step)
+	return curve
+end
 
-	if( frame.auras.debuffs ) then
-		for id, button in pairs(frame.auras.debuffs.buttons) do
-			button.cooldown:SetSwipeColor(0, 0, 0, childAlpha)
+local function setCurve(curve, low, full)
+	curve:ClearPoints()
+	curve:AddPoint(0, low)
+	curve:AddPoint(1, full)
+end
+
+local function healthValue(frame, curve, fallback)
+	local ok, value = pcall(UnitHealthPercent, frame.unitSUF, true, curve)
+	if( ok and value ) then return value end
+	return fallback
+end
+
+-- With the health curves on, the idle fade lives in each curve's full-health point sliding toward the inactive alpha while the wounded point stays put, so a wounded unit never fades and a full one fades on schedule
+-- Range writes join through the stored range state, the plain or secret boolean picks between the in-range and out-of-range curves natively
+local function applyHealthAlpha(frame)
+	local fader = frame.fader
+	local config = ShadowUF.db.profile.units[frame.unitType].fader
+	local progress, inactive = fader.progress, config.inactiveAlpha
+	if( frame.rangeSet ) then
+		local inAlpha, oorAlpha = frame.rangeInAlpha, frame.rangeOorAlpha
+		if( fader.builtProgress ~= progress or fader.builtIn ~= inAlpha or fader.builtOOR ~= oorAlpha ) then
+			setCurve(fader.curveIn, inAlpha, inAlpha + (inactive - inAlpha) * progress)
+			setCurve(fader.curveOOR, oorAlpha, oorAlpha + (inactive - oorAlpha) * progress)
+			fader.builtProgress, fader.builtIn, fader.builtOOR = progress, inAlpha, oorAlpha
 		end
+		frame:SetAlpha(C_CurveUtil.EvaluateColorValueFromBoolean(frame.rangeInRange, healthValue(frame, fader.curveIn, inAlpha), healthValue(frame, fader.curveOOR, oorAlpha)))
+	else
+		local combat = config.combatAlpha
+		if( fader.builtProgress ~= progress or fader.builtIn ~= combat or fader.builtOOR ~= nil ) then
+			setCurve(fader.curve, combat, combat + (inactive - combat) * progress)
+			fader.builtProgress, fader.builtIn, fader.builtOOR = progress, combat, nil
+		end
+		frame:SetAlpha(healthValue(frame, fader.curve, combat))
 	end
 end
 
 local function faderUpdate(self, elapsed)
 	self.timeElapsed = self.timeElapsed + elapsed
-	if( self.timeElapsed >= self.fadeTime ) then
-		tempAuraFader(self.parent, self.alphaEnd)
-		self.parent:SetAlpha(self.alphaEnd)
-		self:Hide()
-
-		if( self.fadeType == "in" ) then
-			self.parent:DisableRangeAlpha(false)
-		end
-		return
-	end
-
-	local a
-	if( self.fadeType == "in" ) then
-		a = (self.timeElapsed / self.fadeTime) * (self.alphaEnd - self.alphaStart) + self.alphaStart
+	local frame = self.parent
+	local done = self.timeElapsed >= self.fadeTime
+	local fraction = done and 1 or self.timeElapsed / self.fadeTime
+	if( self.healthAware ) then
+		self.progress = self.progressStart + (self.progressEnd - self.progressStart) * fraction
+		applyHealthAlpha(frame)
 	else
-		a = ((self.fadeTime - self.timeElapsed) / self.fadeTime) * (self.alphaStart - self.alphaEnd) + self.alphaEnd
+		frame:SetAlpha(self.alphaStart + (self.alphaEnd - self.alphaStart) * fraction)
 	end
-	self.parent:SetAlpha(a)
-	tempAuraFader(self.parent, a)
+
+	if( done ) then
+		self:Hide()
+		if( self.fadeType == "in" and not self.healthAware ) then
+			frame:DisableRangeAlpha(false)
+		end
+	end
 end
 
-local function startFading(self, type, alpha, speedyFade)
-	if( self.fader.fadeType == type ) then return end
-	if( type == "out" ) then
-		self:DisableRangeAlpha(true)
-	end
-
-	self.fader.fadeTime = speedyFade and 0.15 or type == "in" and 0.25 or type == "out" and 0.75
-	self.fader.fadeType = type
-	self.fader.timeElapsed = 0
-	-- GetAlpha() returns secret if range used SetAlphaFromBoolean with secret values.
-	-- Use previous fade target as best approximation when alpha is secret.
-	if self.HasSecretAspect and self:HasSecretAspect(Enum.SecretAspect.Alpha) then
-		self.fader.alphaStart = self.fader.alphaEnd or 1.0
+local function startFading(frame, fadeType, speedy)
+	local fader = frame.fader
+	if( fader.fadeType == fadeType ) then return false end
+	local config = ShadowUF.db.profile.units[frame.unitType].fader
+	fader.fadeType = fadeType
+	fader.fadeTime = speedy and 0.15 or fadeType == "in" and 0.25 or 0.75
+	fader.timeElapsed = 0
+	if( fader.healthAware ) then
+		fader.progressStart = fader.progress
+		fader.progressEnd = fadeType == "in" and 0 or 1
 	else
-		self.fader.alphaStart = self:GetAlpha()
+		if( fadeType == "out" ) then
+			frame:DisableRangeAlpha(true)
+		end
+		-- GetAlpha reads secret once the range module used SetAlphaFromBoolean, the previous fade target is the best approximation then
+		if( frame.HasSecretAspect and frame:HasSecretAspect(Enum.SecretAspect.Alpha) ) then
+			fader.alphaStart = fader.alphaEnd or 1.0
+		else
+			fader.alphaStart = frame:GetAlpha()
+		end
+		fader.alphaEnd = fadeType == "in" and config.combatAlpha or config.inactiveAlpha
 	end
-	self.fader.alphaEnd = alpha
-	self.fader:Show()
+	fader:Show()
+	return true
+end
+
+local function powerValues(unit)
+	return UnitPowerType(unit), UnitPower(unit), UnitPowerMax(unit)
+end
+
+-- Power only counts while it reads plain, a secret reading never triggers the fade
+local function powerNotFull(unit)
+	local ok, powerType, power, maxPower = pcall(powerValues, unit)
+	if( not ok or not powerDepletes[powerType] or issecretvalue(power) or issecretvalue(maxPower) ) then return false end
+	return power ~= maxPower
+end
+
+local function configure(frame)
+	local fader = frame.fader
+	fader.healthAware = canCurve and ShadowUF.db.profile.units[frame.unitType].fader.healthAware or false
+	fader.routeRange = fader.healthAware
+	fader.builtProgress = nil
+	if( fader.healthAware and not fader.curve ) then
+		fader.curve, fader.curveIn, fader.curveOOR = newCurve(), newCurve(), newCurve()
+	end
+end
+
+-- Range writes land here while the health curves own the alpha, a running fade picks the new state up on its next tick
+function Fader:ApplyRange(frame)
+	if( not frame.fader:IsShown() ) then
+		applyHealthAlpha(frame)
+	end
 end
 
 function Fader:OnEnable(frame)
-	if( not frame.fader ) then
-		frame.fader = CreateFrame("Frame", nil, frame)
-		frame.fader.timeElapsed = 0
-		frame.fader.parent = frame
-		frame.fader:SetScript("OnUpdate", faderUpdate)
-		frame.fader:Hide()
+	local fader = frame.fader
+	if( not fader ) then
+		fader = CreateFrame("Frame", nil, frame)
+		fader.parent = frame
+		fader:SetScript("OnUpdate", faderUpdate)
+		fader:Hide()
+		frame.fader = fader
 	end
+	fader.active = true
+	fader.fadeType = nil
+	fader.progress = 0
+	configure(frame)
 
 	frame:RegisterNormalEvent("PLAYER_REGEN_ENABLED", self, "Update")
 	frame:RegisterNormalEvent("PLAYER_REGEN_DISABLED", self, "Update")
@@ -86,18 +148,21 @@ end
 function Fader:OnLayoutApplied(frame)
 	if( frame.visibility.fader ) then
 		frame.fader.fadeType = nil
+		configure(frame)
 		frame:DisableRangeAlpha(false)
 	end
 end
 
 function Fader:OnDisable(frame)
 	frame:UnregisterAll(self)
-	frame:SetAlpha(1.0)
-
 	if( frame.fader ) then
+		frame.fader.active = false
+		frame.fader.routeRange = false
 		frame.fader.fadeType = nil
 		frame.fader:Hide()
 	end
+	frame:SetAlpha(1.0)
+	frame:DisableRangeAlpha(false)
 end
 
 -- While we're in combat, we don't care about the other events so we might as well unregister them
@@ -127,7 +192,6 @@ function Fader:PLAYER_REGEN_DISABLED(frame, event)
 	frame:UnregisterSingleEvent("UNIT_MAXPOWER", self)
 end
 
-
 local activeCastID
 function Fader:CastStart(frame, event, unit, id)
 	if( unit ~= "player" or activeCastID == id ) then return end
@@ -145,26 +209,21 @@ function Fader:CastStop(frame, event, unit, id)
 	self:Update(frame)
 end
 
-
 function Fader:Update(frame, event)
-	local okPT, pt = pcall(UnitPowerType, frame.unitSUF)
-	-- In combat, fade back in
+	local fader = frame.fader
+	local started
 	if( InCombatLockdown() or event == "PLAYER_REGEN_DISABLED" ) then
-		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha)
-	-- Player is casting, fade in
-	elseif( frame.fader.playerCasting ) then
-		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha, true)
-	-- Ether mana or energy is not at 100%, fade in
-	elseif( okPT and powerDepletes[pt] and ShadowUF:SafeMath(function() return UnitPower(frame.unitSUF) ~= UnitPowerMax(frame.unitSUF) end) ) then
-		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha)
-	-- Health is not at max, fade in
-	elseif( ShadowUF:SafeMath(function() return UnitHealth(frame.unitSUF) ~= UnitHealthMax(frame.unitSUF) end) ) then
-		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha)
-	-- Targetting somebody, fade in
-	elseif( frame.unitType == "player" and UnitExists("target") ) then
-		startFading(frame, "in", ShadowUF.db.profile.units[frame.unitType].fader.combatAlpha)
-	-- Nothing else? Fade out!
+		started = startFading(frame, "in")
+	elseif( fader.playerCasting ) then
+		started = startFading(frame, "in", true)
+	elseif( ( frame.unitType == "player" and UnitExists("target") ) or powerNotFull(frame.unitSUF) ) then
+		started = startFading(frame, "in")
 	else
-		startFading(frame, "out", ShadowUF.db.profile.units[frame.unitType].fader.inactiveAlpha)
+		started = startFading(frame, "out")
+	end
+
+	-- Settled with the curves on, a health change still needs a fresh evaluation
+	if( not started and fader.healthAware and not fader:IsShown() ) then
+		applyHealthAlpha(frame)
 	end
 end

@@ -185,20 +185,39 @@ local function UnregisterAll(self, handler)
 	end
 end
 
--- Handles setting alphas in a way so combat fader and range checker don't override each other
-local function DisableRangeAlpha(self, toggle)
-	self.disableRangeAlpha = toggle
-
-	if( not toggle and self.rangeAlpha ) then
-		self:SetAlpha(self.rangeAlpha)
+-- Range and the combat fader share the frame alpha, the fader cuts the range while faded out and, with its health curves on, folds the range state into its own composition
+local function applyRangeState(self)
+	if( self.disableRangeAlpha or not self.rangeSet ) then return end
+	if( self.fader and self.fader.active and self.fader.routeRange ) then
+		ShadowUF.modules.fader:ApplyRange(self)
+	elseif( issecretvalue(self.rangeInRange) ) then
+		self:SetAlphaFromBoolean(self.rangeInRange, self.rangeInAlpha, self.rangeOorAlpha)
+	else
+		self:SetAlpha(self.rangeInRange and self.rangeInAlpha or self.rangeOorAlpha)
 	end
 end
 
-local function SetRangeAlpha(self, alpha)
-	if( not self.disableRangeAlpha ) then
-		self:SetAlpha(alpha)
+local function DisableRangeAlpha(self, toggle)
+	self.disableRangeAlpha = toggle
+	if( not toggle ) then
+		applyRangeState(self)
+	end
+end
+
+-- inRange may be a secret boolean, it only ever reaches native sinks
+local function SetRangeState(self, inRange, inAlpha, oorAlpha)
+	self.rangeSet = true
+	self.rangeInRange, self.rangeInAlpha, self.rangeOorAlpha = inRange, inAlpha, oorAlpha
+	applyRangeState(self)
+end
+
+local function ClearRangeState(self)
+	self.rangeSet = false
+	if( self.disableRangeAlpha ) then return end
+	if( self.fader and self.fader.active and self.fader.routeRange ) then
+		ShadowUF.modules.fader:ApplyRange(self)
 	else
-		self.rangeAlpha = alpha
+		self:SetAlpha(1.0)
 	end
 end
 
@@ -875,7 +894,8 @@ function Units:CreateUnit(...)
 	frame.RegisterUpdateFunc = RegisterUpdateFunc
 	frame.UnregisterAll = UnregisterAll
 	frame.UnregisterSingleEvent = UnregisterEvent
-	frame.SetRangeAlpha = SetRangeAlpha
+	frame.SetRangeState = SetRangeState
+	frame.ClearRangeState = ClearRangeState
 	frame.DisableRangeAlpha = DisableRangeAlpha
 	frame.UnregisterUpdateFunc = UnregisterUpdateFunc
 	frame.ReregisterUnitEvents = ReregisterUnitEvents
@@ -900,7 +920,7 @@ function Units:CreateUnit(...)
 	frame:SetScript("OnHide", OnHide)
 
 	-- 3D portrait models don't inherit parent alpha for their 3D rendering,
-	-- so we propagate alpha changes explicitly (same pattern as tempAuraFader)
+	-- so we propagate alpha changes explicitly
 	hooksecurefunc(frame, "SetAlpha", function(self, alpha)
 		if self.portraitModel and self.portraitModel:IsShown() then
 			self.portraitModel:SetAlpha(alpha)

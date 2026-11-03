@@ -1,8 +1,8 @@
-## Interface: 120000,120001,120005,120007,120100,120105,16001
+## Interface: 120000,120001,120005,120007,120100,120105,120107,16001
 ## Title: Shadowed Unit Frames
 ## Notes: Moooooooooooooooooo
 ## Author: Shadowed
-## Version: v4.6.14
+## Version: v4.6.15
 ## SavedVariables: ShadowedUFDB
 ## X-Website: https://www.curseforge.com/wow/addons/shadowed-unit-frames-redux
 ## OptionalDeps: Ace3, LibSharedMedia-3.0, AceGUI-3.0-SharedMediaWidgets, LibDualSpec-1.0, LibSpellRange-1.0, UTF8, Clique
