@@ -1335,44 +1335,47 @@ local function hideBlizzardFrameKeepAuras(frame, keepEvents)
 	end
 end
 
+-- Blizzard loads its unit frame files per game type, so a global can be absent on a given client
 local function hideBlizzardFrames(...)
 	for i=1, select("#", ...) do
 		local frame = select(i, ...)
-		-- Unit watch state lives on a protected manager, always blocked in combat regardless of the frame
-		if( InCombatLockdown() ) then
-			ShadowUF:DeferUntilRegen(frame, function()
+		if( frame ) then
+			-- Unit watch state lives on a protected manager, always blocked in combat regardless of the frame
+			if( InCombatLockdown() ) then
+				ShadowUF:DeferUntilRegen(frame, function()
+					UnregisterUnitWatch(frame)
+					frame:Hide()
+					frame:SetParent(ShadowUF.hiddenFrame)
+				end)
+			else
 				UnregisterUnitWatch(frame)
+			end
+			frame:UnregisterAllEvents()
+			if( not InCombatLockdown() or not frame:IsProtected() ) then
 				frame:Hide()
+			end
+
+			if( frame.manabar ) then frame.manabar:UnregisterAllEvents() end
+			if( frame.healthbar ) then frame.healthbar:UnregisterAllEvents() end
+			if( frame.spellbar ) then frame.spellbar:UnregisterAllEvents() end
+			if( frame.powerBarAlt ) then frame.powerBarAlt:UnregisterAllEvents() end
+
+			if( not InCombatLockdown() ) then
 				frame:SetParent(ShadowUF.hiddenFrame)
-			end)
-		else
-			UnregisterUnitWatch(frame)
-		end
-		frame:UnregisterAllEvents()
-		if( not InCombatLockdown() or not frame:IsProtected() ) then
-			frame:Hide()
-		end
+			end
+			frame:HookScript("OnShow", rehideFrame)
 
-		if( frame.manabar ) then frame.manabar:UnregisterAllEvents() end
-		if( frame.healthbar ) then frame.healthbar:UnregisterAllEvents() end
-		if( frame.spellbar ) then frame.spellbar:UnregisterAllEvents() end
-		if( frame.powerBarAlt ) then frame.powerBarAlt:UnregisterAllEvents() end
-
-		if( not InCombatLockdown() ) then
-			frame:SetParent(ShadowUF.hiddenFrame)
-		end
-		frame:HookScript("OnShow", rehideFrame)
-
-		-- Prevent Blizzard from reparenting the frame away from hiddenFrame
-		if( not hookedFrames[frame] ) then
-			hooksecurefunc(frame, "SetParent", function(self, parent)
-				if( parent ~= ShadowUF.hiddenFrame ) then
-					if( not InCombatLockdown() or not self:IsProtected() ) then
-						self:SetParent(ShadowUF.hiddenFrame)
+			-- Prevent Blizzard from reparenting the frame away from hiddenFrame
+			if( not hookedFrames[frame] ) then
+				hooksecurefunc(frame, "SetParent", function(self, parent)
+					if( parent ~= ShadowUF.hiddenFrame ) then
+						if( not InCombatLockdown() or not self:IsProtected() ) then
+							self:SetParent(ShadowUF.hiddenFrame)
+						end
 					end
-				end
-			end)
-			hookedFrames[frame] = true
+				end)
+				hookedFrames[frame] = true
+			end
 		end
 	end
 end
