@@ -1,6 +1,11 @@
 local Combat = {}
 ShadowUF:RegisterModule(Combat, "combatText", ShadowUF.L["Combat text"])
 
+-- Size multipliers against the base font, the frame scale carries them so the string itself is never stretched
+local flagScales = {CRITICAL = 1.5, CRUSHING = 1.5, GLANCING = 0.75}
+local actionScales = {IMMUNE = 0.75, BLOCK = 0.75}
+local zeroWoundScales = {ABSORB = 0.75, BLOCK = 0.75, RESIST = 0.75}
+
 function Combat:OnEnable(frame)
 	if( not frame.combatText ) then
 		frame.combatText = CreateFrame("Frame", nil, frame.highFrame)
@@ -10,7 +15,6 @@ function Combat:OnEnable(frame)
 		frame.combatText:SetFrameLevel(frame.topFrameLevel)
 
 		frame.combatText.feedbackStartTime = 0
-		frame.combatText.feedbackFontHeight = ShadowUF.db.profile.font.size + 1
 		frame.combatText:SetScript("OnUpdate", CombatFeedback_OnUpdate)
 		frame.combatText:SetHeight(1)
 		frame.combatText:SetWidth(1)
@@ -20,13 +24,14 @@ function Combat:OnEnable(frame)
 end
 
 function Combat:OnLayoutApplied(frame, config)
-	-- Update feedback text
 	ShadowUF.Layout:ToggleVisibility(frame.combatText, frame.visibility.combatText)
 	if( frame.visibility.combatText ) then
-		frame.combatText.feedbackFontHeight = ShadowUF.db.profile.font.size + 1
-		frame.combatText.fontPath = ShadowUF.Layout.mediaPath.font
-
-		ShadowUF.Layout:SetupFontString(frame.combatText.feedbackText, 1)
+		local font = ShadowUF.db.profile.font
+		if( font.shadowEnabled and font.shadowColor and font.shadowX and font.shadowY ) then
+			ShadowUF:SetFontAndShadow(frame.combatText.feedbackText, ShadowUF.Layout.mediaPath.font, font.size, "OUTLINE", font.shadowColor.r, font.shadowColor.g, font.shadowColor.b, font.shadowColor.a, font.shadowX, font.shadowY)
+		else
+			ShadowUF:SetFontAndShadow(frame.combatText.feedbackText, ShadowUF.Layout.mediaPath.font, font.size, "OUTLINE")
+		end
 		ShadowUF.Layout:AnchorFrame(frame, frame.combatText, config.combatText)
 	end
 end
@@ -35,25 +40,39 @@ function Combat:OnDisable(frame)
 	frame:UnregisterAll(self)
 end
 
-function Combat:Update(frame, event, unit, type, ...)
-	-- Blizzard's CombatFeedback errors on a nil font height (the layout only sets it when combat text is visible)
-	if( not frame.visibility.combatText or not frame.combatText.feedbackFontHeight ) then return end
-	CombatFeedback_OnCombatEvent(frame.combatText, type, ...)
-	if( type == "IMMUNE" ) then
-		frame.combatText.feedbackText:SetTextHeight(frame.combatText.feedbackFontHeight * 0.75)
+-- The amount is secret, so nothing compares it and nothing measures the string built from it, size and color come from the plain action and flags
+function Combat:Update(frame, event, unit, action, flags, amount, schoolMask)
+	if( not frame.visibility.combatText ) then return end
+
+	local text, scale = "", 1
+	local r, g, b = 1, 1, 1
+	if( action == "WOUND" ) then
+		-- The zero damage words are only reachable while the amount is plain
+		if( issecretvalue(amount) or amount ~= 0 ) then
+			scale = flagScales[flags] or 1
+			if( schoolMask ~= Enum.Damageclass.MaskPhysical ) then b = 0 end
+			text = BreakUpLargeNumbers(amount)
+			if( flags == "BLOCK_REDUCED" ) then text = COMBAT_TEXT_BLOCK_REDUCED:format(text) end
+		elseif( zeroWoundScales[flags] ) then
+			text, scale = CombatFeedbackText[flags], zeroWoundScales[flags]
+		else
+			text = CombatFeedbackText.MISS
+		end
+	elseif( action == "HEAL" ) then
+		text, r, b = BreakUpLargeNumbers(amount), 0, 0
+		if( flags == "CRITICAL" ) then scale = 1.5 end
+	elseif( action == "ENERGIZE" ) then
+		text, r, g, b = BreakUpLargeNumbers(amount), 0.41, 0.8, 0.94
+		if( flags == "CRITICAL" ) then scale = 1.5 end
+	else
+		text, scale = CombatFeedbackText[action] or "", actionScales[action] or 1
 	end
 
-	-- Increasing the font size will make the text look pixelated, however scaling it up will make it look smooth and awesome
-	local scale = frame.combatText.feedbackText:GetStringHeight() / ShadowUF.db.profile.font.size
-	if( scale > 0 ) then
-		frame.combatText:SetScale(scale)
-		local cf = ShadowUF.db.profile.font
-		local cr, cg, cb, ca = frame.combatText.feedbackText:GetTextColor()
-		if( cf.shadowEnabled and cf.shadowColor and cf.shadowX and cf.shadowY ) then
-			ShadowUF:SetFontAndShadow(frame.combatText.feedbackText, frame.combatText.fontPath, cf.size, "OUTLINE", cf.shadowColor.r, cf.shadowColor.g, cf.shadowColor.b, cf.shadowColor.a, cf.shadowX, cf.shadowY)
-		else
-			ShadowUF:SetFontAndShadow(frame.combatText.feedbackText, frame.combatText.fontPath, cf.size, "OUTLINE")
-		end
-		if( cr ) then frame.combatText.feedbackText:SetTextColor(cr, cg, cb, ca) end
-	end
+	local fontSize = ShadowUF.db.profile.font.size
+	frame.combatText:SetScale((fontSize + 1) * scale / fontSize)
+	frame.combatText.feedbackText:SetText(text)
+	frame.combatText.feedbackText:SetTextColor(r, g, b)
+	frame.combatText.feedbackText:SetAlpha(0)
+	frame.combatText.feedbackText:Show()
+	frame.combatText.feedbackStartTime = GetTime()
 end
