@@ -821,6 +821,10 @@ local function loadGeneralOptions()
 								end
 							end
 
+							if( ShadowUF.isForever ) then
+								ShadowUF:RepairPetHappinessBadge()
+							end
+
 							ShadowUF:ProfilesChanged()
 						end,
 					},

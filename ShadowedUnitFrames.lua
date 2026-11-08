@@ -217,6 +217,24 @@ function ShadowUF:CheckBuild()
 	self.db.profile.wowBuild = build
 end
 
+-- The pet happiness badge gets its anchor from the default layout only, the indicator options never write anchorTo and an imported layout may carry no entry at all
+function ShadowUF:RepairPetHappinessBadge()
+	local pet = self.db.profile.units.pet
+	if( not pet ) then return end
+
+	pet.indicators = pet.indicators or {}
+	local badge = pet.indicators.happiness
+	if( not badge ) then
+		badge = {enabled = true, x = 0, y = 0}
+		pet.indicators.happiness = badge
+	end
+	if( not badge.anchorTo ) then
+		badge.anchorTo = "$parent"
+		badge.anchorPoint = badge.anchorPoint or "RC"
+		if( (badge.size or 0) == 0 ) then badge.size = 18 end
+	end
+end
+
 function ShadowUF:CheckUpgrade()
 	local revision = self.db.profile.revision or self.dbRevision
 
@@ -287,13 +305,7 @@ function ShadowUF:CheckUpgrade()
 		end
 	end
 	if( revision <= 73 and self.isForever ) then
-		-- The pet happiness badge gets its anchor from the default layout only, the indicator options never write anchorTo
-		local badge = self.db.profile.units.pet.indicators.happiness
-		if( badge and not badge.anchorTo ) then
-			badge.anchorTo = "$parent"
-			badge.anchorPoint = badge.anchorPoint or "RC"
-			if( (badge.size or 0) == 0 ) then badge.size = 18 end
-		end
+		self:RepairPetHappinessBadge()
 	end
 	if( revision <= 72 ) then
 		-- Dispel display modes are now stored as filter mode strings
