@@ -1128,9 +1128,11 @@ L["Let's you modify the base font size to either make it larger or smaller."] = 
 L["Level"] = "Nível"
 L["Level %s - %s: %s/%s (%.2f%% done)"] = "Nível %s - %s: %s/%s (%.2f%% atingido)"
 L["Level %s - %s: %s/%s (%.2f%% done), %s rested."] = "Nível %s - %s: %s/%s (%.2f%% done), %s restante."
+L["Level (Colored by difficulty)"] = "Nível (Colorido por dificuldade)"
 L["Level (Colored)"] = [=[Nível (Colorido)
 
 ]=]
+L["Level colored by the difficulty the game assigns to the unit for your character, like the default target frame. If you cannot attack them then no color is returned."] = "Nível colorido de acordo com a dificuldade que o jogo atribui à unidade para o seu personagem, como o quadro de alvo padrão. Se você não puder atacá-los, nenhuma cor será retornada."
 L["Level without any coloring."] = [=[Nível sem qualquer coloração.
 
 ]=]

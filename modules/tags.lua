@@ -900,6 +900,30 @@ Tags.defaultTags = {
 			return level > 0 and level or "??"
 		end
 	end]],
+	["lvldifficulty"] = [[function(unit, unitOwner)
+		if( UnitIsWildBattlePet(unit) or UnitIsBattlePetCompanion(unit) ) then
+			return nil
+		end
+
+		local level = UnitLevel(unit) or 0
+		if( level < 0 and UnitClassification(unit) == "worldboss" ) then
+			return nil
+		end
+
+		if( not UnitCanAttack("player", unit) ) then
+			return level > 0 and level or "??"
+		elseif( level <= 0 ) then
+			return ShadowUF:Hex(GetDifficultyColor(Enum.RelativeContentDifficulty.Impossible)) .. "??|r"
+		end
+
+		-- The server rates the unit for the player, which can disagree with the level difference thresholds behind GetQuestDifficultyColor
+		local difficulty = C_PlayerInfo.GetContentDifficultyCreatureForPlayer(unit)
+		if( issecretvalue(difficulty) ) then
+			return level
+		end
+
+		return ShadowUF:Hex(GetDifficultyColor(difficulty)) .. level .. "|r"
+	end]],
 	["faction"] = [[function(unit, unitOwner) return UnitFactionGroup(unitOwner) end]],
 	["level"] = [[function(unit, unitOwner)
 		if( UnitIsWildBattlePet(unit) or UnitIsBattlePetCompanion(unit) ) then
@@ -1388,6 +1412,7 @@ Tags.defaultEvents = {
 	["hpower"]					= "SUF_POWERTYPE:HOLY_POWER UNIT_POWER_FREQUENT",
 	["level"]               	= "UNIT_LEVEL UNIT_FACTION PLAYER_LEVEL_UP",
 	["levelcolor"]				= "UNIT_LEVEL UNIT_FACTION PLAYER_LEVEL_UP",
+	["lvldifficulty"]			= "UNIT_LEVEL UNIT_FACTION PLAYER_LEVEL_UP",
 	["maxhp"]               	= "UNIT_MAXHEALTH",
 	-- ["def:name"]				= "UNIT_NAME_UPDATE UNIT_MAXHEALTH UNIT_HEALTH", -- 12.0: Disabled
 	["absmaxhp"]				= "UNIT_MAXHEALTH",
@@ -1492,6 +1517,7 @@ Tags.defaultCategories = {
 	["curmaxhp"]				= "health",
 	["curmaxpp"]				= "power",
 	["levelcolor"]				= "classification",
+	["lvldifficulty"]			= "classification",
 	-- ["def:name"]				= "health", -- 12.0: Disabled
 	["faction"]					= "classification",
 	["colorname"]				= "misc",
@@ -1591,6 +1617,7 @@ Tags.defaultHelp = {
 	["curmaxhp"]				= L["Current and maximum health, formatted as [curhp]/[maxhp], if the unit is dead or offline then that is shown instead."],
 	["curmaxpp"]				= L["Current and maximum power, formatted as [curpp]/[maxpp]."],
 	["levelcolor"]				= L["Returns the color code based off of the units level compared to yours. If you cannot attack them then no color is returned."],
+	["lvldifficulty"]			= L["Level colored by the difficulty the game assigns to the unit for your character, like the default target frame. If you cannot attack them then no color is returned."],
 	-- ["def:name"]				= L["..."], -- 12.0: Disabled
 	["faction"]					= L["Units alignment, Thrall will return Horde, Magni Bronzebeard will return Alliance."],
 	["colorname"]				= L["Unit name colored by class.|n|nIn combat, shows uncolored name on enemy units."],
@@ -1694,6 +1721,7 @@ Tags.defaultNames = {
 	["curmaxhp"]				= L["Cur/Max HP (Short)"],
 	["curmaxpp"]				= L["Cur/Max Power (Short)"],
 	["levelcolor"]				= L["Level (Colored)"],
+	["lvldifficulty"]			= L["Level (Colored by difficulty)"],
 	-- ["def:name"]				= L["Deficit/Unit Name"], -- 12.0: Disabled
 	["faction"]					= L["Unit faction"],
 	["colorname"]				= L["Unit name (Class colored)"],
