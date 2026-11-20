@@ -6958,6 +6958,44 @@ local function loadUnitOptions()
 		end
 	end
 
+	if playerClass == "SHAMAN" and SHAMAN_TOTEM_PRIORITIES and #SHAMAN_TOTEM_PRIORITIES == 4 then
+		local slots = {
+			[FIRE_TOTEM_SLOT or 1] = L["Fire totem"],
+			[EARTH_TOTEM_SLOT or 2] = L["Earth totem"],
+			[WATER_TOTEM_SLOT or 3] = L["Water totem"],
+			[AIR_TOTEM_SLOT or 4] = L["Air totem"],
+		}
+		local group = {
+			type = "group", inline = true, order = 4, name = L["Totem order from left to right"],
+			hidden = function(info) return info[2] ~= "player" end,
+			disabled = function() return InCombatLockdown() end,
+			args = {},
+		}
+		Config.unitTable.args.bars.args.totemBar.args.slotOrder = group
+		for position = 1, 4 do
+			group.args["position" .. position] = {
+				type = "select", order = position, values = slots,
+				name = string.format(L["Position %d"], position),
+				get = function()
+					local config = ShadowUF.db.profile.units.player.totemBar
+					return (config.slotOrder or SHAMAN_TOTEM_PRIORITIES)[position]
+				end,
+				set = function(_, slot)
+					local config = ShadowUF.db.profile.units.player.totemBar
+					local order = CopyTable(config.slotOrder or SHAMAN_TOTEM_PRIORITIES)
+					for index, current in ipairs(order) do
+						if current == slot then
+							order[index], order[position] = order[position], slot
+							config.slotOrder = order
+							ShadowUF.Layout:Reload("player")
+							return
+						end
+					end
+				end,
+			}
+		end
+	end
+
 	-- Load global unit
 	for k, v in pairs(Config.unitTable.args) do
 		options.args.units.args.global.args[k] = v

@@ -71,7 +71,11 @@ function Totems:OnLayoutApplied(frame)
 	local barWidth = (frame.totemBar:GetWidth() - (MAX_TOTEMS - 1)) / MAX_TOTEMS
 	local config = ShadowUF.db.profile.units[frame.unitType].totemBar
 
-	for _, totem in pairs(frame.totemBar.totems) do
+	local order = playerClass == "SHAMAN" and frame.unitType == "player" and (config.slotOrder or SHAMAN_TOTEM_PRIORITIES)
+	for index, totem in ipairs(frame.totemBar.totems) do
+		if order and not InCombatLockdown() then
+			totem.id = order[index]
+		end
 		totem:SetHeight(frame.totemBar:GetHeight())
 		totem:SetWidth(barWidth)
 		totem:SetOrientation(ShadowUF.db.profile.units[frame.unitType].totemBar.vertical and "VERTICAL" or "HORIZONTAL")
