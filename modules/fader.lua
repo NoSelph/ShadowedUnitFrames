@@ -1,6 +1,6 @@
 local Fader = {}
 local powerDepletes = {[Enum.PowerType.Mana] = true, [Enum.PowerType.Energy] = true, [Enum.PowerType.Focus] = true}
-ShadowUF:RegisterModule(Fader, "fader", ShadowUF.L["Combat fader"])
+ShadowUF:RegisterModule(Fader, "fader", "Combat fader")
 
 local canCurve = C_CurveUtil and C_CurveUtil.CreateCurve and C_CurveUtil.EvaluateColorValueFromBoolean and UnitHealthPercent and true or false
 

@@ -1,5 +1,5 @@
 local Priest = {}
-ShadowUF:RegisterModule(Priest, "priestBar", ShadowUF.L["Priest mana bar"], true, "PRIEST", SPEC_PRIEST_SHADOW)
+ShadowUF:RegisterModule(Priest, "priestBar", "Priest mana bar", true, "PRIEST", SPEC_PRIEST_SHADOW)
 
 function Priest:OnEnable(frame)
 	frame.priestBar = frame.priestBar or ShadowUF.Units:CreateBar(frame)

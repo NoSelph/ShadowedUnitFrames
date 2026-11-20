@@ -16,8 +16,8 @@ ShadowUF.modules = {}
 ShadowUF.moduleOrder = {}
 ShadowUF.unitList = {"player", "pet", "pettarget", "target", "targettarget", "targettargettarget", "focus", "focustarget", "party", "partypet", "partytarget", "partytargettarget", "raid", "raidpet", "boss", "bosstarget", "maintank", "maintanktarget", "mainassist", "mainassisttarget", "arena", "arenatarget", "arenapet", "battleground", "battlegroundtarget", "battlegroundpet", "arenatargettarget", "battlegroundtargettarget", "maintanktargettarget", "mainassisttargettarget", "bosstargettarget"}
 ShadowUF.fakeUnits = {["targettarget"] = true, ["targettargettarget"] = true, ["pettarget"] = true, ["arenatarget"] = true, ["arenatargettarget"] = true, ["focustarget"] = true, ["focustargettarget"] = true, ["partytarget"] = true, ["raidtarget"] = true, ["bosstarget"] = true, ["maintanktarget"] = true, ["mainassisttarget"] = true, ["battlegroundtarget"] = true, ["partytargettarget"] = true, ["battlegroundtargettarget"] = true, ["maintanktargettarget"] = true, ["mainassisttargettarget"] = true, ["bosstargettarget"] = true}
-L.units = {["raidpet"] = L["Raid pet"], ["PET"] = L["Pet"], ["VEHICLE"] = L["Vehicle"], ["arena"] = L["Arena"], ["arenapet"] = L["Arena Pet"], ["arenatarget"] = L["Arena Target"], ["arenatargettarget"] = L["Arena Target of Target"], ["boss"] = L["Boss"], ["bosstarget"] = L["Boss Target"], ["focus"] = L["Focus"], ["focustarget"] = L["Focus Target"], ["mainassist"] = L["Main Assist"], ["mainassisttarget"] = L["Main Assist Target"], ["maintank"] = L["Main Tank"], ["maintanktarget"] = L["Main Tank Target"], ["party"] = L["Party"], ["partypet"] = L["Party Pet"], ["partytarget"] = L["Party Target"], ["pet"] = L["Pet"], ["pettarget"] = L["Pet Target"], ["player"] = L["Player"],["raid"] = L["Raid"], ["target"] = L["Target"], ["targettarget"] = L["Target of Target"], ["targettargettarget"] = L["Target of Target of Target"], ["battleground"] = L["Battleground"], ["battlegroundpet"] = L["Battleground Pet"], ["battlegroundtarget"] = L["Battleground Target"], ["partytargettarget"] = L["Party Target of Target"], ["battlegroundtargettarget"] = L["Battleground Target of Target"], ["maintanktargettarget"] = L["Main Tank Target of Target"], ["mainassisttargettarget"] = L["Main Assist Target of Target"], ["bosstargettarget"] = L["Boss Target of Target"]}
-L.shortUnits = {["battleground"] = L["BG"], ["battlegroundtarget"] = L["BG Target"], ["battlegroundpet"] = L["BG Pet"], ["battlegroundtargettarget"] = L["BG ToT"], ["arenatargettarget"] = L["Arena ToT"], ["partytargettarget"] = L["Party ToT"], ["bosstargettarget"] = L["Boss ToT"], ["maintanktargettarget"] = L["MT ToT"], ["mainassisttargettarget"] = L["MA ToT"]}
+L.units = ShadowUF:LocalizedLabels({["raidpet"] = "Raid pet", ["PET"] = "Pet", ["VEHICLE"] = "Vehicle", ["arena"] = "Arena", ["arenapet"] = "Arena Pet", ["arenatarget"] = "Arena Target", ["arenatargettarget"] = "Arena Target of Target", ["boss"] = "Boss", ["bosstarget"] = "Boss Target", ["focus"] = "Focus", ["focustarget"] = "Focus Target", ["mainassist"] = "Main Assist", ["mainassisttarget"] = "Main Assist Target", ["maintank"] = "Main Tank", ["maintanktarget"] = "Main Tank Target", ["party"] = "Party", ["partypet"] = "Party Pet", ["partytarget"] = "Party Target", ["pet"] = "Pet", ["pettarget"] = "Pet Target", ["player"] = "Player",["raid"] = "Raid", ["target"] = "Target", ["targettarget"] = "Target of Target", ["targettargettarget"] = "Target of Target of Target", ["battleground"] = "Battleground", ["battlegroundpet"] = "Battleground Pet", ["battlegroundtarget"] = "Battleground Target", ["partytargettarget"] = "Party Target of Target", ["battlegroundtargettarget"] = "Battleground Target of Target", ["maintanktargettarget"] = "Main Tank Target of Target", ["mainassisttargettarget"] = "Main Assist Target of Target", ["bosstargettarget"] = "Boss Target of Target"})
+L.shortUnits = ShadowUF:LocalizedLabels({["battleground"] = "BG", ["battlegroundtarget"] = "BG Target", ["battlegroundpet"] = "BG Pet", ["battlegroundtargettarget"] = "BG ToT", ["arenatargettarget"] = "Arena ToT", ["partytargettarget"] = "Party ToT", ["bosstargettarget"] = "Boss ToT", ["maintanktargettarget"] = "MT ToT", ["mainassisttargettarget"] = "MA ToT"})
 
 -- Cache the units so we don't have to concat every time it updates
 ShadowUF.unitTarget = setmetatable({}, {__index = function(tbl, unit) rawset(tbl, unit, unit .. "target"); return unit .. "target" end})
@@ -31,6 +31,7 @@ for i=1, 5 do ShadowUF.arenaUnits[i] = "arena" .. i end
 for i=1, 4 do ShadowUF.battlegroundUnits[i] = "arena" .. i end
 
 function ShadowUF:OnInitialize()
+	self:SetDisplayLocale(ShadowUFDisplayLocale)
 	self.defaults = {
 		profile = {
 			locked = false,
@@ -1151,7 +1152,8 @@ function ShadowUF:RegisterModule(module, key, name, isBar, class, spec, level)
 
 	module.moduleKey = key
 	module.moduleHasBar = isBar
-	module.moduleName = name
+	module.moduleNameKey = name and self.englishLocale[name] and name
+	module.moduleName = module.moduleNameKey and self.L[name] or name
 	module.moduleClass = class
 	module.moduleLevel = level
 

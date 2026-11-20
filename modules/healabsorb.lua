@@ -1,5 +1,5 @@
 local HealAbsorb = setmetatable({["frameKey"] = "healAbsorb", ["colorKey"] = "healAbsorb", ["frameLevelMod"] = 1}, {__index = ShadowUF.IncHeal})
-ShadowUF:RegisterModule(HealAbsorb, "healAbsorb", ShadowUF.L["Healing absorb"])
+ShadowUF:RegisterModule(HealAbsorb, "healAbsorb", "Healing absorb")
 
 function HealAbsorb:OnEnable(frame)
 	frame.healAbsorb = frame.healAbsorb or ShadowUF.Units:CreateBar(frame)

@@ -1,7 +1,7 @@
 if( not ShadowUF.ComboPoints ) then return end
 
 local Combo = setmetatable({}, {__index = ShadowUF.ComboPoints})
-ShadowUF:RegisterModule(Combo, "comboPoints", ShadowUF.L["Combo points"])
+ShadowUF:RegisterModule(Combo, "comboPoints", "Combo points")
 local cpConfig = {max = MAX_COMBO_POINTS, key = "comboPoints", colorKey = "COMBOPOINTS", powerType = 4, eventType = "COMBO_POINTS", icon = "Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\combo"}
 
 function Combo:OnEnable(frame)

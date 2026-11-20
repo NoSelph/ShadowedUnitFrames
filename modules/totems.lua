@@ -5,9 +5,9 @@ local MAX_TOTEMS = MAX_TOTEMS
 local playerClass = select(2, UnitClass("player"))
 if( playerClass == "MONK" ) then
 	MAX_TOTEMS = 1
-	ShadowUF:RegisterModule(Totems, "totemBar", ShadowUF.L["Statue bar"], true, "MONK", {1, 2})
+	ShadowUF:RegisterModule(Totems, "totemBar", "Statue bar", true, "MONK", {1, 2})
 elseif( playerClass == "SHAMAN" ) then
-	ShadowUF:RegisterModule(Totems, "totemBar", ShadowUF.L["Totem bar"], true, "SHAMAN")
+	ShadowUF:RegisterModule(Totems, "totemBar", "Totem bar", true, "SHAMAN")
 end
 
 ShadowUF.BlockTimers:Inject(Totems, "TOTEM_TIMER")

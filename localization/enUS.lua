@@ -1,5 +1,7 @@
 ﻿local ShadowUF = select(2, ...)
 local L = {}
+L["Interface language"] = "Interface language"
+L["Game language"] = "Game language"
 L["%d auras in group"] = "%d auras in group"
 L["%s (%s): %s/%s (%.2f%% done)"] = "%s (%s): %s/%s (%.2f%% done)"
 L["%s aura groups disabled"] = "%s aura groups disabled"
@@ -1135,6 +1137,7 @@ L["Bar fills missing health then overflows as reverse overlay on the health bar.
 L["Your buffs flagged to show on raid frames in combat."] = "Your buffs flagged to show on raid frames in combat."
 
 
+ShadowUF.englishLocale = L
 ShadowUF.L = L
 --[==[@debug@
 ShadowUF.L = setmetatable(ShadowUF.L, {

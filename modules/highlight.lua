@@ -2,7 +2,7 @@
 local goldColor, mouseColor = {r = 0.75, g = 0.75, b = 0.35}, {r = 0.75, g = 0.75, b = 0.50}
 local rareColor, eliteColor = {r = 0, g = 0.63, b = 1}, {r = 1, g = 0.81, b = 0}
 
-ShadowUF:RegisterModule(Highlight, "highlight", ShadowUF.L["Highlight"])
+ShadowUF:RegisterModule(Highlight, "highlight", "Highlight")
 
 -- Four AuraSlots (one per border edge) on the same filter track the top dispellable debuff, Blizzard colors each edge by dispel type and shows/hides them together
 -- Replaces the legacy scan, which errors in combat

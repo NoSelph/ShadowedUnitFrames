@@ -1,7 +1,7 @@
 if( not ShadowUF.ComboPoints ) then return end
 
 local ArcaneCharges = setmetatable({}, {__index = ShadowUF.ComboPoints})
-ShadowUF:RegisterModule(ArcaneCharges, "arcaneCharges", ShadowUF.L["Arcane Charges"], nil, "MAGE", SPEC_MAGE_ARCANE)
+ShadowUF:RegisterModule(ArcaneCharges, "arcaneCharges", "Arcane Charges", nil, "MAGE", SPEC_MAGE_ARCANE)
 local arcaneConfig = {max = 5, key = "arcaneCharges", colorKey = "ARCANECHARGES", powerType = Enum.PowerType.ArcaneCharges, eventType = "ARCANE_CHARGES", icon = "Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\combo"}
 
 function ArcaneCharges:OnEnable(frame)

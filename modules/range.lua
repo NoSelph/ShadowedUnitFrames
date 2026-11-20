@@ -91,7 +91,7 @@ if( ShadowUF.isForever ) then
 	}
 end
 
-ShadowUF:RegisterModule(Range, "range", ShadowUF.L["Range indicator"])
+ShadowUF:RegisterModule(Range, "range", "Range indicator")
 
 local LSR = LibStub("SpellRange-1.0")
 

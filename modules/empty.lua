@@ -1,7 +1,7 @@
 local Empty = {}
 local fallbackColor
 local issecretvalue = _G.issecretvalue
-ShadowUF:RegisterModule(Empty, "emptyBar", ShadowUF.L["Empty bar"], true)
+ShadowUF:RegisterModule(Empty, "emptyBar", "Empty bar", true)
 
 function Empty:OnEnable(frame)
 	frame.emptyBar = frame.emptyBar or ShadowUF.Units:CreateBar(frame)

@@ -13,4 +13,5 @@ libs\AceGUI-3.0-SharedMediaWidgets\widget.xml
 libs\AceConfig-3.0\AceConfig-3.0.xml
 #@end-no-lib-strip@
 
+profileLocale.lua
 config.lua
