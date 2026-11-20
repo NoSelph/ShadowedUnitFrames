@@ -24,7 +24,7 @@ local function refreshCastColors()
 	bgImportantUninterruptible = CreateColor(colors.importantUninterruptible.r, colors.importantUninterruptible.g, colors.importantUninterruptible.b, bgAlpha)
 end
 
-ShadowUF:RegisterModule(Cast, "castBar", L["Cast bar"], true)
+ShadowUF:RegisterModule(Cast, "castBar", "Cast bar", true)
 
 -- Fake units use polling since events don't fire for them
 -- 12.0: Use durationObject to avoid secret value errors

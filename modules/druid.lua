@@ -1,5 +1,5 @@
 local Druid = {}
-ShadowUF:RegisterModule(Druid, "druidBar", ShadowUF.L["Druid mana bar"], true, "DRUID")
+ShadowUF:RegisterModule(Druid, "druidBar", "Druid mana bar", true, "DRUID")
 
 function Druid:OnEnable(frame)
 	frame.druidBar = frame.druidBar or ShadowUF.Units:CreateBar(frame)

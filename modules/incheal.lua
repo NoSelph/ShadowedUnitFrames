@@ -1,6 +1,6 @@
 local IncHeal = {["frameKey"] = "incHeal", ["colorKey"] = "inc", ["frameLevelMod"] = 2}
 ShadowUF.IncHeal = IncHeal
-ShadowUF:RegisterModule(IncHeal, "incHeal", ShadowUF.L["Incoming heals"])
+ShadowUF:RegisterModule(IncHeal, "incHeal", "Incoming heals")
 
 local function ensureCropper(bar, parent)
 	if( not bar.cropper ) then

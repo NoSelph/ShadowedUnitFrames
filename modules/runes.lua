@@ -1,5 +1,5 @@
 local Runes = {}
-ShadowUF:RegisterModule(Runes, "runeBar", ShadowUF.L["Rune bar"], true, "DEATHKNIGHT")
+ShadowUF:RegisterModule(Runes, "runeBar", "Rune bar", true, "DEATHKNIGHT")
 ShadowUF.BlockTimers:Inject(Runes, "RUNE_TIMER")
 ShadowUF.DynamicBlocks:Inject(Runes)
 

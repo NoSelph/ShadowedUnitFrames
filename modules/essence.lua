@@ -1,7 +1,7 @@
 if( not ShadowUF.ComboPoints ) then return end
 
 local Essence = setmetatable({}, {__index = ShadowUF.ComboPoints})
-ShadowUF:RegisterModule(Essence, "essence", ShadowUF.L["Essence"], nil, "EVOKER")
+ShadowUF:RegisterModule(Essence, "essence", "Essence", nil, "EVOKER")
 local essenceConfig = {max = 5, key = "essence", colorKey = "ESSENCE", powerType = Enum.PowerType.Essence, eventType = "ESSENCE", icon = "Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\combo"}
 
 function Essence:OnEnable(frame)

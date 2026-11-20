@@ -1,6 +1,6 @@
 local Power = {}
 local powerMap = ShadowUF.Tags.powerMap
-ShadowUF:RegisterModule(Power, "powerBar", ShadowUF.L["Power bar"], true)
+ShadowUF:RegisterModule(Power, "powerBar", "Power bar", true)
 
 function Power:OnEnable(frame)
 	frame.powerBar = frame.powerBar or ShadowUF.Units:CreateBar(frame)

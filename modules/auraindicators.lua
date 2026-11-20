@@ -1,5 +1,5 @@
 ﻿local Indicators = {}
-ShadowUF:RegisterModule(Indicators, "auraIndicators", ShadowUF.L["Aura indicators"])
+ShadowUF:RegisterModule(Indicators, "auraIndicators", "Aura indicators")
 
 Indicators.auraFilters = {"curable"}
 

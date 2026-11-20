@@ -1,6 +1,6 @@
 local Indicators = {list = {"status", "pvp", "leader", "resurrect", "sumPending", "masterLoot", "raidTarget", "ready", "role", "lfdRole", "class", "phase", "questBoss", "petBattle", "arenaSpec", "happiness", "dispel"}}
 
-ShadowUF:RegisterModule(Indicators, "indicators", ShadowUF.L["Indicators"])
+ShadowUF:RegisterModule(Indicators, "indicators", "Indicators")
 
 -- Leader/role/PvP/phase APIs return secrets when the unit's identity is secret (target/focus/boss in combat)
 -- A boolean test on a secret is an error, so secret state just hides the indicator

@@ -1,6 +1,6 @@
 local AltPower = {}
 AltPower.defaultVisibility = false
-ShadowUF:RegisterModule(AltPower, "altPowerBar", ShadowUF.L["Alt. Power bar"], true)
+ShadowUF:RegisterModule(AltPower, "altPowerBar", "Alt. Power bar", true)
 
 function AltPower:OnEnable(frame)
 	frame.altPowerBar = frame.altPowerBar or ShadowUF.Units:CreateBar(frame)

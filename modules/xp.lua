@@ -1,6 +1,6 @@
 local XP = {}
 local L = ShadowUF.L
-ShadowUF:RegisterModule(XP, "xpBar", L["XP/Rep bar"], true)
+ShadowUF:RegisterModule(XP, "xpBar", "XP/Rep bar", true)
 
 local function OnEnter(self)
 	if( self.tooltip ) then

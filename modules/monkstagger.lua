@@ -1,5 +1,5 @@
 local Stagger = {}
-ShadowUF:RegisterModule(Stagger, "staggerBar", ShadowUF.L["Stagger bar"], true, "MONK", SPEC_MONK_BREWMASTER)
+ShadowUF:RegisterModule(Stagger, "staggerBar", "Stagger bar", true, "MONK", SPEC_MONK_BREWMASTER)
 
 function Stagger:OnEnable(frame)
 	frame.staggerBar = frame.staggerBar or ShadowUF.Units:CreateBar(frame)

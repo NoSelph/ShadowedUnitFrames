@@ -1,5 +1,5 @@
 local Combat = {}
-ShadowUF:RegisterModule(Combat, "combatText", ShadowUF.L["Combat text"])
+ShadowUF:RegisterModule(Combat, "combatText", "Combat text")
 
 -- Size multipliers against the base font, the frame scale carries them so the string itself is never stretched
 local flagScales = {CRITICAL = 1.5, CRUSHING = 1.5, GLANCING = 0.75}

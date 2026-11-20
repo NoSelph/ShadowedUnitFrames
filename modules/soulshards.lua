@@ -1,7 +1,7 @@
 if( not ShadowUF.ComboPoints ) then return end
 
 local Souls = setmetatable({}, {__index = ShadowUF.ComboPoints})
-ShadowUF:RegisterModule(Souls, "soulShards", ShadowUF.L["Soul Shards"], nil, "WARLOCK")
+ShadowUF:RegisterModule(Souls, "soulShards", "Soul Shards", nil, "WARLOCK")
 local soulsConfig = {max = 5, key = "soulShards", colorKey = "SOULSHARDS", powerType = Enum.PowerType.SoulShards, eventType = "SOUL_SHARDS", icon = "Interface\\AddOns\\ShadowedUnitFrames\\media\\textures\\shard"}
 
 local function isDestruction()

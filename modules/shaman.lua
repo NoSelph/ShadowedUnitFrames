@@ -1,5 +1,5 @@
 local Shaman = {}
-ShadowUF:RegisterModule(Shaman, "shamanBar", ShadowUF.L["Shaman mana bar"], true, "SHAMAN")
+ShadowUF:RegisterModule(Shaman, "shamanBar", "Shaman mana bar", true, "SHAMAN")
 
 function Shaman:OnEnable(frame)
 	frame.shamanBar = frame.shamanBar or ShadowUF.Units:CreateBar(frame)

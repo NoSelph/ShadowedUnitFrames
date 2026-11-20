@@ -1,5 +1,5 @@
 ﻿local Health = {}
-ShadowUF:RegisterModule(Health, "healthBar", ShadowUF.L["Health bar"], true)
+ShadowUF:RegisterModule(Health, "healthBar", "Health bar", true)
 
 local function getGradientColor(unit)
 	if not ShadowUF.db or not ShadowUF.db.profile or not ShadowUF.db.profile.healthColors then

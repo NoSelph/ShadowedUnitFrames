@@ -10,11 +10,11 @@ local GetSpellName = C_Spell.GetSpellName
 local GetSpellTexture = C_Spell.GetSpellTexture
 
 -- Shared by the aura text position selects (per-frame tab and the General defaults)
-local auraTextAnchorValues = {
-	["TOPLEFT"] = L["Top Left"], ["TOP"] = L["Top"], ["TOPRIGHT"] = L["Top Right"],
-	["LEFT"] = L["Left"], ["CENTER"] = L["Center"], ["RIGHT"] = L["Right"],
-	["BOTTOMLEFT"] = L["Bottom Left"], ["BOTTOM"] = L["Bottom"], ["BOTTOMRIGHT"] = L["Bottom Right"],
-}
+local auraTextAnchorValues = ShadowUF:LocalizedLabels({
+	["TOPLEFT"] = "Top Left", ["TOP"] = "Top", ["TOPRIGHT"] = "Top Right",
+	["LEFT"] = "Left", ["CENTER"] = "Center", ["RIGHT"] = "Right",
+	["BOTTOMLEFT"] = "Bottom Left", ["BOTTOM"] = "Bottom", ["BOTTOMRIGHT"] = "Bottom Right",
+})
 
 -- Shown by the color pickers when a profile has no stored value yet
 local dispelPaletteDefaults = {
@@ -100,40 +100,40 @@ local unitCategories = {
 	battleground = {"battleground", "battlegroundpet", "battlegroundtarget", "battlegroundtargettarget"}
 }
 
-local UNIT_DESC = {
-	["boss"] = L["Boss units are for only certain fights, such as Blood Princes or the Gunship battle, you will not see them for every boss fight."],
-	["mainassist"] = L["Main Assists's are set by the Blizzard Main Assist system or mods that use it."],
-	["maintank"] = L["Main Tank's are set through the Raid frames, or through selecting the Tank role."],
-	["battleground"] = L["Currently used in battlegrounds for showing flag carriers."],
-	["battlegroundpet"] = L["Current pet used by a battleground unit."],
-	["battlegroundtarget"] = L["Current target of a battleground unit."],
-	["battlegroundtargettarget"] = L["Current target of target of a battleground unit."]
-}
+local UNIT_DESC = ShadowUF:LocalizedLabels({
+	["boss"] = "Boss units are for only certain fights, such as Blood Princes or the Gunship battle, you will not see them for every boss fight.",
+	["mainassist"] = "Main Assists's are set by the Blizzard Main Assist system or mods that use it.",
+	["maintank"] = "Main Tank's are set through the Raid frames, or through selecting the Tank role.",
+	["battleground"] = "Currently used in battlegrounds for showing flag carriers.",
+	["battlegroundpet"] = "Current pet used by a battleground unit.",
+	["battlegroundtarget"] = "Current target of a battleground unit.",
+	["battlegroundtargettarget"] = "Current target of target of a battleground unit."
+})
 
-local PAGE_DESC = {
-	["general"] = L["General configuration to all enabled units."],
-	["enableUnits"] = L["Various units can be enabled through this page, such as raid or party targets."],
-	["hideBlizzard"] = L["Hiding and showing various aspects of the default UI such as the player buff frames."],
-	["units"] = L["Configuration to specific unit frames."],
-	["visibility"] = L["Disabling unit modules in various instances."],
-	["tags"] = L["Advanced tag management, allows you to add your own custom tags."],
-	["filter"] = L["Simple aura filtering by whitelists and blacklists."],
-}
-local INDICATOR_NAMES = {["questBoss"] = L["Quest Boss"], ["leader"] = L["Leader / Assist"], ["lfdRole"] = L["Class Role"], ["masterLoot"] = L["Master Looter"], ["pvp"] = L["PvP Flag"], ["raidTarget"] = L["Raid Target"], ["ready"] = L["Ready Status"], ["role"] = L["Raid Role"], ["status"] = L["Combat Status"], ["class"] = L["Class Icon"], ["resurrect"] = L["Resurrect Status"], ["sumPending"] = L["Summon Pending"], ["phase"] = L["Other Party/Phase Status"], ["petBattle"] = L["Pet Battle"], ["arenaSpec"] = L["Arena Spec"], ["happiness"] = L["Pet Happiness"], ["dispel"] = L["Dispel Type"]}
-local AREA_NAMES = {["arena"] = L["Arenas"],["none"] = L["Everywhere else"], ["party"] = L["Party instances"], ["pvp"] = L["Battleground"], ["raid"] = L["Raid instances"], ["neighborhood"] = L["Neighborhood"]}
-local INDICATOR_DESC = {
-		["leader"] = L["Crown indicator for group leader or assistants."], ["lfdRole"] = L["Role the unit is playing."],
-		["masterLoot"] = L["Bag indicator for master looters."], ["pvp"] = L["PVP flag indicator, Horde for Horde flagged pvpers and Alliance for Alliance flagged pvpers."],
-		["raidTarget"] = L["Raid target indicator."], ["ready"] = L["Ready status of group members."], ["phase"] = L["Shows when a party member is in a different phase or another group."],
-		["questBoss"] = L["Shows that a NPC is a boss for a quest."], ["petBattle"] = L["Shows what kind of pet the unit is for pet battles."], ["happiness"] = L["Indicator for the current pet happiness."],
-		["role"] = L["Raid role indicator, adds a shield indicator for main tanks and a sword icon for main assists."], ["status"] = L["Status indicator, shows if the unit is currently in combat. For the player it will also show if you are rested."], ["class"] = L["Class icon for players."],
-		["arenaSpec"] = L["Talent spec of your arena opponents."],
-		["dispel"] = L["Blizzard icon for the dispel type of the first dispellable aura, debuffs on friendly units and purgeable buffs on hostile ones."]
-}
-local TAG_GROUPS = {["classification"] = L["Classifications"], ["health"] = L["Health"], ["misc"] = L["Miscellaneous"], ["playerthreat"] = L["Player threat"], ["power"] = L["Power"], ["status"] = L["Status"], ["threat"] = L["Threat"], --[==[["raid"] = L["Raid"],]==] ["classspec"] = L["Class Specific"], ["classtimer"] = L["Class Timer"]}
+local PAGE_DESC = ShadowUF:LocalizedLabels({
+	["general"] = "General configuration to all enabled units.",
+	["enableUnits"] = "Various units can be enabled through this page, such as raid or party targets.",
+	["hideBlizzard"] = "Hiding and showing various aspects of the default UI such as the player buff frames.",
+	["units"] = "Configuration to specific unit frames.",
+	["visibility"] = "Disabling unit modules in various instances.",
+	["tags"] = "Advanced tag management, allows you to add your own custom tags.",
+	["filter"] = "Simple aura filtering by whitelists and blacklists.",
+})
+local INDICATOR_NAMES = ShadowUF:LocalizedLabels({["questBoss"] = "Quest Boss", ["leader"] = "Leader / Assist", ["lfdRole"] = "Class Role", ["masterLoot"] = "Master Looter", ["pvp"] = "PvP Flag", ["raidTarget"] = "Raid Target", ["ready"] = "Ready Status", ["role"] = "Raid Role", ["status"] = "Combat Status", ["class"] = "Class Icon", ["resurrect"] = "Resurrect Status", ["sumPending"] = "Summon Pending", ["phase"] = "Other Party/Phase Status", ["petBattle"] = "Pet Battle", ["arenaSpec"] = "Arena Spec", ["happiness"] = "Pet Happiness", ["dispel"] = "Dispel Type"})
+local AREA_NAMES = ShadowUF:LocalizedLabels({["arena"] = "Arenas",["none"] = "Everywhere else", ["party"] = "Party instances", ["pvp"] = "Battleground", ["raid"] = "Raid instances", ["neighborhood"] = "Neighborhood"})
+local INDICATOR_DESC = ShadowUF:LocalizedLabels({
+		["leader"] = "Crown indicator for group leader or assistants.", ["lfdRole"] = "Role the unit is playing.",
+		["masterLoot"] = "Bag indicator for master looters.", ["pvp"] = "PVP flag indicator, Horde for Horde flagged pvpers and Alliance for Alliance flagged pvpers.",
+		["raidTarget"] = "Raid target indicator.", ["ready"] = "Ready status of group members.", ["phase"] = "Shows when a party member is in a different phase or another group.",
+		["questBoss"] = "Shows that a NPC is a boss for a quest.", ["petBattle"] = "Shows what kind of pet the unit is for pet battles.", ["happiness"] = "Indicator for the current pet happiness.",
+		["role"] = "Raid role indicator, adds a shield indicator for main tanks and a sword icon for main assists.", ["status"] = "Status indicator, shows if the unit is currently in combat. For the player it will also show if you are rested.", ["class"] = "Class icon for players.",
+		["arenaSpec"] = "Talent spec of your arena opponents.",
+		["dispel"] = "Blizzard icon for the dispel type of the first dispellable aura, debuffs on friendly units and purgeable buffs on hostile ones."
+})
+local TAG_GROUPS = ShadowUF:LocalizedLabels({["classification"] = "Classifications", ["health"] = "Health", ["misc"] = "Miscellaneous", ["playerthreat"] = "Player threat", ["power"] = "Power", ["status"] = "Status", ["threat"] = "Threat", --[==[["raid"] = "Raid",]==] ["classspec"] = "Class Specific", ["classtimer"] = "Class Timer"})
 
-local pointPositions = {["BOTTOM"] = L["Bottom"], ["TOP"] = L["Top"], ["LEFT"] = L["Left"], ["RIGHT"] = L["Right"], ["TOPLEFT"] = L["Top Left"], ["TOPRIGHT"] = L["Top Right"], ["BOTTOMLEFT"] = L["Bottom Left"], ["BOTTOMRIGHT"] = L["Bottom Right"], ["CENTER"] = L["Center"]}
-local positionList = {["C"] = L["Center"], ["RT"] = L["Right Top"], ["RC"] = L["Right Center"], ["RB"] = L["Right Bottom"], ["LT"] = L["Left Top"], ["LC"] = L["Left Center"], ["LB"] = L["Left Bottom"], ["BL"] = L["Bottom Left"], ["BC"] = L["Bottom Center"], ["BR"] = L["Bottom Right"], ["TR"] = L["Top Right"], ["TC"] = L["Top Center"], ["TL"] = L["Top Left"]}
+local pointPositions = ShadowUF:LocalizedLabels({["BOTTOM"] = "Bottom", ["TOP"] = "Top", ["LEFT"] = "Left", ["RIGHT"] = "Right", ["TOPLEFT"] = "Top Left", ["TOPRIGHT"] = "Top Right", ["BOTTOMLEFT"] = "Bottom Left", ["BOTTOMRIGHT"] = "Bottom Right", ["CENTER"] = "Center"})
+local positionList = ShadowUF:LocalizedLabels({["C"] = "Center", ["RT"] = "Right Top", ["RC"] = "Right Center", ["RB"] = "Right Bottom", ["LT"] = "Left Top", ["LC"] = "Left Center", ["LB"] = "Left Bottom", ["BL"] = "Bottom Left", ["BC"] = "Bottom Center", ["BR"] = "Bottom Right", ["TR"] = "Top Right", ["TC"] = "Top Center", ["TL"] = "Top Left"})
 
 local unitOrder = {}
 for order, unit in pairs(ShadowUF.unitList) do unitOrder[unit] = order end
@@ -889,6 +889,22 @@ local function loadGeneralOptions()
 						inline = true,
 						name = L["General"],
 						args = {
+							interfaceLanguage = {
+								type = "select", order = 0, width = "double",
+								name = L["Interface language"],
+								values = {auto = L["Game language"], enUS = "English", ruRU = "Русский"},
+								get = function() return ShadowUFDisplayLocale or "auto" end,
+								disabled = function() return InCombatLockdown() end,
+								set = function(_, locale)
+									if locale == (ShadowUFDisplayLocale or "auto") then return end
+									ShadowUFDisplayLocale = locale
+									ShadowUF:SetDisplayLocale(locale)
+									C_Timer.After(0, function() Config:RefreshLanguage() end)
+								end,
+							},
+							afterInterfaceLanguage = {
+								type = "description", name = "", order = 0.5, width = "full",
+							},
 							locked = {
 								order = 1,
 								type = "toggle",
@@ -6742,6 +6758,7 @@ local function loadUnitOptions()
 	options.args.profile = LibStub("AceDBOptions-3.0"):GetOptionsTable(ShadowUF.db, true)
 	local LibDualSpec = LibStub("LibDualSpec-1.0", true)
 	if LibDualSpec then LibDualSpec:EnhanceOptions(options.args.profile, ShadowUF.db) end
+	options.args.profile = ShadowUF:LocalizeProfileOptions(options.args.profile, ShadowUFDisplayLocale)
 
 	options.args.enableUnits = {
 		type = "group",
@@ -9666,6 +9683,12 @@ local function loadOptions()
 
 	-- Options finished loading, fire callback for any non-default modules that want to be included
 	ShadowUF:FireModuleEvent("OnConfigurationLoad")
+end
+
+function Config:RefreshLanguage()
+	loadOptions()
+	AceRegistry:RegisterOptionsTable("ShadowedUF", options, true)
+	AceRegistry:NotifyChange("ShadowedUF")
 end
 
 -- The aura indicator and custom filter trees snapshot profile data when built, everything else reads live through dynamic getters
