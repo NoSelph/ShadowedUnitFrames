@@ -883,18 +883,37 @@ Tags.defaultTags = {
 		if( UnitIsWildBattlePet(unit) or UnitIsBattlePetCompanion(unit) ) then
 			return nil
 		end
-
+	
 		local level = UnitLevel(unit) or 0
 		if( level < 0 and UnitClassification(unit) == "worldboss" ) then
 			return nil
 		end
-
+	
 		if( UnitCanAttack("player", unit) ) then
-			local color = ShadowUF:Hex(GetQuestDifficultyColor(level > 0 and level or 99))
+			local difficulty = C_PlayerInfo.GetContentDifficultyCreatureForPlayer(unit)
+			local colorKey
+	
+			if difficulty == Enum.RelativeContentDifficulty.Trivial then
+				colorKey = "trivial"
+			elseif difficulty == Enum.RelativeContentDifficulty.Easy then
+				colorKey = "standard"
+			elseif difficulty == Enum.RelativeContentDifficulty.Fair then
+				colorKey = "difficult"
+			elseif difficulty == Enum.RelativeContentDifficulty.Difficult then
+				colorKey = "verydifficult"
+			elseif difficulty == Enum.RelativeContentDifficulty.Impossible then
+				colorKey = "impossible"
+			else
+				colorKey = "difficult"
+			end
+	
+			local colorInfo = QuestDifficultyColors[colorKey]
+			local color = ShadowUF:Hex(colorInfo or GetQuestDifficultyColor(level > 0 and level or 99))
+	
 			if( not color ) then
 				return level > 0 and level or "??"
 			end
-
+	
 			return color .. (level > 0 and level or "??") .. "|r"
 		else
 			return level > 0 and level or "??"
