@@ -824,6 +824,7 @@ L["Free (screen)"] = "Livre (tela)"
 L["Frame"] = "Quadro"
 L["Frame alpha when you are out of combat while having no target and 100% mana or energy."] = "Quadro alfa quando você está fora de combate sem ter alvo e 100% de mana ou energia."
 L["Frame alpha while this unit is in combat."] = "Quadro alfa enquanto esta unidade está em combate."
+L["Frame strata"] = "Estrato dos quadros"
 L["Frames"] = "Quadros"
 L["Friendly"] = "Amigável"
 L["Fuel"] = "Combustivel"
@@ -968,6 +969,7 @@ L["How close the frame should clip with the border."] = [=[Quão perto o quadro 
 L["How far the background should be from the unit frame border."] = [=[A distância entre o plano de fundo e a borda do quadro da unidade.
 
 ]=]
+L["How high the unit frames sit against the rest of the interface. Background keeps them below everything, Low matches the default Blizzard unit frames, Medium matches the action bars and windows."] = "Altura dos quadros de unidade em relação ao resto da interface. Background os mantém abaixo de tudo, Baixa corresponde aos quadros de unidade padrão da Blizzard, Média às barras de ação e janelas."
 L["How large the background should tile"] = [=[Qual deve ser o tamanho do plano de fundo
 
 ]=]
@@ -1153,6 +1155,7 @@ L["Lock frames"] = [=[Quadros de bloqueio
 L["Locks the unit frame positionings hiding the mover boxes."] = [=[Bloqueia os posicionamentos do quadro da unidade ocultando as caixas do movimentador.
 
 ]=]
+L["Low"] = "Baixa"
 L["Low health"] = [=[Baixa saúde
 
 ]=]

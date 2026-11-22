@@ -9,7 +9,7 @@ local zeroWoundScales = {ABSORB = 0.75, BLOCK = 0.75, RESIST = 0.75}
 function Combat:OnEnable(frame)
 	if( not frame.combatText ) then
 		frame.combatText = CreateFrame("Frame", nil, frame.highFrame)
-		frame.combatText:SetFrameStrata("HIGH")
+		frame.combatText:SetFrameStrata(ShadowUF.Units:GetStrata(3))
 		frame.combatText.feedbackText = frame.combatText:CreateFontString(nil, "ARTWORK")
 		frame.combatText.feedbackText:SetPoint("CENTER", frame.combatText, "CENTER", 0, 0)
 		frame.combatText:SetFrameLevel(frame.topFrameLevel)

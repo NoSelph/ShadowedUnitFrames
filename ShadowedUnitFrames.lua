@@ -40,6 +40,7 @@ function ShadowUF:OnInitialize()
 			bossmodSpellRename = true,
 			omnicc = false,
 			blizzardcc = true,
+			frameStrata = "BACKGROUND",
 			tags = {},
 			units = {},
 			positions = {},

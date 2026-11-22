@@ -1753,10 +1753,8 @@ function Auras:SetupBossDebuffs(frame, config)
 		frame.bossDebuffs.anchorIDs = {}
 		frame.bossDebuffs.testButtons = {}
 		frame.bossDebuffs.container = CreateFrame("Frame", nil, frame.highFrame)
-		-- 12.0.5, private aura icons ignore frame level on re-apply and end up
-		-- behind the parent unit frame. Bumping the container's strata above the unit frame's
-		-- strata ("LOW") keeps icons on top regardless of level.
-		frame.bossDebuffs.container:SetFrameStrata("MEDIUM")
+		-- Private aura icons ignore frame level on re-apply and end up behind the unit frame, a higher strata keeps them on top
+		frame.bossDebuffs.container:SetFrameStrata(ShadowUF.Units:GetStrata(2))
 	end
 
 	-- Every layout pass lands here, redoing the geometry and the private aura anchors is only worth it when the config moved

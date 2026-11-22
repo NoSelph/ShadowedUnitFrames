@@ -931,8 +931,21 @@ local function loadGeneralOptions()
 								end,
 								width = "double",
 							},
-							bossmodCastNames = {
+							frameStrata = {
 								order = 3.1,
+								type = "select",
+								name = L["Frame strata"],
+								desc = L["How high the unit frames sit against the rest of the interface. Background keeps them below everything, Low matches the default Blizzard unit frames, Medium matches the action bars and windows."],
+								values = {["BACKGROUND"] = L["Background"], ["LOW"] = L["Low"], ["MEDIUM"] = L["Medium"]},
+								set = function(info, value)
+									set(info, value)
+									ShadowUF.Units:ApplyStrata()
+								end,
+								arg = "frameStrata",
+								width = "double",
+							},
+							bossmodCastNames = {
+								order = 3.2,
 								type = "toggle",
 								name = L["Use Boss Mod Cast Name overrides"],
 								desc = L["Use spell name overrides provided by boss mods (BigWigs) on the cast bars."],

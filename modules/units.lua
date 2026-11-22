@@ -44,6 +44,45 @@ petBattleFrame:WrapScript(petBattleFrame, "OnAttributeChanged", [[
 
 RegisterStateDriver(petBattleFrame, "petbattle", "[petbattle] active; none")
 
+-- Child units, private auras and combat text each sit one strata above the previous rung, capped at DIALOG to stay under the fullscreen stratas
+local strataOrder = {"BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG"}
+local strataBase = {BACKGROUND = 1, LOW = 2, MEDIUM = 3}
+
+function Units:GetStrata(rung)
+	local base = strataBase[ShadowUF.db.profile.frameStrata] or 1
+	return strataOrder[math.min(base + rung, #(strataOrder))]
+end
+
+-- SetFrameStrata overwrites the whole subtree, so the base goes first and the rungs are replayed parents before children
+function Units:ApplyStrata()
+	if( InCombatLockdown() ) then
+		ShadowUF:DeferUntilRegen("frameStrata", function() self:ApplyStrata() end, ShadowUF.L["Unit changes will be applied after combat."])
+		return
+	end
+
+	petBattleFrame:SetFrameStrata(self:GetStrata(0))
+
+	for frame in pairs(frameList) do
+		if( frame.isChildUnit ) then
+			frame:SetFrameStrata(self:GetStrata(1))
+		end
+	end
+
+	for frame in pairs(frameList) do
+		if( frame.bossDebuffs and frame.bossDebuffs.container ) then
+			frame.bossDebuffs.container:SetFrameStrata(self:GetStrata(2))
+		end
+
+		if( frame.combatText ) then
+			frame.combatText:SetFrameStrata(self:GetStrata(3))
+		end
+	end
+end
+
+function Units:OnInitialize()
+	self:ApplyStrata()
+end
+
 -- Frame shown, do a full update
 local function FullUpdate(self)
 	if( not self.unitSUF or (not self.configMode and not UnitExists(self.unitSUF)) ) then return end
@@ -1529,7 +1568,7 @@ function Units:LoadChildUnit(parent, type, id)
 	frame.isChildUnit = true
 	frame.GetTargetInfo = PingTargetInfo
 	frame.hasStateWatch = type == "partypet"
-	frame:SetFrameStrata("LOW")
+	frame:SetFrameStrata(self:GetStrata(1))
 	frame:SetAttribute("useparent-unit", true)
 	frame:SetAttribute("unitsuffix", suffix)
 	OnAttributeChanged(frame, "unit", SecureButton_GetModifiedUnit(frame))
@@ -1609,6 +1648,8 @@ end
 
 -- Profile changed, reload units
 function Units:ProfileChanged()
+	self:ApplyStrata()
+
 	-- Reset the anchors for all frames to prevent X is dependant on Y
 	for frame in pairs(frameList) do
 		if( frame.unitSUF ) then
