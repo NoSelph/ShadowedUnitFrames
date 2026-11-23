@@ -957,6 +957,12 @@ L["Temp enchant scan"] = "Временные чары"
 L["How often to scan for temporary weapon enchants (seconds)."] = "Частота сканирования временных зачарований оружия (секунды)."
 L["Reset to defaults"] = "Сбросить по умолчанию"
 L["Reset all performance settings to their default values."] = "Сбросить все настройки производительности к значениям по умолчанию."
+L["Totem order from left to right"] = "Порядок тотемов слева направо"
+L["Position %d"] = "Позиция %d"
+L["Fire totem"] = "Огонь"
+L["Earth totem"] = "Земля"
+L["Water totem"] = "Вода"
+L["Air totem"] = "Воздух"
 L["Add spell"] = "Добавить заклинание"
 
 local ShadowUF = select(2, ...)
