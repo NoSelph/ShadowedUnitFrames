@@ -773,13 +773,21 @@ local function loadGeneralOptions()
 						get = false,
 						disabled = function() return ShadowUF.db:GetCurrentProfile() == "Import Backup" end,
 						set = function(info, import)
-							local layout, err = loadstring(string.format([[return %s]], import))
+							layoutData.error = nil
+
+							local layoutFunc, err = loadstring(string.format([[return %s]], import))
 							if( err ) then
 								layoutData.error = string.format(L["Failed to import layout, error:|n|n%s"], err)
 								return
 							end
 
-							layout = layout()
+							-- An export is a plain table literal, an empty environment keeps a pasted string from reaching any game API
+							setfenv(layoutFunc, {})
+							local ok, layout = pcall(layoutFunc)
+							if( not ok or type(layout) ~= "table" or type(layout.units) ~= "table" ) then
+								layoutData.error = string.format(L["Failed to import layout, error:|n|n%s"], ok and "not a layout" or tostring(layout))
+								return
+							end
 
 							-- Strip position settings
 							if( not layoutData.positions ) then
@@ -800,7 +808,7 @@ local function loadGeneralOptions()
 
 							-- Check if we need move over the visibility and positions info
 							layout.positions = layout.positions or CopyTable(ShadowUF.db.profile.positions)
-							layout.visibility = layout.visibility or CopyTable(ShadowUF.db.profile.positions)
+							layout.visibility = layout.visibility or CopyTable(ShadowUF.db.profile.visibility)
 
 							-- Now backup the profile
 							local currentLayout = ShadowUF.db:GetCurrentProfile()
@@ -4406,22 +4414,33 @@ local function loadUnitOptions()
 								set = function(info, value)
 									setUnit(info, value)
 									local unit = info[2]
-									if( unit == "player" ) then
-										if( ShadowUF.Units.unitFrames.pet ) then
-											ShadowUF.Units.unitFrames.pet:SetAttribute("disableVehicleSwap", ShadowUF.db.profile.units[unit].disableVehicle)
-										end
+									-- Attributes on secure frames are protected, so a change made in combat waits for regen
+									local function apply()
+										local disable = ShadowUF.db.profile.units[unit].disableVehicle
+										if( unit == "player" ) then
+											if( ShadowUF.Units.unitFrames.pet ) then
+												ShadowUF.Units.unitFrames.pet:SetAttribute("disableVehicleSwap", disable)
+											end
 
-										if( ShadowUF.Units.unitFrames.player ) then
-											ShadowUF.Units:CheckVehicleStatus(ShadowUF.Units.unitFrames.player)
-										end
-									elseif( unit == "party" ) then
-										for frame in pairs(ShadowUF.Units.unitFrames) do
-											if( frame.unitType == "partypet" ) then
-												frame:SetAttribute("disableVehicleSwap", ShadowUF.db.profile.units[unit].disableVehicle)
-											elseif( frame.unitType == "party" ) then
-												ShadowUF.Units:CheckVehicleStatus(frame)
+											if( ShadowUF.Units.unitFrames.player ) then
+												ShadowUF.Units:CheckVehicleStatus(ShadowUF.Units.unitFrames.player)
+											end
+										elseif( unit == "party" ) then
+											-- frameList is keyed by frame, unitFrames is keyed by unit name
+											for frame in pairs(ShadowUF.Units.frameList) do
+												if( frame.unitType == "partypet" ) then
+													frame:SetAttribute("disableVehicleSwap", disable)
+												elseif( frame.unitType == "party" ) then
+													ShadowUF.Units:CheckVehicleStatus(frame)
+												end
 											end
 										end
+									end
+
+									if( InCombatLockdown() ) then
+										ShadowUF:DeferUntilRegen("vehicleSwap" .. unit, apply, L["Unit changes will be applied after combat."])
+									else
+										apply()
 									end
 								end,
 								arg = "disableVehicle",
