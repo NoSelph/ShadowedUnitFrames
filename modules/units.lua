@@ -128,12 +128,16 @@ local function RegisterNormalEvent(self, event, handler, func, unitOverride)
 		event = "UNIT_HEALTH"
 	end
 
-	if( unitEvents[event] and not ShadowUF.fakeUnits[self.unitRealType] ) then
+	local isFakeUnit = ShadowUF.fakeUnits[self.unitRealType]
+	if( unitEvents[event] and ( not isFakeUnit or unitOverride ) ) then
 		self:BlizzRegisterUnitEvent(event, unitOverride or self.unitOwner, self.vehicleUnit)
 		if unitOverride then
 			self.unitEventOverrides = self.unitEventOverrides or {}
 			self.unitEventOverrides[event] = unitOverride
 		end
+	elseif( unitEvents[event] and isFakeUnit ) then
+		-- No unit event ever carries a compound token (targettarget etc), OnEvent would drop every one of them
+		-- The poll ticker keeps these frames current, so listening would only flood Lua with events (nameplates included)
 	else
 		self:RegisterEvent(event)
 	end

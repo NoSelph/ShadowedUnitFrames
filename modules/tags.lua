@@ -71,6 +71,13 @@ function Tags:RegisterEvents(parent, fontString, tags)
 						ShadowUF.Units.unitEvents[event] = false
 						Tags.eventType[event] = "unitless"
 
+						-- Fake-unit frames skip client registration while an event counts as a unit event, now it doesn't they need it
+						for frame in pairs(ShadowUF.Units.frameList) do
+							if( frame.registeredEvents and frame.registeredEvents[event] and next(frame.registeredEvents[event]) ) then
+								frame:RegisterEvent(event)
+							end
+						end
+
 						parent:RegisterNormalEvent(event, fontString, "UpdateTags")
 					end
 				-- Everything else
@@ -528,6 +535,8 @@ Druid.CatForm = GetSpellName(768)
 Druid.MoonkinForm = GetSpellName(24858)
 Druid.TravelForm = GetSpellName(783)
 Druid.BearForm = GetSpellName(5487)
+-- 1.x rulesets (Forever) learn Dire Bear Form as its own spell at 40, with its own aura and form ID
+Druid.DireBearForm = GetSpellName(9634)
 Druid.TreeForm = GetSpellName(33891)
 Druid.AquaticForm = GetSpellName(1066)
 Druid.SwiftFlightForm = GetSpellName(40120)
@@ -535,8 +544,8 @@ Druid.FlightForm = GetSpellName(33943)
 -- Shapeshift form IDs (DRUID_*_FORM constants, Blizzard_FrameXMLBase/Constants.lua)
 -- GetShapeshiftFormID() is combat-safe, unlike aura queries (secret/error in combat)
 -- Localization keys resolved through ShadowUF.L at tag runtime
-Druid.shortFormKeys = { [1] = "C", [2] = "T", [3] = "T", [4] = "A", [5] = "B", [27] = "F", [29] = "F", [31] = "M", [35] = "M" }
-Druid.formKeys = { [1] = "Cat", [2] = "Tree", [3] = "Travel", [4] = "Aquatic", [5] = "Bear", [27] = "Flight", [29] = "Flight", [31] = "Moonkin", [35] = "Moonkin" }
+Druid.shortFormKeys = { [1] = "C", [2] = "T", [3] = "T", [4] = "A", [5] = "B", [8] = "B", [27] = "F", [29] = "F", [31] = "M", [35] = "M" }
+Druid.formKeys = { [1] = "Cat", [2] = "Tree", [3] = "Travel", [4] = "Aquatic", [5] = "Bear", [8] = "Bear", [27] = "Flight", [29] = "Flight", [31] = "Moonkin", [35] = "Moonkin" }
 ShadowUF.Druid = Druid
 
 Tags.defaultTags = {
@@ -572,7 +581,7 @@ Tags.defaultTags = {
 			return ShadowUF.L["T"]
 		elseif( ShadowUF.UnitAuraBySpell(unit, Druid.MoonkinForm) ) then
 			return ShadowUF.L["M"]
-		elseif( ShadowUF.UnitAuraBySpell(unit, Druid.BearForm) ) then
+		elseif( ShadowUF.UnitAuraBySpell(unit, Druid.BearForm) or ShadowUF.UnitAuraBySpell(unit, Druid.DireBearForm) ) then
 			return ShadowUF.L["B"]
 		elseif( ShadowUF.UnitAuraBySpell(unit, Druid.SwiftFlightForm) or ShadowUF.UnitAuraBySpell(unit, Druid.FlightForm) ) then
 			return ShadowUF.L["F"]
@@ -600,7 +609,7 @@ Tags.defaultTags = {
 			return ShadowUF.L["Tree"]
 		elseif( ShadowUF.UnitAuraBySpell(unit, Druid.MoonkinForm) ) then
 			return ShadowUF.L["Moonkin"]
-		elseif( ShadowUF.UnitAuraBySpell(unit, Druid.BearForm) ) then
+		elseif( ShadowUF.UnitAuraBySpell(unit, Druid.BearForm) or ShadowUF.UnitAuraBySpell(unit, Druid.DireBearForm) ) then
 			return ShadowUF.L["Bear"]
 		elseif( ShadowUF.UnitAuraBySpell(unit, Druid.SwiftFlightForm) or ShadowUF.UnitAuraBySpell(unit, Druid.FlightForm) ) then
 			return ShadowUF.L["Flight"]
@@ -917,8 +926,9 @@ Tags.defaultTags = {
 		end
 
 		-- The server rates the unit for the player, which can disagree with the level difference thresholds behind GetQuestDifficultyColor
-		local difficulty = C_PlayerInfo.GetContentDifficultyCreatureForPlayer(unit)
-		if( issecretvalue(difficulty) ) then
+		local difficulty = C_PlayerInfo.GetContentDifficultyCreatureForPlayer and C_PlayerInfo.GetContentDifficultyCreatureForPlayer(unit)
+		-- issecretvalue first, a boolean test on a secret errors; no rating falls back to the plain level
+		if( issecretvalue(difficulty) or not difficulty ) then
 			return level
 		end
 
