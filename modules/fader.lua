@@ -2,6 +2,10 @@ local Fader = {}
 local powerDepletes = {[Enum.PowerType.Mana] = true, [Enum.PowerType.Energy] = true, [Enum.PowerType.Focus] = true}
 ShadowUF:RegisterModule(Fader, "fader", ShadowUF.L["Combat fader"])
 
+-- Frames with an active fader and the player's current cast, shared with the cast listener further down
+local fadedFrames = {}
+local activeCastID
+
 local canCurve = C_CurveUtil and C_CurveUtil.CreateCurve and C_CurveUtil.EvaluateColorValueFromBoolean and UnitHealthPercent and true or false
 
 local function newCurve()
@@ -131,6 +135,8 @@ function Fader:OnEnable(frame)
 	end
 	fader.active = true
 	fader.fadeType = nil
+	fader.playerCasting = activeCastID and true or nil
+	fadedFrames[frame] = true
 	fader.progress = 0
 	configure(frame)
 
@@ -155,6 +161,7 @@ end
 
 function Fader:OnDisable(frame)
 	frame:UnregisterAll(self)
+	fadedFrames[frame] = nil
 	if( frame.fader ) then
 		frame.fader.active = false
 		frame.fader.routeRange = false
@@ -169,10 +176,6 @@ end
 function Fader:PLAYER_REGEN_ENABLED(frame, event)
 	self:Update(frame, event)
 	frame:RegisterNormalEvent("PLAYER_TARGET_CHANGED", self, "Update")
-	frame:RegisterNormalEvent("UNIT_SPELLCAST_CHANNEL_START", self, "CastStart")
-	frame:RegisterNormalEvent("UNIT_SPELLCAST_CHANNEL_STOP", self, "CastStop")
-	frame:RegisterNormalEvent("UNIT_SPELLCAST_START", self, "CastStart")
-	frame:RegisterNormalEvent("UNIT_SPELLCAST_STOP", self, "CastStop")
 	frame:RegisterUnitEvent("UNIT_HEALTH", self, "Update")
 	frame:RegisterUnitEvent("UNIT_MAXHEALTH", self, "Update")
 	frame:RegisterUnitEvent("UNIT_POWER_FREQUENT", self, "Update")
@@ -182,32 +185,37 @@ end
 function Fader:PLAYER_REGEN_DISABLED(frame, event)
 	self:Update(frame, event)
 	frame:UnregisterSingleEvent("PLAYER_TARGET_CHANGED", self)
-	frame:UnregisterSingleEvent("UNIT_SPELLCAST_CHANNEL_START", self)
-	frame:UnregisterSingleEvent("UNIT_SPELLCAST_CHANNEL_STOP", self)
-	frame:UnregisterSingleEvent("UNIT_SPELLCAST_START", self)
-	frame:UnregisterSingleEvent("UNIT_SPELLCAST_STOP", self)
 	frame:UnregisterSingleEvent("UNIT_HEALTH", self)
 	frame:UnregisterSingleEvent("UNIT_POWER_FREQUENT", self)
 	frame:UnregisterSingleEvent("UNIT_MAXHEALTH", self)
 	frame:UnregisterSingleEvent("UNIT_MAXPOWER", self)
 end
 
-local activeCastID
-function Fader:CastStart(frame, event, unit, id)
-	if( unit ~= "player" or activeCastID == id ) then return end
-	activeCastID = id
+-- One listener for the player's own casts drives every faded frame. Registering the spellcast events per frame
+-- missed them on every non-player frame once a cast bar made them unit events, and a shared cast ID let only the first frame react
+local castWatcher = CreateFrame("Frame")
+castWatcher:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
+castWatcher:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
+castWatcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player")
+castWatcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "player")
+castWatcher:SetScript("OnEvent", function(_, event, unit, id)
+	-- A secret cast GUID can't be compared, fall back to start/stop pairing without the ID check
+	if( issecretvalue(id) ) then id = nil end
+	local casting
+	if( event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" ) then
+		if( id and activeCastID == id ) then return end
+		activeCastID = id or true
+		casting = true
+	else
+		if( id and activeCastID ~= true and activeCastID ~= id ) then return end
+		activeCastID = nil
+	end
 
-	frame.fader.playerCasting = true
-	self:Update(frame)
-end
-
-function Fader:CastStop(frame, event, unit, id)
-	if( unit ~= "player" or activeCastID ~= id ) then return end
-	activeCastID = nil
-
-	frame.fader.playerCasting = nil
-	self:Update(frame)
-end
+	for frame in pairs(fadedFrames) do
+		frame.fader.playerCasting = casting
+		Fader:Update(frame)
+	end
+end)
 
 function Fader:Update(frame, event)
 	local fader = frame.fader
