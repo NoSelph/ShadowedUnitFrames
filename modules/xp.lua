@@ -97,10 +97,12 @@ function XP:UpdateRep(frame)
 	current = math.abs(min - current)
 	max = math.abs(min - max)
 
-	local color = FACTION_BAR_COLORS[factionData.reaction]
+	-- Renown, friendship and out-of-range reactions have no standard color or standing label
+	local color = FACTION_BAR_COLORS[factionData.reaction] or FACTION_BAR_COLORS[5]
+	local standing = GetText("FACTION_STANDING_LABEL" .. tostring(factionData.reaction), UnitSex("player")) or ""
 	frame.xpBar.rep:SetMinMaxValues(0, max)
 	frame.xpBar.rep:SetValue(current)
-	frame.xpBar.rep.tooltip = string.format(L["%s (%s): %s/%s (%.2f%% done)"], factionData.name, GetText("FACTION_STANDING_LABEL" .. tostring(factionData.reaction), UnitSex("player")), formatNumber(current), formatNumber(max), (max > 0 and current / max or 0) * 100)
+	frame.xpBar.rep.tooltip = string.format(L["%s (%s): %s/%s (%.2f%% done)"], factionData.name, standing, formatNumber(current), formatNumber(max), (max > 0 and current / max or 0) * 100)
 	frame.xpBar.rep:SetStatusBarColor(color.r, color.g, color.b, ShadowUF.db.profile.bars.alpha)
 	frame.xpBar.rep.background:SetVertexColor(color.r, color.g, color.b, ShadowUF.db.profile.bars.backgroundAlpha)
 	frame.xpBar.rep:Show()
@@ -108,7 +110,7 @@ end
 
 function XP:UpdateXP(frame)
 	-- At the level cap or XP is disabled, or the pet is actually a vehicle right now, swap to reputation bar (or hide it)
-	if( UnitLevel(frame.unitOwner) == GetMaxLevelForPlayerExpansion() or IsXPUserDisabled() or ( frame.unitOwner == "pet" and UnitExists("vehicle") ) ) then
+	if( UnitLevel(frame.unitOwner) == GetMaxLevelForPlayerExpansion() or ( frame.unitOwner == "player" and IsPlayerAtEffectiveMaxLevel and IsPlayerAtEffectiveMaxLevel() ) or IsXPUserDisabled() or ( frame.unitOwner == "pet" and UnitExists("vehicle") ) ) then
 		frame.xpBar.xp:Hide()
 		return
 	end
@@ -118,6 +120,12 @@ function XP:UpdateXP(frame)
 		current, max = UnitXP(frame.unitOwner), UnitXPMax(frame.unitOwner)
 	else
 		current, max = GetPetExperience()
+	end
+
+	-- Nothing to earn: a demon or other pet without XP, or a level cap GetMaxLevelForPlayerExpansion doesn't report (1.x rulesets)
+	if( not max or max <= 0 ) then
+		frame.xpBar.xp:Hide()
+		return
 	end
 
 	local min = math.min(0, current)
