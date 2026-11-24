@@ -322,8 +322,15 @@ end
 
 function Indicators:SummonPending(frame)
 	if( not frame.indicators.sumPending or not frame.indicators.sumPending.enabled ) then return end
+	if( not C_IncomingSummon ) then
+		frame.indicators.sumPending:Hide()
+		return
+	end
 
-	local status = C_IncomingSummon.HasIncomingSummon(frame.unitSUF) and C_IncomingSummon.IncomingSummonStatus(frame.unitSUF)
+	local hasSummon = C_IncomingSummon.HasIncomingSummon(frame.unitSUF)
+	local status = not issecretvalue(hasSummon) and hasSummon and C_IncomingSummon.IncomingSummonStatus(frame.unitSUF)
+	-- Comparing a secret status would error, hide rather than guess
+	if( issecretvalue(status) ) then status = nil end
 	if( status == 1 ) then
 		frame.indicators.sumPending:SetAtlas("RaidFrame-Icon-SummonPending")
 		frame.indicators.sumPending:Show()

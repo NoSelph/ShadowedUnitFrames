@@ -246,7 +246,8 @@ function ShadowUF:CheckUpgrade()
 		if( missing ) then
 			for aura in pairs(missing) do
 				local ok, secrecy = pcall(C_Secrets.GetSpellAuraSecrecy, tonumber(aura) or aura)
-				if( ok and secrecy ~= Enum.SecrecyLevel.NeverSecret ) then
+				-- A nil answer means the client can't classify the spell (name keys, unknown IDs), not that it is secret
+				if( ok and secrecy ~= nil and secrecy ~= Enum.SecrecyLevel.NeverSecret ) then
 					missing[aura] = nil
 					if( auras and auras[aura] ) then
 						auras[aura] = auras[aura]:gsub("missing%s*=%s*true;?", "")
@@ -277,6 +278,8 @@ function ShadowUF:CheckUpgrade()
 	end
 	auraColors.removable = auraColors.removable or {r = 1, g = 0.70, b = 0.10}
 	auraColors.pandemic = auraColors.pandemic or {r = 1, g = 1, b = 1, a = 0.35}
+	-- castColors comes from the layout, not the defaults, so a partial profile can lack it
+	self.db.profile.castColors = self.db.profile.castColors or {}
 	self.db.profile.castColors.important = self.db.profile.castColors.important or {r = 1.0, g = 0.15, b = 0.6}
 	self.db.profile.castColors.importantUninterruptible = self.db.profile.castColors.importantUninterruptible or {r = 0.439, g = 0.349, b = 0.627}
 

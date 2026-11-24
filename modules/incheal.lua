@@ -191,7 +191,8 @@ function IncHeal:PositionBar(frame, incAmount, maxHealth, event)
 	bar:Show()
 	if( bar.background ) then bar.background:Hide() end
 	if( tracking ) then
-		bar.total = incAmount
+		-- A plain flag, not the amount: the amount can be secret and every reader only tests it for truth, which errors on a secret
+		bar.total = true
 		self:EnsureSafetyTicker(frame)
 	else
 		bar.total = nil

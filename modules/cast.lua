@@ -646,7 +646,8 @@ function Cast:UpdateCast(frame, unit, channelled, spell, displayName, icon, star
 	end
 	
 	cast.important = false
-	if( spellID ) then
+	-- Not every client build has the important-spell list
+	if( spellID and C_Spell.IsSpellImportant ) then
 		cast.important = C_Spell.IsSpellImportant(spellID)
 	end
 	setCastStateColor(frame, cast, notInterruptible)
