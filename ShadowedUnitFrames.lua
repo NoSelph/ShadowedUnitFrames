@@ -1437,7 +1437,7 @@ positionGamepadTargetFrame = function()
 	if( not ShadowUF.isForever or not ShadowUF.db.profile.hidden.target or not frame or InCombatLockdown() ) then return end
 
 	if( not gamepadMenuHost ) then
-		-- Showing the Blizzard frame itself is blocked in combat, so it stays shown and a frame of ours decides whether it can be seen
+		-- The frame stays shown and a frame of ours decides whether it can be seen, both are only ever touched out of combat
 		gamepadMenuHost = CreateFrame("Frame", nil, UIParent)
 		gamepadMenuHost:Hide()
 		hiddenParents[TargetFrame] = gamepadMenuHost
@@ -1471,8 +1471,8 @@ local function hookGamepadTargetMenu()
 
 	local function menuOpened(self)
 		if( self ~= TargetFrame ) then return end
-		-- Combat keeps a protected frame as it is, without the preparation the menu closes on its own like it would without us
-		if( not gamepadMenuHost and InCombatLockdown() ) then return end
+		-- Showing or hiding a frame that holds a protected one is a protected action itself, in combat the menu closes on its own like it did before
+		if( InCombatLockdown() ) then return end
 
 		local menu = Menu.GetManager():GetOpenMenu()
 		if( not menu ) then return end
@@ -1488,11 +1488,11 @@ local function hookGamepadTargetMenu()
 
 		-- The menu survives without the placement below, so its visibility comes first
 		keptVisible[TargetFrame] = true
-		if( not InCombatLockdown() and not TargetFrame:IsShown() ) then
+		if( not TargetFrame:IsShown() ) then
 			TargetFrame:Show()
 		end
 		gamepadMenuHost:Show()
-		if( unitUsesBlizzardFilter("target") and not InCombatLockdown() ) then
+		if( unitUsesBlizzardFilter("target") ) then
 			disableMouse(TargetFrame)
 		end
 
@@ -1500,6 +1500,8 @@ local function hookGamepadTargetMenu()
 		local watcher
 		watcher = C_Timer.NewTicker(0.1, function()
 			if( menu:IsShown() and menu.ownerRegion == TargetFrame ) then return end
+			-- Combat may have started while the menu was open and holds on to the frames until it ends
+			if( InCombatLockdown() ) then return end
 			watcher:Cancel()
 			if( gamepadMenuWatcher == watcher ) then gamepadMenuWatcher = nil end
 			gamepadMenuHost:Hide()
