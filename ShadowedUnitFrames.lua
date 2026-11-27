@@ -11,6 +11,8 @@ ShadowUF.playerUnit = "player"
 local tocVersion = select(4, GetBuildInfo()) or 0
 ShadowUF.isForever = tocVersion >= 16000 and tocVersion < 20000
 local playerClass = select(2, UnitClass("player"))
+-- Defined further down next to the Blizzard frame hiding, LoadUnits has to reach it so the gamepad target menu is prepared before its first use
+local positionGamepadTargetFrame
 ShadowUF.enabledUnits = {}
 ShadowUF.modules = {}
 ShadowUF.moduleOrder = {}
@@ -839,6 +841,8 @@ function ShadowUF:LoadUnits()
 			self.Units:UninitializeFrame(type)
 		end
 	end
+
+	positionGamepadTargetFrame()
 end
 
 function ShadowUF:LoadUnitDefaults()
@@ -1291,8 +1295,13 @@ ShadowUF.noop = function() end
 ShadowUF.hiddenFrame = CreateFrame("Frame")
 ShadowUF.hiddenFrame:Hide()
 
+-- Blizzard frames we hide but have to keep genuinely visible for a moment, the re-hide hook looks the other way for those
+local keptVisible = {}
+-- Where a hidden Blizzard frame belongs, anything else is undone by the SetParent hooks below
+local hiddenParents = {}
+
 local rehideFrame = function(self)
-	if( not InCombatLockdown() ) then
+	if( not InCombatLockdown() and not keptVisible[self] ) then
 		self:Hide()
 	end
 end
@@ -1338,9 +1347,10 @@ local function hideBlizzardFrameKeepAuras(frame, keepEvents)
 
 	if not hookedFrames[frame] then
 		hooksecurefunc(frame, "SetParent", function(self, parent)
-			if parent ~= ShadowUF.hiddenFrame then
+			local hiddenParent = hiddenParents[self] or ShadowUF.hiddenFrame
+			if parent ~= hiddenParent then
 				if not InCombatLockdown() or not self:IsProtected() then
-					self:SetParent(ShadowUF.hiddenFrame)
+					self:SetParent(hiddenParent)
 				end
 			end
 		end)
@@ -1378,12 +1388,13 @@ local function hideBlizzardFrames(...)
 			end
 			frame:HookScript("OnShow", rehideFrame)
 
-			-- Prevent Blizzard from reparenting the frame away from hiddenFrame
+			-- Prevent Blizzard from reparenting the frame away from where we hid it
 			if( not hookedFrames[frame] ) then
 				hooksecurefunc(frame, "SetParent", function(self, parent)
-					if( parent ~= ShadowUF.hiddenFrame ) then
+					local hiddenParent = hiddenParents[self] or ShadowUF.hiddenFrame
+					if( parent ~= hiddenParent ) then
 						if( not InCombatLockdown() or not self:IsProtected() ) then
-							self:SetParent(ShadowUF.hiddenFrame)
+							self:SetParent(hiddenParent)
 						end
 					end
 				end)
@@ -1406,6 +1417,102 @@ local function unitUsesBlizzardFilter(unitType)
 		end
 	end
 	return false
+end
+
+local gamepadMenuAnchor, gamepadMenuHost, gamepadMenuWatcher
+
+-- The Blizzard aura filter leaves Blizzard's own aura buttons under the target frame, they are transparent while the menu is open but would still take clicks
+local function disableMouse(frame)
+	for _, child in ipairs({ frame:GetChildren() }) do
+		if( child:IsMouseEnabled() ) then child:EnableMouse(false) end
+		disableMouse(child)
+	end
+end
+
+-- Forever's gamepad Inspect button opens the target menu through the global TargetFrame_OpenMenu(TargetFrame), the menu is anchored to that
+-- frame and closes on the next frame while the frame is not visible. The gamepad focus system rejects anything an addon opened itself, so
+-- the Blizzard call stays untouched: the hidden frame shadows our target frame and is genuinely visible for exactly as long as its menu is open
+positionGamepadTargetFrame = function()
+	local frame = ShadowUF.Units.unitFrames.target
+	if( not ShadowUF.isForever or not ShadowUF.db.profile.hidden.target or not frame or InCombatLockdown() ) then return end
+
+	if( not gamepadMenuHost ) then
+		-- Showing the Blizzard frame itself is blocked in combat, so it stays shown and a frame of ours decides whether it can be seen
+		gamepadMenuHost = CreateFrame("Frame", nil, UIParent)
+		gamepadMenuHost:Hide()
+		hiddenParents[TargetFrame] = gamepadMenuHost
+		TargetFrame:SetParent(gamepadMenuHost)
+
+		-- Shown is not the same as seen, nothing of the frame may show or take input while the menu is open
+		TargetFrame:SetAlpha(0)
+		TargetFrame:EnableMouse(false)
+		TargetFrame:SetScript("OnUpdate", nil)
+		-- Hiding it again once the menu closed would play the lost target sound, the edit mode bookkeeping is all that is worth keeping
+		TargetFrame:SetScript("OnHide", EditModeSystemMixin and EditModeSystemMixin.OnSystemHide or nil)
+		keptVisible[TargetFrame] = true
+		TargetFrame:Show()
+		keptVisible[TargetFrame] = nil
+
+		-- A shown anchor keeps the renderer resolving the hidden frame's position whenever our target frame moves
+		gamepadMenuAnchor = CreateFrame("Frame", nil, UIParent)
+		gamepadMenuAnchor:SetSize(1, 1)
+		gamepadMenuAnchor:SetPoint("TOPLEFT", TargetFrame, "TOPLEFT", 0, 0)
+	end
+
+	TargetFrame:ClearAllPoints()
+	TargetFrame:SetAllPoints(frame)
+
+	-- Blizzard reads the position when it places the menu, a rect stays stale after ClearAllPoints until the next frame unless a size query resolves it
+	TargetFrame:GetSize()
+end
+
+local function hookGamepadTargetMenu()
+	if( not ShadowUF.isForever or not TargetFrame_OpenMenu or not Menu or not Menu.GetManager ) then return end
+
+	local function menuOpened(self)
+		if( self ~= TargetFrame ) then return end
+		-- Combat keeps a protected frame as it is, without the preparation the menu closes on its own like it would without us
+		if( not gamepadMenuHost and InCombatLockdown() ) then return end
+
+		local menu = Menu.GetManager():GetOpenMenu()
+		if( not menu ) then return end
+
+		if( not gamepadMenuHost ) then
+			positionGamepadTargetFrame()
+			if( not gamepadMenuHost ) then return end
+		end
+
+		if( gamepadMenuWatcher ) then
+			gamepadMenuWatcher:Cancel()
+		end
+
+		-- The menu survives without the placement below, so its visibility comes first
+		keptVisible[TargetFrame] = true
+		if( not InCombatLockdown() and not TargetFrame:IsShown() ) then
+			TargetFrame:Show()
+		end
+		gamepadMenuHost:Show()
+		if( unitUsesBlizzardFilter("target") and not InCombatLockdown() ) then
+			disableMouse(TargetFrame)
+		end
+
+		-- Nothing of Blizzard's runs our code when the menu closes, so its own timer takes the visibility back
+		local watcher
+		watcher = C_Timer.NewTicker(0.1, function()
+			if( menu:IsShown() and menu.ownerRegion == TargetFrame ) then return end
+			watcher:Cancel()
+			if( gamepadMenuWatcher == watcher ) then gamepadMenuWatcher = nil end
+			gamepadMenuHost:Hide()
+			keptVisible[TargetFrame] = nil
+		end)
+		gamepadMenuWatcher = watcher
+
+		-- Only decides where the menu opens
+		positionGamepadTargetFrame()
+	end
+
+	-- A failed hook must not keep the Blizzard frames below from being hidden
+	pcall(hooksecurefunc, "TargetFrame_OpenMenu", menuOpened)
 end
 
 local active_hiddens = {}
@@ -1507,6 +1614,8 @@ function ShadowUF:HideBlizzardFrames()
 		else
 			hideBlizzardFrames(TargetFrame, ComboFrame, TargetFrameToT)
 		end
+
+		hookGamepadTargetMenu()
 	end
 
 	if( self.db.profile.hidden.focus and not active_hiddens.focus ) then
